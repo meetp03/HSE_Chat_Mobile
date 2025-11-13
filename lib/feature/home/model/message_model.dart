@@ -55,7 +55,11 @@ class Message {
       status: json['status'] as int? ?? 0,
       messageType: json['message_type'] as int? ?? 0,
       fileName: json['file_name']?.toString(),
-      fileUrl: json['file_url']?.toString(),
+      // Prefer a more specific 'other_file_url' when server provides it.
+      // Some server responses include a generic 'file_url' and a unique
+      // 'other_file_url' (with timestamped filename). Use the latter
+      // to reliably display distinct attachments.
+      fileUrl: json['other_file_url']?.toString() ?? json['file_url']?.toString(),
       replyTo: json['reply_to']?.toString(),
       createdAt: DateTime.parse(
         json['created_at'] ?? DateTime.now().toIso8601String(),
@@ -164,32 +168,30 @@ enum MessageKind { SYSTEM, IMAGE, VIDEO, AUDIO, FILE, TEXT }
 
 extension MessageKindHelper on Message {
   MessageKind kind() {
-    // messageType mapping: assume 9 = system, 0 = text, others for files
+    // Prefer server-provided `messageType` when available to avoid false-positive
+    // detections based on filename/URL. This prevents trying to decode video/audio
+    // bytes as an image which triggers FlutterJNI decode errors.
+    // Mapping notes (server):
+    // 9 = system, 0 = text, 1 = image/attachment, 4 = audio (example), 5 = video
     if (messageType == 9) return MessageKind.SYSTEM;
+    if (messageType == 0) return MessageKind.TEXT;
+    if (messageType == 1) return MessageKind.IMAGE;
+    if (messageType == 5) return MessageKind.VIDEO;
+    if (messageType == 4) return MessageKind.AUDIO;
 
-    // Prefer explicit fileUrl, then fileName
+    // Fallback to inspect fileUrl/fileName if messageType is unknown/ambiguous
     final candidate = (fileUrl ?? fileName ?? '').toLowerCase();
-
     if (candidate.isNotEmpty) {
-      if (candidate.endsWith('.png') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.gif')) {
-        return MessageKind.IMAGE;
-      }
-      if (candidate.endsWith('.mp4') || candidate.endsWith('.mov') || candidate.endsWith('.mkv') || candidate.contains('video')) {
-        return MessageKind.VIDEO;
-      }
-      if (candidate.endsWith('.mp3') || candidate.endsWith('.wav') || candidate.endsWith('.m4a') || candidate.contains('audio')) {
-        return MessageKind.AUDIO;
-      }
-      // If we have a candidate but no known extension, treat as FILE
-      if (candidate.isNotEmpty) return MessageKind.FILE;
+      if (candidate.endsWith('.png') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.gif') || candidate.endsWith('.webp')) return MessageKind.IMAGE;
+      if (candidate.endsWith('.mp4') || candidate.endsWith('.mov') || candidate.endsWith('.mkv') || candidate.endsWith('.webm') || candidate.contains('video')) return MessageKind.VIDEO;
+      if (candidate.endsWith('.mp3') || candidate.endsWith('.wav') || candidate.endsWith('.m4a') || candidate.contains('audio')) return MessageKind.AUDIO;
+      return MessageKind.FILE;
     }
 
-    // Fallback: if message contains HTML-like media tags, try to detect
+    // Last-resort: inspect message HTML for embedded media tags
     final msgLower = message.toLowerCase();
-    if (msgLower.contains('<img') || msgLower.contains('<video') || msgLower.contains('data:image')) {
-      if (msgLower.contains('<video')) return MessageKind.VIDEO;
-      return MessageKind.IMAGE;
-    }
+    if (msgLower.contains('<video')) return MessageKind.VIDEO;
+    if (msgLower.contains('<img') || msgLower.contains('data:image')) return MessageKind.IMAGE;
 
     return MessageKind.TEXT;
   }

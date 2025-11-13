@@ -1,17 +1,37 @@
 import 'dart:async';
 import 'dart:io';
+
+import 'package:cached_network_image/cached_network_image.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hsc_chat/cores/utils/utils.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_cubit.dart';
-import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
+import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/feature/home/model/message_model.dart';
-import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hsc_chat/feature/home/widgets/user_info_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:path/path.dart' as p;
+import 'package:hsc_chat/cores/utils/file_validation.dart';
+import 'package:hsc_chat/cores/utils/snackbar.dart';
+import 'package:flutter_cache_manager/flutter_cache_manager.dart';
+import 'package:just_audio/just_audio.dart';
+import 'package:video_player/video_player.dart';
+import 'package:chewie/chewie.dart';
+import 'package:pdfx/pdfx.dart';
+import 'package:dio/dio.dart';
+import 'package:hsc_chat/cores/network/dio_client.dart';
+import 'package:video_thumbnail/video_thumbnail.dart';
+import 'package:permission_handler/permission_handler.dart';
+import 'package:hsc_chat/cores/utils/gallery_helper.dart';
+import 'package:hsc_chat/feature/home/view/_audio_player_inline.dart';
+
+// Use MessageKind and kind() defined in the model (message_model.dart)
 
 class ChatScreen extends StatefulWidget {
   final String userId;
@@ -40,6 +60,23 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isTyping = false;
   String? _attachedFilePath;
   int? _attachedFileType; // 1=image,2=video,4=file
+  // Download/caching & playback helpers
+  final Map<String, CancelToken> _downloadTokens = {};
+  final Map<String, double> _downloadProgress = {};
+  final Map<String, AudioPlayer> _audioPlayers = {};
+  // Memoization for in-flight fetches / thumbnails to avoid duplicate downloads
+  final Map<String, Future<File?>> _fetchFutures = {};
+  final Map<String, Future<File?>> _thumbFutures = {};
+  // Optional: last reported progress to reduce setState churn
+  final Map<String, double> _lastReportedProgress = {};
+
+  // Load-more / scroll preservation helpers
+  bool _pendingLoadMore = false;
+  double? _prevMaxScrollExtent;
+  double? _prevScrollOffset;
+  // When true we recently restored viewport after a load-more and should
+  // suppress the usual auto-scroll-to-bottom triggered by ChatLoaded emits.
+  bool _restoringAfterLoadMore = false;
 
   @override
   void initState() {
@@ -88,6 +125,14 @@ class _ChatScreenState extends State<ChatScreen>
       final state = context.read<ChatCubit>().state;
       if (state is ChatLoaded && state.hasMore && !state.isLoadingMore) {
         // Capture offsets so we can restore scroll position after prepend
+        try {
+          _pendingLoadMore = true;
+          _prevMaxScrollExtent = _scrollController.position.maxScrollExtent;
+          _prevScrollOffset = _scrollController.offset;
+        } catch (_) {
+          _prevMaxScrollExtent = null;
+          _prevScrollOffset = null;
+        }
         context.read<ChatCubit>().loadMoreMessages();
       }
     }
@@ -101,7 +146,11 @@ class _ChatScreenState extends State<ChatScreen>
 
     if (hasFile && hasText) {
       // Shouldn't happen due to UI constraints, but guard anyway
-      ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Cannot send text and file together.')));
+      showCustomSnackBar(
+        context,
+        'Cannot send text and file together.',
+        type: SnackBarType.error,
+      );
       return;
     }
 
@@ -110,12 +159,79 @@ class _ChatScreenState extends State<ChatScreen>
     if (hasFile) {
       final path = _attachedFilePath!;
       print('📤 Sending file: $path');
-      await context.read<ChatCubit>().sendMessage(message: '', filePath: path);
-      // clear attachment after sending
+      // Double-check validation right before send to avoid calling API with invalid files
+      try {
+        final f = File(path);
+        if (!await f.exists()) {
+          showCustomSnackBar(
+            context,
+            'Selected file not found.',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+        // infer category
+        final ext = p.extension(path).toLowerCase();
+        FileCategory category = FileCategory.GENERIC;
+        if ([
+          '.png',
+          '.jpg',
+          '.jpeg',
+          '.gif',
+          '.webp',
+          '.bmp',
+          '.heic',
+          '.heif',
+        ].contains(ext))
+          category = FileCategory.IMAGE;
+        else if ([
+          '.mp4',
+          '.mov',
+          '.mkv',
+          '.webm',
+          '.avi',
+          '.3gp',
+        ].contains(ext))
+          category = FileCategory.VIDEO;
+        else if (ValidationRules.audioExt.contains(ext))
+          category = FileCategory.AUDIO;
+        else if (ValidationRules.docExt.contains(ext))
+          category = FileCategory.DOCUMENT;
+
+        final validation = await validateFileByCategory(f, category);
+        if (!validation.isValid) {
+          showCustomSnackBar(
+            context,
+            validation.message,
+            type: SnackBarType.error,
+          );
+          return;
+        }
+      } catch (e) {
+        print('⚠️ Validation check failed before send: $e');
+        showCustomSnackBar(
+          context,
+          'Failed to validate file before upload.',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+      if (kDebugMode)
+        print(
+          '✅ Local validation OK — calling ChatCubit.sendMessage for file: $path',
+        );
+      final error = await context.read<ChatCubit>().sendMessage(
+        message: '',
+        filePath: path,
+      );
+      // clear attachment after sending attempt
       setState(() {
         _attachedFilePath = null;
         _attachedFileType = null;
       });
+      if (error != null) {
+        showCustomSnackBar(context, error, type: SnackBarType.error);
+      }
       _scrollToBottom();
       return;
     }
@@ -123,15 +239,31 @@ class _ChatScreenState extends State<ChatScreen>
     // Text-only send
     final message = caption;
     print('📤 Sending message: $message');
-    await context.read<ChatCubit>().sendMessage(message: message);
-    _messageController.clear();
-    _scrollToBottom();
+    final error = await context.read<ChatCubit>().sendMessage(message: message);
+    if (error != null) {
+      // keep the typed text so user can retry/edit; show friendly error
+      showCustomSnackBar(context, error, type: SnackBarType.error);
+    } else {
+      _messageController.clear();
+      _scrollToBottom();
+    }
   }
 
   Future<void> _openFilePicker() async {
     try {
+      // Restrict picker to allowed extensions (images, video, documents) - explicitly exclude audio
+      final allowedExt = <String>[
+        // images
+        'png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'heic', 'heif',
+        // videos
+        'mp4', 'mov', 'mkv', 'webm', 'avi', '3gp',
+        // documents
+        'pdf', 'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'txt', 'csv',
+      ];
+
       final result = await FilePicker.platform.pickFiles(
-        type: FileType.any,
+        type: FileType.custom,
+        allowedExtensions: allowedExt,
         allowMultiple: false,
       );
       if (result == null) return;
@@ -139,21 +271,66 @@ class _ChatScreenState extends State<ChatScreen>
       if (file.path == null) return;
       final path = file.path!;
 
+      // Defensive check: if user somehow picked an audio file (some platforms allow typing extension), block it.
+      final ext = p
+          .extension(path)
+          .toLowerCase()
+          .replaceFirst('.', ''); // e.g. 'mp3'
+      final audioExt = ValidationRules.audioExt
+          .map((e) => e.replaceFirst('.', ''))
+          .toList();
+      if (audioExt.contains(ext)) {
+        showCustomSnackBar(
+          context,
+          'Audio files are not supported here. Please select an image, video, or document.',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+
       final lower = path.toLowerCase();
-      final imageExt = ['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp'];
+      final imageExt = [
+        '.png',
+        '.jpg',
+        '.jpeg',
+        '.gif',
+        '.webp',
+        '.bmp',
+        '.heic',
+        '.heif',
+      ];
       final videoExt = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'];
-      int type = 4;
+      int type = 4; // default generic file
       for (var e in imageExt) if (lower.endsWith(e)) type = 1;
       for (var e in videoExt) if (lower.endsWith(e)) type = 2;
 
-      // If user has typed text, prevent attaching
-      if (_messageController.text.trim().isNotEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(content: Text('Please clear text before attaching a file.')));
+      // Validate file using validation helpers
+      final f = File(path);
+      FileCategory category = FileCategory.GENERIC;
+      if (type == 1)
+        category = FileCategory.IMAGE;
+      else if (type == 2)
+        category = FileCategory.VIDEO;
+      else {
+        final ext = p.extension(path).toLowerCase();
+        if (ValidationRules.docExt.contains(ext))
+          category = FileCategory.DOCUMENT;
+        else if (ValidationRules.audioExt.contains(ext))
+          category = FileCategory.AUDIO;
+      }
+
+      final validation = await validateFileByCategory(f, category);
+      if (!validation.isValid) {
+        showCustomSnackBar(
+          context,
+          validation.message,
+          type: SnackBarType.error,
+        );
         return;
       }
 
       setState(() {
-        _attachedFilePath = path;
+        _attachedFilePath = validation.file?.path ?? path;
         _attachedFileType = type;
       });
     } catch (e) {
@@ -200,6 +377,10 @@ class _ChatScreenState extends State<ChatScreen>
   void dispose() {
     print('🧹 Disposing chat screen');
     WidgetsBinding.instance.removeObserver(this);
+    // Dispose audio players
+    for (var p in _audioPlayers.values) {
+      p.dispose();
+    }
     _messageController.dispose();
     _scrollController.dispose();
     _focusNode.dispose();
@@ -249,11 +430,13 @@ class _ChatScreenState extends State<ChatScreen>
                 'file_url': last.fileUrl,
                 'file_name': last.fileName,
                 'group_id': widget.isGroup ? widget.userId : null,
-              }
+              },
             };
             context.read<ConversationCubit>().processRawMessage(payload);
           } catch (e) {
-            print('⚠️ Failed to forward last message to ConversationCubit on pop: $e');
+            print(
+              '⚠️ Failed to forward last message to ConversationCubit on pop: $e',
+            );
           }
         }
         Navigator.pop(context, null);
@@ -307,11 +490,13 @@ class _ChatScreenState extends State<ChatScreen>
                   'file_url': last.fileUrl,
                   'file_name': last.fileName,
                   'group_id': widget.isGroup ? widget.userId : null,
-                }
+                },
               };
               context.read<ConversationCubit>().processRawMessage(payload);
             } catch (e) {
-              print('⚠️ Failed to forward last message to ConversationCubit on back: $e');
+              print(
+                '⚠️ Failed to forward last message to ConversationCubit on back: $e',
+              );
             }
           }
           Navigator.pop(context, null);
@@ -326,11 +511,14 @@ class _ChatScreenState extends State<ChatScreen>
                 ? CachedNetworkImageProvider(widget.userAvatar!)
                 : null,
             child: widget.userAvatar == null
-                ? Icon(
-                    widget.isGroup ? Icons.group : Icons.person,
-                    size: 18,
-                    color: Colors.white,
-                  )
+                ? Text(
+              Utils.getInitials(widget.userName),
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
+                fontSize: 14,
+              ),
+            )
                 : null,
           ),
           const SizedBox(width: 12),
@@ -367,30 +555,97 @@ class _ChatScreenState extends State<ChatScreen>
       ),
       actions: [
         PopupMenuButton<String>(
-          icon: const Icon(Icons.more_vert, color: Colors.white),
+          icon: const Icon(Icons.info_outline, color: Colors.white),
           onSelected: (value) {
-            // Handle menu actions
+            if (value == 'info') {
+              _openUserInfo();
+            }
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(value: 'info', child: Text('View Info')),
-            const PopupMenuItem(value: 'mute', child: Text('Mute')),
-            const PopupMenuItem(value: 'clear', child: Text('Clear Chat')),
+            const PopupMenuItem(
+              value: 'info',
+              child: Row(
+                children: [
+                  Icon(Icons.person_outline),
+                  SizedBox(width: 8),
+                  Text('User Info'),
+                ],
+              ),
+            ),
           ],
         ),
       ],
     );
   }
+  void _openUserInfo() {
+    // TODO: Replace with actual user data from your state/cubit
+    final isCurrentlyBlocked = false; // Get this from your state management
 
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => UserInfoScreen(
+          userId: widget.userId,
+          userName: widget.userName,
+          userAvatar: widget.userAvatar,
+          userEmail: 'user@example.com', // TODO: Get actual user email
+          isBlocked: isCurrentlyBlocked,
+        ),
+      ),
+    );
+  }
   Widget _buildMessagesList() {
     return BlocConsumer<ChatCubit, ChatState>(
       listener: (context, state) {
         // Only act on ChatLoaded states
         if (state is! ChatLoaded) return;
 
-        // If we're in the middle of requesting older messages, wait until
-        // the loading flag is cleared, then restore the previous scroll
-        // position. Also, when isLoadingMore is true, don't auto-scroll.
+        // If we had requested load-more (older messages) restore previous
+        // viewport so the user remains looking at the same message.
+        if (_pendingLoadMore) {
+          // Wait for the new frame so ListView has the new children and
+          // updated scroll metrics. We set _restoringAfterLoadMore to true
+          // so that the subsequent ChatLoaded emit (with updated messages)
+          // doesn't trigger an unwanted scroll-to-bottom.
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            if (!_scrollController.hasClients) {
+              _pendingLoadMore = false;
+              _restoringAfterLoadMore = false;
+              return;
+            }
+
+            final newMax = _scrollController.position.maxScrollExtent;
+            if (_prevMaxScrollExtent != null && _prevScrollOffset != null) {
+              final delta = newMax - _prevMaxScrollExtent!;
+              // Keep the user's viewport anchored by adding the delta to
+              // previous offset. Use jumpTo to avoid animating unexpectedly.
+              final target = (_prevScrollOffset! + delta).clamp(0.0, newMax);
+              try {
+                _scrollController.jumpTo(target);
+              } catch (_) {
+                // ignore - if jump fails just continue
+              }
+            }
+            // Leave _restoringAfterLoadMore true until we've observed the
+            // next non-loading state to suppress auto-scroll there as well.
+            _pendingLoadMore = false;
+            _prevMaxScrollExtent = null;
+            _prevScrollOffset = null;
+            _restoringAfterLoadMore = true;
+          });
+
+          return;
+        }
+
+        // If we're in the middle of requesting older messages, don't auto-scroll.
         if (state.isLoadingMore) return;
+
+        // If we just restored the viewport for load-more, suppress the
+        // automatic scroll-to-bottom for this emission so the user's
+        // position remains stable. Clear the flag afterwards.
+        if (_restoringAfterLoadMore) {
+          _restoringAfterLoadMore = false;
+          return;
+        }
 
         // Normal new message arrival → scroll to bottom
         _scrollToBottom();
@@ -483,7 +738,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     // If it's a SYSTEM message render it as a standalone centered blue bubble
     if (kind == MessageKind.SYSTEM) {
-      // Centered full-row system message styled as a blue pill with white text.
+      // Centered full-row system message styled as a purple pill with light opacity.
       final maxWidth = MediaQuery.of(context).size.width * 0.85;
       return Padding(
         padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
@@ -494,20 +749,20 @@ class _ChatScreenState extends State<ChatScreen>
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
               decoration: BoxDecoration(
-                color: Color(0xFFBFDBFE),
+                color: AppClr.primaryColor.withValues(alpha: 0.15),
                 border: Border.all(
-                  color: const Color(0xff1E40AF).withValues(alpha: .5),
+                  color: AppClr.primaryColor.withValues(alpha: 0.3),
                   width: 1,
                 ),
-                borderRadius: BorderRadius.circular(20),
+                borderRadius: BorderRadius.circular(12),
               ),
               child: Text(
                 _parseMessage(message.message),
                 textAlign: TextAlign.center,
-                style: const TextStyle(
-                  color: Color(0xff1E40AF),
+                style: TextStyle(
                   fontSize: 14,
                   fontWeight: FontWeight.w600,
+                  color: AppClr.primaryColor,
                 ),
               ),
             ),
@@ -571,7 +826,7 @@ class _ChatScreenState extends State<ChatScreen>
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withAlpha((0.05 * 255).round()),
+                        color: Colors.black.withOpacity(0.05),
                         blurRadius: 4,
                         offset: const Offset(0, 2),
                       ),
@@ -606,17 +861,57 @@ class _ChatScreenState extends State<ChatScreen>
                           GestureDetector(
                             onTap: () async {
                               final kind = message.kind();
+                              final url = _buildMediaUrl(message);
                               if (kind == MessageKind.IMAGE) {
-                                final url = _buildMediaUrl(message);
                                 if (url != null && url.isNotEmpty) {
+                                  // Show an in-app preview dialog with zoom/pan instead of launching external URL
                                   showDialog(
-                                    context: ctx,
-                                    builder: (_) => Dialog(
+                                    context: context,
+                                    builder: (ctx) => Dialog(
+                                      insetPadding: const EdgeInsets.all(8),
+                                      backgroundColor: Colors.transparent,
                                       child: GestureDetector(
-                                        onTap: () => Navigator.pop(ctx),
-                                        child: CachedNetworkImage(
-                                          imageUrl: url,
-                                          fit: BoxFit.contain,
+                                        onTap: () => Navigator.of(ctx).pop(),
+                                        child: ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            12,
+                                          ),
+                                          child: Container(
+                                            color: Colors.black,
+                                            child: InteractiveViewer(
+                                              panEnabled: true,
+                                              minScale: 1.0,
+                                              maxScale: 4.0,
+                                              child: CachedNetworkImage(
+                                                imageUrl: url,
+                                                placeholder: (context, url) =>
+                                                    Container(
+                                                      width: double.infinity,
+                                                      height: 300,
+                                                      color: Colors.black12,
+                                                      child: const Center(
+                                                        child:
+                                                            CircularProgressIndicator(),
+                                                      ),
+                                                    ),
+                                                errorWidget:
+                                                    (
+                                                      context,
+                                                      url,
+                                                      error,
+                                                    ) => Container(
+                                                      width: double.infinity,
+                                                      height: 300,
+                                                      color: Colors.black12,
+                                                      child: const Icon(
+                                                        Icons.broken_image,
+                                                        color: Colors.white70,
+                                                      ),
+                                                    ),
+                                                fit: BoxFit.contain,
+                                              ),
+                                            ),
+                                          ),
                                         ),
                                       ),
                                     ),
@@ -625,39 +920,49 @@ class _ChatScreenState extends State<ChatScreen>
                               } else if (kind == MessageKind.VIDEO) {
                                 final url = _buildMediaUrl(message);
                                 if (url != null && url.isNotEmpty) {
-                                  showDialog(
-                                    context: ctx,
-                                    builder: (_) => Dialog(
-                                      child: Container(
-                                        width: 400,
-                                        height: 300,
-                                        color: Colors.black,
-                                        child: Center(
-                                          child: IconButton(
-                                            icon: const Icon(
-                                              Icons.play_circle_fill,
-                                              size: 64,
-                                              color: Colors.white,
-                                            ),
-                                            onPressed: () async {
-                                              if (await canLaunchUrl(
-                                                Uri.parse(url),
-                                              ))
-                                                await launchUrl(Uri.parse(url));
-                                            },
-                                          ),
-                                        ),
-                                      ),
-                                    ),
-                                  );
+                                  // Open in-app video dialog
+                                  await _openVideoDialog(url, message.id);
                                 }
-                              } else if (kind == MessageKind.FILE ||
-                                  kind == MessageKind.AUDIO) {
-                                final url = message.fileUrl;
-                                if (url != null &&
-                                    url.isNotEmpty &&
-                                    await canLaunchUrl(Uri.parse(url))) {
-                                  await launchUrl(Uri.parse(url));
+                              } else if (kind == MessageKind.AUDIO) {
+                                // show inline player in bottom sheet
+                                showModalBottomSheet(
+                                  context: ctx,
+                                  builder: (_) => Padding(
+                                    padding: const EdgeInsets.all(12.0),
+                                    child: _audioPlayerWidget(message),
+                                  ),
+                                );
+                              } else if (kind == MessageKind.FILE) {
+                                if (url != null && url.isNotEmpty) {
+                                  final ext = p.extension(url).toLowerCase();
+                                  if (ext == '.pdf') {
+                                    await _openPdfViewer(url, message.id);
+                                  } else {
+                                    try {
+                                      final file = await _fetchAndCache(
+                                        url,
+                                        message.id,
+                                      );
+                                      if (file != null) {
+                                        final uri = Uri.file(file.path);
+                                        if (await canLaunchUrl(uri)) {
+                                          await launchUrl(uri);
+                                        } else {
+                                          showCustomSnackBar(
+                                            context,
+                                            'Cannot open file.',
+                                            type: SnackBarType.error,
+                                          );
+                                        }
+                                      }
+                                    } catch (e) {
+                                      showCustomSnackBar(
+                                        context,
+                                        'Failed to open file: $e',
+                                        type: SnackBarType.error,
+                                      );
+                                    }
+                                  }
                                 }
                               }
                             },
@@ -738,18 +1043,45 @@ class _ChatScreenState extends State<ChatScreen>
   Widget _buildMessageContent(Message message) {
     final kind = message.kind();
 
-    // Use an if/else chain instead of switch to avoid exhaustive-match issues
     if (kind == MessageKind.SYSTEM) {
       return const SizedBox.shrink();
     } else if (kind == MessageKind.IMAGE) {
       final url = _buildMediaUrl(message);
       if (url == null || url.isEmpty) return const SizedBox.shrink();
       return GestureDetector(
-        onTap: () async {
-          if (await canLaunchUrl(Uri.parse(url))) {
-            await launchUrl(Uri.parse(url));
-          }
-          print('🖼️ Image tapped: $url');
+        onTap: () {
+          showDialog(
+            context: context,
+            builder: (ctx) => Dialog(
+              insetPadding: const EdgeInsets.all(8),
+              backgroundColor: Colors.transparent,
+              child: GestureDetector(
+                onTap: () => Navigator.of(ctx).pop(),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: CachedNetworkImage(
+                    imageUrl: url,
+                    placeholder: (context, url) => Container(
+                      width: double.infinity,
+                      height: 300,
+                      color: Colors.black12,
+                      child: const Center(child: CircularProgressIndicator()),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: double.infinity,
+                      height: 300,
+                      color: Colors.black12,
+                      child: const Icon(
+                        Icons.broken_image,
+                        color: Colors.white70,
+                      ),
+                    ),
+                    fit: BoxFit.contain,
+                  ),
+                ),
+              ),
+            ),
+          );
         },
         child: ClipRRect(
           borderRadius: BorderRadius.circular(8),
@@ -778,72 +1110,380 @@ class _ChatScreenState extends State<ChatScreen>
     } else if (kind == MessageKind.VIDEO) {
       final url = _buildMediaUrl(message);
       if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+      // DON'T auto-generate thumbnail - just show placeholder with play button
       return GestureDetector(
-        onTap: () async {
-          if (await canLaunchUrl(Uri.parse(url)))
-            await launchUrl(Uri.parse(url));
-        },
+        onLongPress: () => _showMediaOptions(message, url),
         child: Stack(
           alignment: Alignment.center,
-          children: const [
-            SizedBox(
+          children: [
+            // Static placeholder - no thumbnail generation
+            Container(
               width: 200,
               height: 120,
-              child: ColoredBox(color: Colors.black12),
+              decoration: BoxDecoration(
+                color: Colors.black26,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(
+                Icons.videocam,
+                size: 48,
+                color: Colors.white54,
+              ),
             ),
-            Icon(Icons.play_circle_fill, size: 48, color: Colors.white70),
+            // Play button
+            const Icon(Icons.play_circle_fill, size: 56, color: Colors.white70),
+            // Download indicator
+            Positioned(
+              right: 8,
+              top: 8,
+              child: FutureBuilder<FileInfo?>(
+                future: DefaultCacheManager().getFileFromCache(url),
+                builder: (context, snapshot) {
+                  final isCached = snapshot.data != null;
+                  final isDownloading =
+                      _downloadProgress[message.id] != null &&
+                      _downloadProgress[message.id]! < 1.0;
+
+                  if (isDownloading) {
+                    return SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Stack(
+                        alignment: Alignment.center,
+                        children: [
+                          CircularProgressIndicator(
+                            value: _downloadProgress[message.id],
+                            backgroundColor: Colors.white24,
+                            color: Colors.white,
+                          ),
+                          const Icon(
+                            Icons.downloading,
+                            size: 14,
+                            color: Colors.white,
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+
+                  if (!isCached) {
+                    return Container(
+                      padding: const EdgeInsets.all(4),
+                      decoration: BoxDecoration(
+                        color: Colors.black54,
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Icon(
+                        Icons.cloud_download,
+                        color: Colors.white,
+                        size: 20,
+                      ),
+                    );
+                  }
+
+                  return Container(
+                    padding: const EdgeInsets.all(4),
+                    decoration: BoxDecoration(
+                      color: Colors.green.withOpacity(0.7),
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.check_circle,
+                      color: Colors.white,
+                      size: 20,
+                    ),
+                  );
+                },
+              ),
+            ),
+            // Tap area
+            Positioned.fill(
+              child: Material(
+                color: Colors.transparent,
+                child: InkWell(
+                  onTap: () async {
+                    // Check if cached
+                    final cached = await DefaultCacheManager().getFileFromCache(
+                      url,
+                    );
+                    if (cached != null) {
+                      // Already cached, play directly
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) {
+                            return Scaffold(
+                              backgroundColor: Colors.black,
+                              appBar: AppBar(
+                                backgroundColor: Colors.black,
+                                iconTheme: const IconThemeData(
+                                  color: Colors.white,
+                                ),
+                              ),
+                              body: Center(
+                                child: AspectRatio(
+                                  aspectRatio: 16 / 9,
+                                  child: VideoPlayerViewer(
+                                    url: url,
+                                    messageId: message.id,
+                                  ),
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    } else {
+                      // Not cached, download first
+                      try {
+                        await _fetchAndCache(url, message.id);
+                        setState(() {}); // Refresh to show cached state
+                        showCustomSnackBar(
+                          context,
+                          'Download complete. Tap again to play.',
+                          type: SnackBarType.success,
+                        );
+                      } catch (e) {
+                        showCustomSnackBar(
+                          context,
+                          'Download failed: $e',
+                          type: SnackBarType.error,
+                        );
+                      }
+                    }
+                  },
+                ),
+              ),
+            ),
           ],
         ),
       );
     } else if (kind == MessageKind.AUDIO) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          IconButton(
-            icon: const Icon(Icons.play_arrow),
-            onPressed: () async {
-              final url = message.fileUrl;
-              if (url != null && await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url));
-              }
-            },
-          ),
-          Text(message.fileName ?? 'Audio'),
-        ],
+      final url = _buildMediaUrl(message);
+      if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+      return FutureBuilder<FileInfo?>(
+        future: DefaultCacheManager().getFileFromCache(url),
+        builder: (context, snapshot) {
+          final isCached = snapshot.data != null;
+          final isDownloading =
+              _downloadProgress[message.id] != null &&
+              _downloadProgress[message.id]! < 1.0;
+
+          return Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+            decoration: BoxDecoration(
+              color: Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCached ? Colors.green : Colors.grey.withOpacity(0.5),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  Icons.audiotrack,
+                  size: 20,
+                  color: isCached ? Colors.green : Colors.grey[700],
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    message.fileName ?? 'Audio',
+                    style: TextStyle(
+                      color: isCached ? Colors.green[700] : Colors.black87,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isDownloading)
+                  SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      value: _downloadProgress[message.id],
+                      strokeWidth: 2,
+                    ),
+                  )
+                else if (!isCached)
+                  IconButton(
+                    icon: const Icon(Icons.download_rounded, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () async {
+                      try {
+                        await _fetchAndCache(url, message.id);
+                        setState(() {});
+                        showCustomSnackBar(
+                          context,
+                          'Download complete',
+                          type: SnackBarType.success,
+                        );
+                      } catch (e) {
+                        showCustomSnackBar(
+                          context,
+                          'Download failed: $e',
+                          type: SnackBarType.error,
+                        );
+                      }
+                    },
+                  )
+                else
+                  IconButton(
+                    icon: const Icon(Icons.play_arrow, size: 20),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                    onPressed: () {
+                      showModalBottomSheet(
+                        context: context,
+                        builder: (_) => Padding(
+                          padding: const EdgeInsets.all(12.0),
+                          child: _audioPlayerWidget(message),
+                        ),
+                      );
+                    },
+                  ),
+              ],
+            ),
+          );
+        },
       );
     } else if (kind == MessageKind.FILE) {
-      return Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.insert_drive_file, size: 20),
-          const SizedBox(width: 8),
-          Flexible(child: Text(message.fileName ?? 'File')),
-          IconButton(
-            icon: const Icon(Icons.download, size: 20),
-            onPressed: () async {
-              final url = message.fileUrl;
-              if (url != null && await canLaunchUrl(Uri.parse(url))) {
-                await launchUrl(Uri.parse(url));
-              }
-            },
-          ),
-        ],
+      final url = message.fileUrl;
+      if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+      return GestureDetector(
+        onLongPress: () => _showMediaOptions(message, url),
+        child: FutureBuilder<FileInfo?>(
+          future: DefaultCacheManager().getFileFromCache(url),
+          builder: (context, snapshot) {
+            final isCached = snapshot.data != null;
+            final isDownloading =
+                _downloadProgress[message.id] != null &&
+                _downloadProgress[message.id]! < 1.0;
+
+            return Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              decoration: BoxDecoration(
+                color: Colors.grey[100],
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(
+                  color: isCached ? Colors.green : Colors.grey.withOpacity(0.5),
+                  width: 1.5,
+                ),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(
+                    Icons.insert_drive_file,
+                    size: 20,
+                    color: isCached ? Colors.green : Colors.grey[700],
+                  ),
+                  const SizedBox(width: 8),
+                  Flexible(
+                    child: Text(
+                      message.fileName ?? 'File',
+                      style: TextStyle(
+                        color: isCached ? Colors.green[700] : Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  if (isDownloading)
+                    SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        value: _downloadProgress[message.id],
+                        strokeWidth: 2,
+                      ),
+                    )
+                  else if (!isCached)
+                    IconButton(
+                      icon: const Icon(Icons.download_rounded, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () async {
+                        try {
+                          await _fetchAndCache(url, message.id);
+                          setState(() {});
+                          showCustomSnackBar(
+                            context,
+                            'Download complete',
+                            type: SnackBarType.success,
+                          );
+                        } catch (e) {
+                          showCustomSnackBar(
+                            context,
+                            'Download failed: $e',
+                            type: SnackBarType.error,
+                          );
+                        }
+                      },
+                    )
+                  else
+                    IconButton(
+                      icon: const Icon(Icons.open_in_new, size: 20),
+                      padding: EdgeInsets.zero,
+                      constraints: const BoxConstraints(),
+                      onPressed: () async {
+                        try {
+                          final file = await _fetchAndCache(url, message.id);
+                          if (file != null) {
+                            final ext = p.extension(file.path).toLowerCase();
+                            if (ext == '.pdf') {
+                              await _openPdfViewer(url, message.id);
+                            } else {
+                              final uri = Uri.file(file.path);
+                              if (await canLaunchUrl(uri)) {
+                                await launchUrl(uri);
+                              } else {
+                                showCustomSnackBar(
+                                  context,
+                                  'Cannot open file.',
+                                  type: SnackBarType.error,
+                                );
+                              }
+                            }
+                          }
+                        } catch (e) {
+                          showCustomSnackBar(
+                            context,
+                            'Failed to open file: $e',
+                            type: SnackBarType.error,
+                          );
+                        }
+                      },
+                    ),
+                ],
+              ),
+            );
+          },
+        ),
       );
     }
 
-    // TEXT and any unknown kinds: render nothing here (text is rendered below)
     return const SizedBox.shrink();
   }
 
   String? _extractFirstImgSrc(String html) {
-    final pattern = "<img[^>]+src=[\"']?([^\"'>]+)[\"']?";
+    final pattern = r'<img[^>]*src="([^"]*)"';
     final reg = RegExp(pattern, caseSensitive: false);
     final m = reg.firstMatch(html);
     return m?.group(1);
   }
 
   String? _extractFirstVideoSrc(String html) {
-    final pattern = "<video[^>]+src=[\"']?([^\"'>]+)[\"']?";
+    final pattern = r'<video[^>]*src="([^"]*)"';
     final reg = RegExp(pattern, caseSensitive: false);
     final m = reg.firstMatch(html);
     return m?.group(1);
@@ -855,7 +1495,7 @@ class _ChatScreenState extends State<ChatScreen>
       padding: const EdgeInsets.all(8),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withAlpha((0.1 * 255).round()),
+        color: Colors.black.withOpacity(0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border(left: BorderSide(color: AppClr.primaryColor, width: 3)),
       ),
@@ -929,7 +1569,7 @@ class _ChatScreenState extends State<ChatScreen>
         color: Colors.white,
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withAlpha((0.05 * 255).round()),
+            color: Colors.black.withOpacity(0.05),
             blurRadius: 4,
             offset: const Offset(0, -2),
           ),
@@ -991,7 +1631,9 @@ class _ChatScreenState extends State<ChatScreen>
                   child: Center(
                     child: _attachedFileType == 1
                         ? const Icon(Icons.image, size: 20)
-                        : (_attachedFileType == 2 ? const Icon(Icons.videocam, size: 20) : const Icon(Icons.insert_drive_file, size: 20)),
+                        : (_attachedFileType == 2
+                              ? const Icon(Icons.videocam, size: 20)
+                              : const Icon(Icons.insert_drive_file, size: 20)),
                   ),
                 ),
               ),
@@ -1021,7 +1663,8 @@ class _ChatScreenState extends State<ChatScreen>
   // Create a stable fingerprint for a message for UI-level dedupe
   String _fingerprint(Message m) {
     final txt = _parseMessage(m.message);
-    return '${m.fromId}|$txt|${m.fileUrl ?? ''}|${m.messageType}';
+    // include server id to make fingerprint unique per message
+    return '${m.id}|${m.fromId}|$txt|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
   }
 
   List<Message> _uniqueMessages(List<Message> messages) {
@@ -1092,5 +1735,418 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (_) {
       return null;
     }
+  }
+
+  // Fetch a file and cache it using flutter_cache_manager. Returns local File.
+  Future<File?> _fetchAndCache(String url, String messageId) async {
+    if (url.isEmpty) return null;
+
+    final cacheManager = DefaultCacheManager();
+
+    // Fast cache check
+    try {
+      final cached = await cacheManager.getFileFromCache(url);
+      if (cached != null) {
+        debugPrint('📥 Cache hit for: $url (messageId:$messageId)');
+        return cached.file;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Cache check failed for $url: $e');
+      // proceed to download
+    }
+
+    // If an identical fetch is already in progress, return that future
+    if (_fetchFutures.containsKey(url)) {
+      debugPrint('🔁 Reusing in-flight download for: $url');
+      return _fetchFutures[url];
+    }
+
+    // Create the download future and store it so concurrent callers reuse it
+    final future = (() async {
+      final dio = DioClient();
+      final cancelToken = CancelToken();
+      _downloadTokens[messageId] = cancelToken;
+
+      debugPrint('⬇️ Starting download: $url (messageId:$messageId)');
+      try {
+        final resp = await dio.downloadBytes(
+          url,
+          onReceiveProgress: (count, total) {
+            final pct = (total > 0) ? (count / total) : 0.0;
+            _downloadProgress[messageId] = pct;
+            // throttle UI updates: only call setState when progress changed enough
+            final last = _lastReportedProgress[messageId] ?? -1.0;
+            if ((pct - last).abs() > 0.02 || pct == 1.0) {
+              _lastReportedProgress[messageId] = pct;
+              if (mounted) setState(() {});
+            }
+          },
+          cancelToken: cancelToken,
+        );
+
+        final bytes = resp.data as List<int>?;
+        if (bytes == null) throw Exception('Empty download');
+
+        await cacheManager.putFile(
+          url,
+          Uint8List.fromList(bytes),
+          fileExtension: p.extension(url),
+        );
+        final info = await cacheManager.getFileFromCache(url);
+        debugPrint('✅ Download complete: $url');
+        return info?.file;
+      } finally {
+        _downloadProgress.remove(messageId);
+        _downloadTokens.remove(messageId);
+        _lastReportedProgress.remove(messageId);
+      }
+    })();
+
+    _fetchFutures[url] = future;
+
+    try {
+      final file = await future;
+      return file;
+    } finally {
+      // remove stored future so subsequent calls will re-check cache
+      _fetchFutures.remove(url);
+    }
+  }
+
+  Future<File?> _getVideoThumbnail(String url, String messageId) async {
+    if (url.isEmpty) return null;
+
+    final cacheManager = DefaultCacheManager();
+    final thumbKey = '${url}_thumb.jpg';
+
+    // If thumb cached, return quickly
+    try {
+      final cached = await cacheManager.getFileFromCache(thumbKey);
+      if (cached != null) {
+        debugPrint('📥 Thumbnail cache hit for $url');
+        return cached.file;
+      }
+    } catch (e) {
+      debugPrint('⚠️ Thumb cache check failed: $e');
+    }
+
+    // Reuse in-flight thumbnail generation
+    if (_thumbFutures.containsKey(thumbKey)) {
+      debugPrint('🔁 Reusing in-flight thumbnail for $url');
+      return _thumbFutures[thumbKey];
+    }
+
+    final future = (() async {
+      // Ensure video is downloaded first (reuses _fetchAndCache which also memoizes)
+      final videoFile = await _fetchAndCache(url, messageId);
+      if (videoFile == null) return null;
+
+      final data = await VideoThumbnail.thumbnailData(
+        video: videoFile.path,
+        imageFormat: ImageFormat.JPEG,
+        maxWidth: 480,
+        quality: 75,
+      );
+      if (data == null) return null;
+
+      await cacheManager.putFile(thumbKey, data, fileExtension: '.jpg');
+      final info = await cacheManager.getFileFromCache(thumbKey);
+      return info?.file;
+    })();
+
+    // Store the future for reuse
+    _thumbFutures[thumbKey] = future;
+
+    try {
+      final result = await future;
+      return result;
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Thumbnail generation failed: $e');
+      return null;
+    } finally {
+      // Clean up the future cache when done
+      _thumbFutures.remove(thumbKey);
+    }
+  }
+
+  // Save a file (image/video) to the gallery. Requests permissions where required.
+  Future<void> _saveToGallery(File file) async {
+    try {
+      if (Platform.isAndroid) {
+        final status = await Permission.storage.request();
+        if (!status.isGranted) {
+          showCustomSnackBar(
+            context,
+            'Storage permission required to save files.',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+      } else if (Platform.isIOS) {
+        final status = await Permission.photos.request();
+        if (!status.isGranted) {
+          showCustomSnackBar(
+            context,
+            'Photos permission required to save files.',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+      }
+
+      final bytes = await file.readAsBytes();
+      final pathStr = file.path;
+      final ext = p.extension(pathStr).toLowerCase();
+      bool saved = false;
+      if (ext == '.mp4' || ext == '.mov' || ext == '.mkv' || ext == '.webm') {
+        saved = await GalleryHelper.saveVideo(pathStr) ?? false;
+      } else {
+        saved = await GalleryHelper.saveImage(pathStr) ?? false;
+      }
+      if (saved)
+        showCustomSnackBar(
+          context,
+          'Saved to gallery',
+          type: SnackBarType.success,
+        );
+      else
+        showCustomSnackBar(
+          context,
+          'Failed to save to gallery',
+          type: SnackBarType.error,
+        );
+    } catch (e) {
+      showCustomSnackBar(
+        context,
+        'Error saving file: $e',
+        type: SnackBarType.error,
+      );
+    }
+  }
+
+  // Open video dialog (downloads if necessary and plays cached file)
+  Future<void> _openVideoDialog(String url, String messageId) async {
+    try {
+      final file = await _fetchAndCache(url, messageId);
+      if (file == null) {
+        showCustomSnackBar(
+          context,
+          'Video not available',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) {
+            return Scaffold(
+              backgroundColor: Colors.black,
+              body: SafeArea(
+                child: Center(
+                  child: Hero(
+                    tag: 'media_$messageId',
+                    child: AspectRatio(
+                      aspectRatio: 16 / 9,
+                      child: VideoPlayerViewer(url: url, messageId: messageId),
+                    ),
+                  ),
+                ),
+              ),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      showCustomSnackBar(
+        context,
+        'Failed to open video: $e',
+        type: SnackBarType.error,
+      );
+    }
+  }
+
+  // Open PDF viewer using pdfx package (downloads file first)
+  Future<void> _openPdfViewer(String url, String messageId) async {
+    try {
+      final file = await _fetchAndCache(url, messageId);
+      if (file == null) {
+        showCustomSnackBar(
+          context,
+          'PDF not available',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) {
+            final controller = PdfController(
+              document: PdfDocument.openFile(file.path),
+            );
+            return Scaffold(
+              appBar: AppBar(title: const Text('Document')),
+              body: PdfView(controller: controller),
+            );
+          },
+        ),
+      );
+    } catch (e) {
+      showCustomSnackBar(
+        context,
+        'Failed to open PDF: $e',
+        type: SnackBarType.error,
+      );
+    }
+  }
+
+  // Minimal audio player widget: plays cached audio file using just_audio
+  Widget _audioPlayerWidget(Message message) {
+    return AudioPlayerInline(message: message, fetchAndCache: _fetchAndCache);
+  }
+
+  // Show download / save / share options for a message (long-press)
+  void _showMediaOptions(Message message, String url) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        final downloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: Icon(
+                  downloading ? Icons.cancel : Icons.download_rounded,
+                ),
+                title: Text(downloading ? 'Cancel download' : 'Download'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  if (downloading) {
+                    final token = _downloadTokens[message.id];
+                    token?.cancel('user_cancel');
+                    _downloadProgress.remove(message.id);
+                    setState(() {});
+                    showCustomSnackBar(
+                      context,
+                      'Download cancelled',
+                      type: SnackBarType.info,
+                    );
+                  } else {
+                    try {
+                      await _fetchAndCache(url, message.id);
+                      setState(() {});
+                      showCustomSnackBar(
+                        context,
+                        'Downloaded',
+                        type: SnackBarType.success,
+                      );
+                    } catch (e) {
+                      showCustomSnackBar(
+                        context,
+                        'Download failed: $e',
+                        type: SnackBarType.error,
+                      );
+                    }
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.save_alt),
+                title: const Text('Save to gallery'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  try {
+                    final file = await _fetchAndCache(url, message.id);
+                    if (file != null) await _saveToGallery(file);
+                  } catch (e) {
+                    showCustomSnackBar(
+                      context,
+                      'Save failed: $e',
+                      type: SnackBarType.error,
+                    );
+                  }
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  showCustomSnackBar(
+                    context,
+                    'Share not implemented',
+                    type: SnackBarType.info,
+                  );
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+// Small helper widget to play a cached video file using Chewie.
+class VideoPlayerViewer extends StatefulWidget {
+  final String url;
+  final String messageId;
+  const VideoPlayerViewer({
+    super.key,
+    required this.url,
+    required this.messageId,
+  });
+
+  @override
+  State<VideoPlayerViewer> createState() => _VideoPlayerViewerState();
+}
+
+class _VideoPlayerViewerState extends State<VideoPlayerViewer> {
+  VideoPlayerController? _controller;
+  ChewieController? _chewie;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      final info = await DefaultCacheManager().getFileFromCache(widget.url);
+      final file = info?.file;
+      if (file != null) {
+        _controller = VideoPlayerController.file(file);
+        await _controller!.initialize();
+        _chewie = ChewieController(
+          videoPlayerController: _controller!,
+          autoPlay: true,
+          looping: false,
+        );
+        setState(() {});
+      }
+    } catch (e) {
+      if (kDebugMode) print('⚠️ Video viewer init failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewie?.dispose();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_chewie == null ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Chewie(controller: _chewie!);
   }
 }

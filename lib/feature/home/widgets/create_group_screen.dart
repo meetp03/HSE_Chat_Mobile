@@ -11,10 +11,8 @@ import 'package:hsc_chat/cores/utils/snackbar.dart';
 class CreateGroupScreen extends StatefulWidget {
   final List<int> selectedUserIds;
 
-  const CreateGroupScreen({
-    Key? key,
-    required this.selectedUserIds,
-  }) : super(key: key);
+  const CreateGroupScreen({Key? key, required this.selectedUserIds})
+    : super(key: key);
 
   @override
   State<CreateGroupScreen> createState() => _CreateGroupScreenState();
@@ -43,14 +41,22 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         });
       }
     } catch (e) {
-      showCustomSnackBar(context, 'Failed to pick image: $e', type: SnackBarType.error);
+      showCustomSnackBar(
+        context,
+        'Failed to pick image: $e',
+        type: SnackBarType.error,
+      );
     }
   }
 
   void _createGroup() {
     if (_formKey.currentState!.validate()) {
       if (widget.selectedUserIds.isEmpty) {
-        showCustomSnackBar(context, 'Please select at least one user', type: SnackBarType.error);
+        showCustomSnackBar(
+          context,
+          'Please select at least one user',
+          type: SnackBarType.error,
+        );
         return;
       }
 
@@ -75,12 +81,20 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     return BlocListener<GroupCubit, GroupState>(
       listener: (context, state) {
         if (state is GroupCreated) {
-          showCustomSnackBar(context, 'Group created successfully', type: SnackBarType.success);
+          showCustomSnackBar(
+            context,
+            'Group created successfully',
+            type: SnackBarType.success,
+          );
 
           // Navigate back to home and refresh conversations
           Navigator.popUntil(context, (route) => route.isFirst);
         } else if (state is GroupError) {
-          showCustomSnackBar(context, 'Error: ${state.message}', type: SnackBarType.error);
+          showCustomSnackBar(
+            context,
+            'Error: ${state.message}',
+            type: SnackBarType.error,
+          );
         }
       },
       child: Scaffold(
@@ -98,15 +112,26 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 // Group Image
                 GestureDetector(
                   onTap: _pickImage,
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.grey.shade200,
-                    backgroundImage: _selectedImagePath != null
-                        ? FileImage(File(_selectedImagePath!))
-                        : null,
-                    child: _selectedImagePath == null
-                        ? const Icon(Icons.camera_alt, size: 40, color: Colors.grey)
-                        : null,
+                  child: Container(
+                    padding: const EdgeInsets.all(3),
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(color: AppClr.primaryColor, width: 2),
+                    ),
+                    child: CircleAvatar(
+                      radius: 50,
+                      backgroundColor: Colors.grey.shade200,
+                      backgroundImage: _selectedImagePath != null
+                          ? FileImage(File(_selectedImagePath!))
+                          : null,
+                      child: _selectedImagePath == null
+                          ? const Icon(
+                              Icons.camera_alt,
+                              size: 40,
+                              color: Colors.grey,
+                            )
+                          : null,
+                    ),
                   ),
                 ),
                 const SizedBox(height: 20),
@@ -114,13 +139,26 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 // Group Name
                 TextFormField(
                   controller: _nameController,
-                  decoration: const InputDecoration(
+                  decoration: InputDecoration(
                     labelText: 'Channel Name',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(color: Colors.grey, width: 1.5),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: BorderSide(
+                        color: AppClr.primaryColor,
+                        width: 2.0,
+                      ),
+                    ),
                   ),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Please enter group name';
+                      return 'Please enter channel name';
                     }
                     return null;
                   },
@@ -130,21 +168,62 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                 // Description
                 TextFormField(
                   controller: _descriptionController,
-                  decoration: const InputDecoration(
+
+                  decoration: InputDecoration(
                     labelText: 'Description (Optional)',
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: Colors.grey,
+                        width: 1.5,
+                      ),
+                    ),
+                    focusedBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                      borderSide: const BorderSide(
+                        color: AppClr.primaryColor,
+                        width: 2.0,
+                      ),
+                    ),
                   ),
                   maxLines: 3,
                 ),
                 const SizedBox(height: 16),
 
                 // Selected Users Count
-                Text(
-                  'Selected Users: ${widget.selectedUserIds.length}',
-                  style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: AppClr.primaryColor.withValues(
+                      alpha: 0.15,
+                    ), // light green transparent background
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: AppClr.primaryColor, width: 1),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.max,
+                    children: [
+                      Icon(Icons.people, color: AppClr.primaryColor, size: 20),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Selected Users: ${widget.selectedUserIds.length}',
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.green,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
                 const SizedBox(height: 20),
-
+                Spacer(),
                 // Create Button
                 BlocBuilder<GroupCubit, GroupState>(
                   builder: (context, state) {

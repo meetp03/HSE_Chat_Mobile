@@ -1,12 +1,14 @@
 // chat_repository.dart
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/network/api_response.dart';
 import 'package:hsc_chat/cores/network/dio_client.dart';
 import 'package:hsc_chat/cores/network/network_exceptions.dart';
 import 'package:hsc_chat/feature/home/model/chat_response_model.dart';
-import 'package:path/path.dart' as p;
+import 'package:hsc_chat/cores/utils/file_validation.dart';
 import 'dart:io';
+import 'package:path/path.dart' as p;
 
 abstract class IChatRepository {
   Future<ApiResponse<ChatConversationResponse>> getConversations({
@@ -79,9 +81,7 @@ class ChatRepository implements IChatRepository {
       }
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
-      return ApiResponse<ChatConversationResponse>.error(
-        networkException.message,
-      );
+      return ApiResponse<ChatConversationResponse>.error(networkException.message);
     } catch (e) {
       return ApiResponse<ChatConversationResponse>.error(
         'Unexpected error: $e',
@@ -118,28 +118,47 @@ class ChatRepository implements IChatRepository {
       final response = await _dio.post(ApiUrls.sendMessage, data: data);
 
       if (response.statusCode == 200) {
-        if (response.data['success'] == true) {
-          final messageData = MessageResponse.fromJson(response.data);
-          return ApiResponse<MessageResponse>.success(
-            messageData,
-            message: messageData.message,
-            statusCode: response.statusCode,
-          );
+        final respData = response.data;
+        if (respData is Map<String, dynamic>) {
+          if (respData['success'] == true) {
+            final messageData = MessageResponse.fromJson(respData);
+            return ApiResponse<MessageResponse>.success(
+              messageData,
+              message: messageData.message,
+              statusCode: response.statusCode,
+            );
+          } else {
+            // Return server-provided message if available (don't mask)
+            final msg = respData['message']?.toString();
+            final friendly = (msg != null && msg.isNotEmpty)
+                ? msg
+                : 'Failed to send message. Please try again.';
+            return ApiResponse<MessageResponse>.error(friendly);
+          }
         } else {
-          return ApiResponse<MessageResponse>.error(
-            response.data['message'] ?? 'Failed to send message',
-          );
+          // Non-JSON response — surface its string for debugging/user info
+          final bodyStr = response.data?.toString() ?? 'Unexpected server response.';
+          return ApiResponse<MessageResponse>.error(bodyStr);
         }
       } else {
-        return ApiResponse<MessageResponse>.error(
-          response.data['message'] ?? 'Failed to send message',
-        );
+        final respMsg = (response.data is Map && response.data['message'] != null)
+            ? response.data['message'].toString()
+            : (response.statusMessage ?? response.data?.toString());
+        final friendly = (respMsg != null && respMsg.isNotEmpty)
+            ? respMsg
+            : 'Failed to send message (status ${response.statusCode}).';
+        return ApiResponse<MessageResponse>.error(friendly);
       }
     } on DioException catch (e) {
+      // Inspect response if present to present a friendly message for 5xx
+      final status = e.response?.statusCode;
+      if (status != null && status >= 500) {
+        return ApiResponse<MessageResponse>.error('Server error while sending message. Please try again later.');
+      }
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse<MessageResponse>.error(networkException.message);
     } catch (e) {
-      return ApiResponse<MessageResponse>.error('Unexpected error: $e');
+      return ApiResponse<MessageResponse>.error('Unexpected error: ${e.toString()}');
     }
   }
 
@@ -158,8 +177,24 @@ class ChatRepository implements IChatRepository {
     try {
       final file = File(filePath);
       if (!await file.exists()) {
-        return ApiResponse<MessageResponse>.error('File not found: $filePath');
+        return ApiResponse<MessageResponse>.error('Selected file not found.');
       }
+
+      // Extra safeguard: validate file on repository level so any caller
+      // that invokes this method cannot bypass client-side rules.
+      final ext = p.extension(file.path).toLowerCase();
+      FileCategory category = FileCategory.GENERIC;
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.heic', '.heif'].contains(ext)) category = FileCategory.IMAGE;
+      else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(ext)) category = FileCategory.VIDEO;
+      else if (ValidationRules.audioExt.contains(ext)) category = FileCategory.AUDIO;
+      else if (ValidationRules.docExt.contains(ext)) category = FileCategory.DOCUMENT;
+
+      final validation = await validateFileByCategory(file, category);
+      if (!validation.isValid) {
+        if (kDebugMode) print('⚠️ Repository validation failed for $filePath: ${validation.message}');
+        return ApiResponse<MessageResponse>.error(validation.message);
+      }
+      if (kDebugMode) print('✅ Repository validation passed for $filePath (size=${validation.sizeBytes}, mime=${validation.mime})');
 
       // Ensure server receives a non-empty message string
       final inferredMessage = (message != null && message.trim().isNotEmpty)
@@ -178,6 +213,7 @@ class ChatRepository implements IChatRepository {
         if (replyTo != null) 'reply_to': replyTo,
       };
 
+      if (kDebugMode) print('📤 Repository: starting upload to ${ApiUrls.sendMessage} for file: $filePath');
       // Upload using DioClient.uploadFile which builds FormData and sends
       final response = await _dio.uploadFile(
         ApiUrls.sendMessage,
@@ -185,30 +221,47 @@ class ChatRepository implements IChatRepository {
         data: formMap,
         onSendProgress: onSendProgress,
       );
+      if (kDebugMode) print('📦 Repository: upload completed for file: $filePath status=${response.statusCode}');
 
       if (response.statusCode == 200) {
-        if (response.data['success'] == true) {
-          final msgData = MessageResponse.fromJson(response.data);
-          return ApiResponse<MessageResponse>.success(
-            msgData,
-            message: msgData.message,
-            statusCode: response.statusCode,
-          );
+        final respData = response.data;
+        if (respData is Map<String, dynamic>) {
+          if (respData['success'] == true) {
+            final msgData = MessageResponse.fromJson(respData);
+            return ApiResponse<MessageResponse>.success(
+              msgData,
+              message: msgData.message,
+              statusCode: response.statusCode,
+            );
+          } else {
+            final msg = respData['message']?.toString();
+            final friendly = (msg != null && msg.isNotEmpty)
+                ? msg
+                : 'Failed to send file. Please try again.';
+            return ApiResponse<MessageResponse>.error(friendly);
+          }
         } else {
-          return ApiResponse<MessageResponse>.error(
-            response.data['message'] ?? 'Failed to send file message',
-          );
+          final bodyStr = response.data?.toString() ?? 'Unexpected server response.';
+          return ApiResponse<MessageResponse>.error(bodyStr);
         }
       } else {
-        return ApiResponse<MessageResponse>.error(
-          response.data['message'] ?? 'Failed to send file message',
-        );
+        final respMsg = (response.data is Map && response.data['message'] != null)
+            ? response.data['message'].toString()
+            : (response.statusMessage ?? response.data?.toString());
+        final friendly = (respMsg != null && respMsg.isNotEmpty)
+            ? respMsg
+            : 'Failed to upload file (status ${response.statusCode}).';
+        return ApiResponse<MessageResponse>.error(friendly);
       }
     } on DioException catch (e) {
+      final status = e.response?.statusCode;
+      if (status != null && status >= 500) {
+        return ApiResponse<MessageResponse>.error('Server error while uploading file. Please try again later.');
+      }
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse<MessageResponse>.error(networkException.message);
     } catch (e) {
-      return ApiResponse<MessageResponse>.error('Unexpected error: $e');
+      return ApiResponse<MessageResponse>.error('Unexpected error: ${e.toString()}');
     }
   }
 

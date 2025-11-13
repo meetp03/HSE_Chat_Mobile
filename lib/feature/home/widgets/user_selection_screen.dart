@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
- import 'package:hsc_chat/feature/home/widgets/create_group_screen.dart';
+import 'package:hsc_chat/feature/home/widgets/create_group_screen.dart';
 
 class UserSelectionScreen extends StatefulWidget {
   const UserSelectionScreen({Key? key}) : super(key: key);
@@ -45,7 +45,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-        _scrollController.position.maxScrollExtent - 100 &&
+            _scrollController.position.maxScrollExtent - 100 &&
         _scrollController.position.maxScrollExtent > 0) {
       context.read<GroupCubit>().loadMoreUsers();
     }
@@ -75,9 +75,8 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder: (context) => CreateGroupScreen(
-                      selectedUserIds: _selectedUsers,
-                    ),
+                    builder: (context) =>
+                        CreateGroupScreen(selectedUserIds: _selectedUsers),
                   ),
                 );
               },
@@ -95,9 +94,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           // Selected Users Count
           _buildSelectedUsersInfo(),
           // Users List
-          Expanded(
-            child: _buildUsersList(),
-          ),
+          Expanded(child: _buildUsersList()),
         ],
       ),
     );
@@ -112,18 +109,25 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
         decoration: InputDecoration(
           hintText: 'Search users...',
           prefixIcon: const Icon(Icons.search),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey, width: 1.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
+          ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: () {
-              _searchController.clear();
-              context.read<GroupCubit>().clearUsersSearch();
-            },
-          )
+                  icon: const Icon(Icons.clear),
+                  onPressed: () {
+                    _searchController.clear();
+                    context.read<GroupCubit>().clearUsersSearch();
+                  },
+                )
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(25.0),
-          ),
+
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         ),
       ),
@@ -137,15 +141,17 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           return Container(
             width: double.infinity,
             padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-            color: Colors.blue.shade50,
+            decoration: BoxDecoration(
+              color: AppClr.primaryColor.withValues(alpha: 0.1),
+            ),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Selected: ${_selectedUsers.length} users',
-                  style: const TextStyle(
+                  style: TextStyle(
                     fontWeight: FontWeight.bold,
-                    color: Colors.blue,
+                    color: AppClr.primaryColor,
                   ),
                 ),
                 if (_selectedUsers.isNotEmpty)
@@ -157,7 +163,10 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                     },
                     child: const Text(
                       'Clear All',
-                      style: TextStyle(color: Colors.red),
+                      style: TextStyle(
+                        color: Colors.redAccent,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ),
               ],
@@ -182,7 +191,8 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                 Text('Error: ${state.message}'),
                 const SizedBox(height: 16),
                 ElevatedButton(
-                  onPressed: () => context.read<GroupCubit>().loadUsers(refresh: true),
+                  onPressed: () =>
+                      context.read<GroupCubit>().loadUsers(refresh: true),
                   child: const Text('Retry'),
                 ),
               ],
@@ -238,7 +248,9 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: isSelected ? AppClr.primaryColor : Colors.green.shade100,
+            backgroundColor: isSelected
+                ? AppClr.primaryColor
+                : Colors.green.shade100,
             child: Text(
               user.name.substring(0, 1),
               style: TextStyle(

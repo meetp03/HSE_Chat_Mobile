@@ -5,6 +5,7 @@ import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/cores/network/dio_client.dart';
 import 'package:hsc_chat/cores/network/socket_service.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hsc_chat/cores/utils/utils.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_state.dart';
@@ -166,7 +167,7 @@ class _HomeScreenState extends State<HomeScreen>
     return Scaffold(
       backgroundColor: Colors.white,
       body: NestedScrollView(
-         headerSliverBuilder: (context, innerBoxScrolled) => [
+        headerSliverBuilder: (context, innerBoxScrolled) => [
           SliverAppBar(
             backgroundColor: AppClr.primaryColor,
             pinned: true,
@@ -204,7 +205,7 @@ class _HomeScreenState extends State<HomeScreen>
                 },
               ),
 
-           /*   // Message Icon Button
+              /*   // Message Icon Button
               IconButton(
                 icon: const Icon(Icons.message, color: Colors.white),
                 onPressed: () {
@@ -260,6 +261,7 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
 
+          SliverToBoxAdapter(child: SizedBox(height: 16)),
           SliverToBoxAdapter(child: _buildSearchBar()),
 
           SliverToBoxAdapter(
@@ -270,11 +272,20 @@ class _HomeScreenState extends State<HomeScreen>
 
                 final count = activeTab == 0
                     ? (context.read<ConversationCubit>().currentQuery.isNotEmpty
-                        ? context.read<ConversationCubit>().filteredAllChats.length
-                        : context.read<ConversationCubit>().allChats.length)
+                          ? context
+                                .read<ConversationCubit>()
+                                .filteredAllChats
+                                .length
+                          : context.read<ConversationCubit>().allChats.length)
                     : (context.read<ConversationCubit>().unreadQuery.isNotEmpty
-                        ? context.read<ConversationCubit>().filteredUnreadChats.length
-                        : context.read<ConversationCubit>().unreadChats.length);
+                          ? context
+                                .read<ConversationCubit>()
+                                .filteredUnreadChats
+                                .length
+                          : context
+                                .read<ConversationCubit>()
+                                .unreadChats
+                                .length);
 
                 final isSearching = activeTab == 0
                     ? context.read<ConversationCubit>().currentQuery.isNotEmpty
@@ -293,7 +304,11 @@ class _HomeScreenState extends State<HomeScreen>
                             color: Colors.grey,
                           ),
                         )
-                      else if (activeTab == 1 && context.read<ConversationCubit>().unreadChats.isNotEmpty)
+                      else if (activeTab == 1 &&
+                          context
+                              .read<ConversationCubit>()
+                              .unreadChats
+                              .isNotEmpty)
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 8,
@@ -360,29 +375,50 @@ class _HomeScreenState extends State<HomeScreen>
             final cubit = context.read<ConversationCubit>();
 
             Widget buildAllTab() {
-              if (state is ConversationLoading) return const Center(child: CircularProgressIndicator());
-              if (state is ConversationError) return Center(child: Text('Error: ${state.message}'));
+              if (state is ConversationLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (state is ConversationError) {
+                return Center(child: Text('Error: ${state.message}'));
+              }
 
-               final isSearching = cubit.currentQuery.isNotEmpty;
-               final chats = isSearching ? cubit.filteredAllChats : cubit.allChats;
-               return _buildChatList(chats, cubit.hasMoreConversations, cubit.isLoadingMoreConversations, isSearching, controller: _scrollController);
-             }
+              final isSearching = cubit.currentQuery.isNotEmpty;
+              final chats = isSearching
+                  ? cubit.filteredAllChats
+                  : cubit.allChats;
+              return _buildChatList(
+                chats,
+                cubit.hasMoreConversations,
+                cubit.isLoadingMoreConversations,
+                isSearching,
+                controller: _scrollController,
+              );
+            }
 
-             Widget buildUnreadTab() {
-               if (state is ConversationLoading) return const Center(child: CircularProgressIndicator());
-               if (state is ConversationError) return Center(child: Text('Error: ${(state).message}'));
+            Widget buildUnreadTab() {
+              if (state is ConversationLoading) {
+                return const Center(child: CircularProgressIndicator());
+              }
+              if (state is ConversationError) {
+                return Center(child: Text('Error: ${(state).message}'));
+              }
 
-               final isSearching = cubit.unreadQuery.isNotEmpty;
-               final chats = isSearching ? cubit.filteredUnreadChats : cubit.unreadChats;
-               return _buildChatList(chats, cubit.hasMoreUnread, cubit.isLoadingMoreUnread, isSearching, controller: _unreadScrollController);
-             }
+              final isSearching = cubit.unreadQuery.isNotEmpty;
+              final chats = isSearching
+                  ? cubit.filteredUnreadChats
+                  : cubit.unreadChats;
+              return _buildChatList(
+                chats,
+                cubit.hasMoreUnread,
+                cubit.isLoadingMoreUnread,
+                isSearching,
+                controller: _unreadScrollController,
+              );
+            }
 
             return TabBarView(
               controller: _tabController,
-              children: [
-                buildAllTab(),
-                buildUnreadTab(),
-              ],
+              children: [buildAllTab(), buildUnreadTab()],
             );
           },
         ),
@@ -393,11 +429,8 @@ class _HomeScreenState extends State<HomeScreen>
         onPressed: () {
           Navigator.push(
             context,
-            MaterialPageRoute(
-              builder: (context) => const MessageScreen(),
-            ),
+            MaterialPageRoute(builder: (context) => const MessageScreen()),
           );
-
         },
       ),
     );
@@ -458,7 +491,10 @@ class _HomeScreenState extends State<HomeScreen>
             children: [
               Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
               const SizedBox(height: 16),
-              const Text('No results found', style: TextStyle(color: Colors.grey, fontSize: 16)),
+              const Text(
+                'No results found',
+                style: TextStyle(color: Colors.grey, fontSize: 16),
+              ),
             ],
           ),
         );
@@ -475,7 +511,10 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
             const SizedBox(height: 16),
-            Text(isSearching ? 'No results found' : 'No conversations yet', style: const TextStyle(color: Colors.grey, fontSize: 16)),
+            Text(
+              isSearching ? 'No results found' : 'No conversations yet',
+              style: const TextStyle(color: Colors.grey, fontSize: 16),
+            ),
           ],
         ),
       );
@@ -492,7 +531,10 @@ class _HomeScreenState extends State<HomeScreen>
           if (metrics.extentAfter <= 200) {
             if (!isLoadingMore && hasMore && _canCall) {
               _canCall = false;
-              Future.delayed(const Duration(milliseconds: 300), () => _canCall = true);
+              Future.delayed(
+                const Duration(milliseconds: 300),
+                () => _canCall = true,
+              );
               if (controller == _scrollController) {
                 context.read<ConversationCubit>().loadMore();
               } else if (controller == _unreadScrollController) {
@@ -509,56 +551,64 @@ class _HomeScreenState extends State<HomeScreen>
         return false;
       },
       child: ListView.builder(
-        key: PageStorageKey(controller == _scrollController ? 'all_chats_list' : 'unread_chats_list'),
+        key: PageStorageKey(
+          controller == _scrollController
+              ? 'all_chats_list'
+              : 'unread_chats_list',
+        ),
         controller: controller,
         padding: EdgeInsets.zero,
         primary: false,
         physics: const ClampingScrollPhysics(),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
-         // Always include a footer row when we have items so we can show either
-         // a loading spinner (if loading more) or a 'No more conversations' note
-         // when pagination finished.
-         itemCount: chats.length + 1,
-         itemBuilder: (context, index) {
-           if (index == chats.length) {
-             // Footer
-             if (isLoadingMore || hasMore) {
-               return const Padding(
-                 padding: EdgeInsets.all(16),
-                 child: Center(child: CircularProgressIndicator()),
-               );
-             }
+        // Always include a footer row when we have items so we can show either
+        // a loading spinner (if loading more) or a 'No more conversations' note
+        // when pagination finished.
+        itemCount: chats.length + 1,
+        itemBuilder: (context, index) {
+          if (index == chats.length) {
+            // Footer
+            if (isLoadingMore || hasMore) {
+              return const Padding(
+                padding: EdgeInsets.all(16),
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
 
-             return Padding(
-               padding: const EdgeInsets.symmetric(vertical: 12),
-               child: Center(
-                 child: Text(
-                   'No more conversations',
-                   style: TextStyle(color: Colors.grey[500], fontSize: 13),
-                 ),
-               ),
-             );
-           }
-           return _buildChatItem(chats[index]);
-         },
-       ),
-     );
-   }
+            return Padding(
+              padding: const EdgeInsets.symmetric(vertical: 12),
+              child: Center(
+                child: Text(
+                  'No more conversations',
+                  style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                ),
+              ),
+            );
+          }
+          return _buildChatItem(chats[index]);
+        },
+      ),
+    );
+  }
 
   Widget _buildChatItem(Conversation conv) {
     return ListTile(
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
         radius: 25,
-        // Use a subtle alpha to tint the avatar background without deprecated APIs
+        // Subtle tint using primary color with low opacity
         backgroundColor: AppClr.primaryColor.withAlpha(25),
         backgroundImage: conv.avatarUrl != null
             ? CachedNetworkImageProvider(conv.avatarUrl!)
             : null,
         child: conv.avatarUrl == null
-            ? Icon(
-                conv.isGroup ? Icons.group : Icons.person,
-                color: AppClr.primaryColor,
+            ? Text(
+                Utils.getInitials(conv.title),
+                style: TextStyle(
+                  color: AppClr.primaryColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
               )
             : null,
       ),
@@ -625,7 +675,11 @@ class _HomeScreenState extends State<HomeScreen>
 
         if (chatId!.isEmpty) {
           print('❌ Error: Invalid chat ID');
-          showCustomSnackBar(context, 'Cannot open chat: Invalid ID', type: SnackBarType.error);
+          showCustomSnackBar(
+            context,
+            'Cannot open chat: Invalid ID',
+            type: SnackBarType.error,
+          );
           return;
         }
 

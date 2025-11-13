@@ -27,9 +27,11 @@ class _MessageScreenState extends State<MessageScreen>
   final ScrollController _blockedUsersScrollController = ScrollController();
 
   // Search controllers for each tab
-  final TextEditingController _contactsSearchController = TextEditingController();
+  final TextEditingController _contactsSearchController =
+      TextEditingController();
   final TextEditingController _usersSearchController = TextEditingController();
-  final TextEditingController _blockedUsersSearchController = TextEditingController();
+  final TextEditingController _blockedUsersSearchController =
+      TextEditingController();
 
   // Search focus nodes
   final FocusNode _contactsSearchFocus = FocusNode();
@@ -77,12 +79,12 @@ class _MessageScreenState extends State<MessageScreen>
   }
 
   void _setupScrollController(
-      ScrollController controller,
-      VoidCallback onLoadMore,
-      ) {
+    ScrollController controller,
+    VoidCallback onLoadMore,
+  ) {
     controller.addListener(() {
       if (controller.position.pixels >=
-          controller.position.maxScrollExtent - 100 &&
+              controller.position.maxScrollExtent - 100 &&
           controller.position.maxScrollExtent > 0) {
         onLoadMore();
       }
@@ -90,9 +92,9 @@ class _MessageScreenState extends State<MessageScreen>
   }
 
   void _setupSearchController(
-      TextEditingController controller,
-      Function(String) onSearch,
-      ) {
+    TextEditingController controller,
+    Function(String) onSearch,
+  ) {
     // Simple debounce implementation
     Timer? _debounce;
     controller.addListener(() {
@@ -166,7 +168,6 @@ class _MessageScreenState extends State<MessageScreen>
     );
   }
 
-
   Widget _buildContactsTab() {
     return Column(
       children: [
@@ -193,9 +194,9 @@ class _MessageScreenState extends State<MessageScreen>
                       Text('Error: ${state.message}'),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: () => context.read<MessageCubit>().loadMyContacts(
-                          refresh: true,
-                        ),
+                        onPressed: () => context
+                            .read<MessageCubit>()
+                            .loadMyContacts(refresh: true),
                         child: const Text('Retry'),
                       ),
                     ],
@@ -238,8 +239,9 @@ class _MessageScreenState extends State<MessageScreen>
                       Text('Error: ${state.message}'),
                       const SizedBox(height: 16),
                       ElevatedButton(
-                        onPressed: () =>
-                            context.read<MessageCubit>().loadUsersList(refresh: true),
+                        onPressed: () => context
+                            .read<MessageCubit>()
+                            .loadUsersList(refresh: true),
                         child: const Text('Retry'),
                       ),
                     ],
@@ -300,6 +302,7 @@ class _MessageScreenState extends State<MessageScreen>
       ],
     );
   }
+
   // Reusable Search Bar Widget
   Widget _buildSearchBar({
     required TextEditingController controller,
@@ -316,19 +319,23 @@ class _MessageScreenState extends State<MessageScreen>
           hintText: hintText,
           prefixIcon: const Icon(Icons.search),
           suffixIcon: controller.text.isNotEmpty
-              ? IconButton(
-            icon: const Icon(Icons.clear),
-            onPressed: onClear,
-          )
+              ? IconButton(icon: const Icon(Icons.clear), onPressed: onClear)
               : null,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(25.0),
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: Colors.grey, width: 1.5),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(12),
+            borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
           ),
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
         ),
       ),
     );
   }
+
   Widget _buildContactsList(MyContactsLoaded state) {
     if (state.contacts.isEmpty) {
       return Center(
@@ -368,15 +375,15 @@ class _MessageScreenState extends State<MessageScreen>
         final contact = state.contacts[index];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: Colors.blue.shade100,
+            backgroundColor: AppClr.primaryColor.withAlpha(25),
             backgroundImage: contact.photoUrl != null
                 ? CachedNetworkImageProvider(contact.photoUrl!)
                 : null,
             child: contact.photoUrl == null
                 ? Text(
-              contact.name.substring(0, 1),
-              style: const TextStyle(fontWeight: FontWeight.bold),
-            )
+                    contact.name.substring(0, 1),
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  )
                 : null,
           ),
           title: Text(contact.name),
@@ -399,7 +406,9 @@ class _MessageScreenState extends State<MessageScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              state.currentQuery.isNotEmpty ? Icons.search_off : Icons.person_add,
+              state.currentQuery.isNotEmpty
+                  ? Icons.search_off
+                  : Icons.person_add,
               size: 64,
               color: Colors.grey,
             ),
@@ -440,7 +449,7 @@ class _MessageScreenState extends State<MessageScreen>
           title: Text(user.name),
           subtitle: Text(user.email),
           trailing: IconButton(
-            icon: const Icon(Icons.message, color: Colors.blue),
+            icon: Icon(Icons.message, color: AppClr.primaryColor),
             onPressed: () {
               _startConversation(user.id, user.name, false);
             },
@@ -511,13 +520,22 @@ class _MessageScreenState extends State<MessageScreen>
     );
   }
 
-  Future<void> _startConversation(int userId, String userName, bool isGroup) async {
+  Future<void> _startConversation(
+    int userId,
+    String userName,
+    bool isGroup,
+  ) async {
     print('Starting conversation with $userName (ID: $userId)');
 
     final messageCubit = context.read<MessageCubit>();
 
     // Show loading message using custom snackbar
-    showCustomSnackBar(context, 'Sending chat request...', type: SnackBarType.info, duration: const Duration(seconds: 10));
+    showCustomSnackBar(
+      context,
+      'Sending chat request...',
+      type: SnackBarType.success,
+      duration: const Duration(seconds: 10),
+    );
 
     try {
       final resp = await messageCubit.sendChatRequestTo(userId.toString());
@@ -527,7 +545,11 @@ class _MessageScreenState extends State<MessageScreen>
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (resp.success) {
-        showCustomSnackBar(context, resp.message ?? 'Chat request sent', type: SnackBarType.success);
+        showCustomSnackBar(
+          context,
+          resp.message ?? 'Chat request sent',
+          type: SnackBarType.success,
+        );
 
         // Navigate to chat screen
         Navigator.push(
@@ -545,12 +567,20 @@ class _MessageScreenState extends State<MessageScreen>
           ),
         );
       } else {
-        showCustomSnackBar(context, resp.message ?? 'Failed to send chat request', type: SnackBarType.error);
+        showCustomSnackBar(
+          context,
+          resp.message ?? 'Failed to send chat request',
+          type: SnackBarType.error,
+        );
       }
     } catch (e) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      showCustomSnackBar(context, 'Failed to send chat request: $e', type: SnackBarType.error);
+      showCustomSnackBar(
+        context,
+        'Failed to send chat request: $e',
+        type: SnackBarType.error,
+      );
     }
   }
 
@@ -569,9 +599,13 @@ class _MessageScreenState extends State<MessageScreen>
             onPressed: () {
               // Add unblock API call here
               Navigator.pop(context);
-              showCustomSnackBar(context, '$username has been unblocked', type: SnackBarType.success);
-               // Refresh blocked users list
-               context.read<MessageCubit>().loadBlockedUsers(refresh: true);
+              showCustomSnackBar(
+                context,
+                '$username has been unblocked',
+                type: SnackBarType.success,
+              );
+              // Refresh blocked users list
+              context.read<MessageCubit>().loadBlockedUsers(refresh: true);
             },
             child: const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
           ),

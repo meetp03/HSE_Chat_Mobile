@@ -7,6 +7,8 @@ import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
+import 'dart:io';
+import 'package:path/path.dart' as p;
 
 class ChatCubit extends Cubit<ChatState> {
   final ChatRepository _chatRepository;
@@ -173,12 +175,11 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Send either a text message OR a file upload. If filePath is provided,
-  /// message must be empty/null. Enforces mutual exclusion.
-  Future<void> sendMessage({required String message, String? replyTo, String? filePath}) async {
+  /// Sends a message or file. Returns null on success, otherwise returns an error message.
+  Future<String?> sendMessage({required String message, String? replyTo, String? filePath}) async {
     if (state is! ChatLoaded || _otherUserId == null || _isGroup == null) {
       print('❌ Cannot send message - invalid state');
-      return;
+      return 'Invalid chat state';
     }
 
     final currentState = state as ChatLoaded;
@@ -188,15 +189,140 @@ class ChatCubit extends Cubit<ChatState> {
     final hasFile = filePath != null && filePath.isNotEmpty;
     if (hasText && hasFile) {
       print('❌ Cannot send both text and file in same request');
-      return;
+      return 'Cannot send both text and file';
     }
 
     print('📤 Sending message to: $_otherUserId (isGroup: $_isGroup)');
     print('👤 From user ID: $currentUserId');
 
+    // Generate a temp id for optimistic UI
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
-    final tempMessage = Message(
-      id: tempId,
+
+    // FILE UPLOAD FLOW
+    if (hasFile) {
+      // Quick existence check only; UI already validated file before calling Cubit.
+      final file = File(filePath);
+      if (!await file.exists()) return 'Selected file not found.';
+
+      // Infer file extension (lowercase) for message_type mapping
+      final fileExt = p.extension(file.path).toLowerCase();
+
+      // Map extension to server message_type (defaults provided)
+      int inferredMessageType = 1;
+      if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].contains(fileExt)) {
+        inferredMessageType = 1; // images
+      } else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(fileExt)) {
+        inferredMessageType = 5; // videos (server observed)
+      } else if (['.mp3', '.m4a', '.wav', '.aac'].contains(fileExt)) {
+        inferredMessageType = 4; // audio (fallback guess)
+      }
+
+      // Create optimistic temp message (file-only)
+      final tempMessage = Message(
+        id: tempId,
+        fromId: currentUserId,
+        toId: _otherUserId!,
+        message: '',
+        status: 0,
+        messageType: inferredMessageType,
+        fileName: p.basename(file.path),
+        fileUrl: null,
+        replyTo: replyTo,
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        sender: Sender(
+          id: currentUserId,
+          name: SharedPreferencesHelper.getCurrentUserName(),
+          photoUrl: SharedPreferencesHelper.getCurrentUserPhotoUrl(),
+        ),
+        isSentByMe: true,
+      );
+
+      // Append optimistic message
+      emit(currentState.copyWith(messages: [...currentState.messages, tempMessage]));
+
+      // Upload with progress
+      try {
+        void onProgress(int sent, int total) {
+          final pct = total > 0 ? (sent / total * 100).clamp(0, 100).toInt() : 0;
+          if (this.state is ChatLoaded) {
+            final s = this.state as ChatLoaded;
+            final updatedMap = Map<String, int>.from(s.uploadProgress);
+            updatedMap[tempId] = pct;
+            emit(s.copyWith(uploadProgress: updatedMap));
+          }
+          if (kDebugMode) print('📤 Upload progress for $tempId: $pct% ($sent/$total)');
+        }
+
+        if (kDebugMode) print('📤 ChatCubit: calling repository.sendFileMultipart for $filePath');
+        // IMPORTANT: backend expects `message_type = 1` for multipart attachments
+        // Always send 1 for multipart payloads; use `inferredMessageType` only for optimistic UI rendering.
+        final resp = await _chatRepository.sendFileMultipart(
+          toId: _otherUserId!,
+          isGroup: _isGroup ?? false,
+          filePath: file.path,
+          // note: we intentionally pass 1 below (repo will set message_type=1)
+          messageType: 1,
+          message: '', // backend may require non-empty; repo sends basename fallback
+          replyTo: replyTo,
+          isMyContact: 1,
+          onSendProgress: onProgress,
+        );
+
+        if (kDebugMode) print('📦 ChatCubit: repository returned success=${resp.success} message=${resp.message}');
+        if (resp.success && resp.data != null) {
+          final serverMsgMap = resp.data!.data.message;
+
+          final serverMsg = Message.fromJson(serverMsgMap, currentUserId);
+
+          // Replace temp message with server message & clear progress
+          if (this.state is ChatLoaded) {
+            final s = this.state as ChatLoaded;
+            final updatedMap = Map<String, int>.from(s.uploadProgress);
+            updatedMap.remove(tempId);
+            final updated = s.messages.map((m) => m.id == tempId ? serverMsg : m).toList();
+            final exists = updated.any((m) => m.id == serverMsg.id);
+            final finalMessages = exists ? updated : [...updated, serverMsg];
+            emit(s.copyWith(messages: finalMessages, uploadProgress: updatedMap));
+          }
+
+          if (kDebugMode) print('✅ File message sent successfully: ${resp.data}');
+          return null;
+        } else {
+          final err = resp.message ?? 'Failed to send file. Please try again.';
+          print('❌ ChatCubit: repository reported failure: $err');
+          if (kDebugMode) print('❌ ChatCubit: File send response payload: ${resp.data}');
+
+          // mark temp message as failed and clear progress
+          _markMessageAsFailed(tempId);
+          if (this.state is ChatLoaded) {
+            final s = this.state as ChatLoaded;
+            final updatedMap = Map<String, int>.from(s.uploadProgress);
+            updatedMap.remove(tempId);
+            emit(s.copyWith(uploadProgress: updatedMap));
+          }
+
+          return err;
+        }
+      } catch (e) {
+        // Log detailed exception for debugging but return a generic message to UI
+        print('❌ Error sending file multipart: $e');
+        _markMessageAsFailed(tempId);
+        if (this.state is ChatLoaded) {
+          final s = this.state as ChatLoaded;
+          final updatedMap = Map<String, int>.from(s.uploadProgress);
+          updatedMap.remove(tempId);
+          emit(s.copyWith(uploadProgress: updatedMap));
+        }
+        return 'Upload failed. Please try again.';
+      }
+    }
+
+    // TEXT-ONLY FLOW
+    // Create optimistic temp message and append
+    final textTempId = tempId; // keep stable id
+    final textTempMessage = Message(
+      id: textTempId,
       fromId: currentUserId,
       toId: _otherUserId!,
       message: message,
@@ -215,85 +341,7 @@ class ChatCubit extends Cubit<ChatState> {
       isSentByMe: true,
     );
 
-    // Append temp message to the end (oldest->newest ordering)
-    emit(
-      currentState.copyWith(messages: [...currentState.messages, tempMessage]),
-    );
-
-    // If it's a file upload, perform multipart upload flow
-    if (hasFile) {
-      // Replace temp message with media-specific temp fields
-      final fileName = filePath!.split('/').last;
-      final tempFileMessage = tempMessage.copyWith(
-        messageType: 1,
-        fileName: fileName,
-        message: '',
-      );
-      // update messages list
-      final updatedList = (state as ChatLoaded).messages.map((m) => m.id == tempId ? tempFileMessage : m).toList();
-      emit((state as ChatLoaded).copyWith(messages: updatedList));
-
-      try {
-        void onProgress(int sent, int total) {
-          final pct = total > 0 ? (sent / total * 100).clamp(0, 100).toInt() : 0;
-          if (state is ChatLoaded) {
-            final s = state as ChatLoaded;
-            final updatedMap = Map<String, int>.from(s.uploadProgress);
-            updatedMap[tempId] = pct;
-            emit(s.copyWith(uploadProgress: updatedMap));
-          }
-          if (kDebugMode) print('📤 Upload progress for $tempId: $pct% ($sent/$total)');
-        }
-
-        final resp = await _chatRepository.sendFileMultipart(
-          toId: _otherUserId!,
-          isGroup: _isGroup ?? false,
-          filePath: filePath,
-          messageType: 1,
-          message: '', // backend expects message but treat as empty; fallback handled in repo
-          replyTo: replyTo,
-          isMyContact: 1,
-          onSendProgress: onProgress,
-        );
-
-        if (resp.success && resp.data != null) {
-          final serverMsgMap = resp.data!.data.message;
-          final serverMsg = Message.fromJson(serverMsgMap, currentUserId);
-          // Clear progress and replace temp
-          if (state is ChatLoaded) {
-            final s = state as ChatLoaded;
-            final updatedMap = Map<String, int>.from(s.uploadProgress);
-            updatedMap.remove(tempId);
-            final updated = s.messages.map((m) => m.id == tempId ? serverMsg : m).toList();
-            final exists = updated.any((m) => m.id == serverMsg.id);
-            final finalMessages = exists ? updated : [...updated, serverMsg];
-            emit(s.copyWith(messages: finalMessages, uploadProgress: updatedMap));
-          }
-          if (kDebugMode) print('✅ File message sent successfully: ${resp.data}');
-          return;
-        } else {
-          print('❌ Failed to send file message: ${resp.message}');
-          _markMessageAsFailed(tempId);
-          if (state is ChatLoaded) {
-            final s = state as ChatLoaded;
-            final updatedMap = Map<String, int>.from(s.uploadProgress);
-            updatedMap.remove(tempId);
-            emit(s.copyWith(uploadProgress: updatedMap));
-          }
-          return;
-        }
-      } catch (e) {
-        print('❌ Error sending file multipart: $e');
-        if (state is ChatLoaded) {
-          final s = state as ChatLoaded;
-          final updatedMap = Map<String, int>.from(s.uploadProgress);
-          updatedMap.remove(tempId);
-          emit(s.copyWith(uploadProgress: updatedMap));
-        }
-        _markMessageAsFailed(tempId);
-        return;
-      }
-    }
+    emit(currentState.copyWith(messages: [...currentState.messages, textTempMessage]));
 
     try {
       final response = await _chatRepository.sendMessage(
@@ -304,41 +352,32 @@ class ChatCubit extends Cubit<ChatState> {
       );
 
       if (response.success && response.data != null) {
-        print('✅ Message sent successfully');
-
-        // ✅ FIX: response.data.message is always Map<String, dynamic>
         final messageData = response.data!.data.message;
-
-        // Convert Map to Message object
         final serverMessage = Message.fromJson(messageData, currentUserId);
 
-        // Replace temp message with server message in the latest state
-        if (state is ChatLoaded) {
-          final latest = state as ChatLoaded;
+        if (this.state is ChatLoaded) {
+          final latest = this.state as ChatLoaded;
           final updatedMessages = latest.messages.map((msg) {
-            return msg.id == tempId ? serverMessage : msg;
+            return msg.id == textTempId ? serverMessage : msg;
           }).toList();
 
-          // If tempMessage wasn't found (edge case), append serverMessage
           final exists = updatedMessages.any((m) => m.id == serverMessage.id);
-          final finalMessages = exists
-              ? updatedMessages
-              : [...updatedMessages, serverMessage];
+          final finalMessages = exists ? updatedMessages : [...updatedMessages, serverMessage];
 
           emit(latest.copyWith(messages: finalMessages));
         }
 
-        // Return raw server payload for caller (e.g., ConversationCubit)
-        return;
+        return null;
       } else {
-        print('❌ Failed to send message: ${response.message}');
-        _markMessageAsFailed(tempId);
-        return;
+        final err = response.message ?? 'Failed to send message';
+        print('❌ Failed to send message: $err');
+        _markMessageAsFailed(textTempId);
+        return err;
       }
     } catch (e) {
       print('❌ Error sending message: $e');
-      _markMessageAsFailed(tempId);
-      return;
+      _markMessageAsFailed(textTempId);
+      return 'Failed to send message. Please try again.';
     }
   }
 
@@ -506,8 +545,9 @@ class ChatCubit extends Cubit<ChatState> {
       // Fallback: same sender, same text and within 60s
       final sameSender = m.fromId == candidate.fromId;
       final sameText = mText == candText && candText.isNotEmpty;
+      // tighten fuzzy window to 5 seconds to avoid collapsing distinct messages
       final timeDiff = m.createdAt.difference(candidate.createdAt).inSeconds.abs();
-      if (sameSender && sameText && timeDiff <= 60) {
+      if (sameSender && sameText && timeDiff <= 5) {
         print('🔁 Duplicate detected by fuzzy match: existing=${m.id} candidate=${candidate.id} dt=$timeDiff s');
         return true;
       }
@@ -519,15 +559,33 @@ class ChatCubit extends Cubit<ChatState> {
   List<Message> _dedupeMessages(List<Message> messages) {
     final out = <Message>[];
     final seenFp = <String>{};
+    final seenIds = <String>{};
     for (var m in messages) {
-      final fp = '${m.fromId}|${_normalizeText(m.message)}|${m.fileUrl ?? ''}|${m.messageType}';
+      // If server provided an ID, prefer exact-id dedupe (safe and reliable)
+      if (m.id.isNotEmpty) {
+        if (seenIds.contains(m.id)) {
+          print('🔇 Skipping duplicate by id: ${m.id}');
+          continue;
+        }
+        // still run fuzzy list check to avoid exact duplicates in `out`
+        if (_isDuplicateInList(out, m)) {
+          print('🔇 Skipping duplicate by list check: ${m.id}');
+          continue;
+        }
+        seenIds.add(m.id);
+        out.add(m);
+        continue;
+      }
+
+      // For messages without id (temporary/edge cases), fall back to fingerprint
+      final fp = '${m.fromId}|${_normalizeText(m.message)}|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
       if (seenFp.contains(fp)) {
-        print('🔇 Skipping duplicate fingerprint: ${m.id} fp=$fp');
+        print('🔇 Skipping duplicate fingerprint (no id): fp=$fp');
         continue;
       }
 
       if (_isDuplicateInList(out, m)) {
-        print('🔇 Skipping duplicate by list check: ${m.id}');
+        print('🔇 Skipping duplicate by list check (no id): ${m.id}');
         continue;
       }
 
