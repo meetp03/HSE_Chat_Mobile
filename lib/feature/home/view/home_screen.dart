@@ -658,12 +658,26 @@ class _HomeScreenState extends State<HomeScreen>
             overflow: TextOverflow.ellipsis,
           ),
           const SizedBox(height: 4),
-          Text(
-            conv.formattedTime,
-            style: const TextStyle(color: Colors.grey, fontSize: 12),
+          Row(
+            children: [
+              // if (conv.isGroup) ...[
+              //   Icon(Icons.group, size: 14, color: Colors.grey[600]),
+              //   const SizedBox(width: 6),
+              //   Text(
+              //     '${conv.participants?.length ?? 0} members',
+              //     style: const TextStyle(color: Colors.grey, fontSize: 12),
+              //   ),
+              //   const SizedBox(width: 12),
+              // ],
+              Text(
+                conv.formattedTime,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
           ),
         ],
       ),
+
       onTap: () {
         print('🎯 Opening chat: ${conv.title}');
         print('📝 Conversation ID: ${conv.id}');
@@ -694,8 +708,11 @@ class _HomeScreenState extends State<HomeScreen>
               child: ChatScreen(
                 userId: conv.id,
                 userName: conv.title,
+                userEmail: conv.email,
                 userAvatar: conv.avatarUrl,
                 isGroup: conv.isGroup,
+                groupData: conv,
+
               ),
             ),
           ),

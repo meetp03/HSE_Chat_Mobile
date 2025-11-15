@@ -67,16 +67,22 @@ class DioClient {
             try {
               final path = response.requestOptions.path;
               if (path.contains('/api/messages/') && path.contains('/conversations')) {
-                final encoder = const JsonEncoder.withIndent('  ');
-                final pretty = encoder.convert(response.data);
-                // debugPrint('--- FULL RESPONSE for ${response.requestOptions.uri} ---', wrapWidth: 1200);
-                // // debugPrint can handle long text; still split into chunks to be safe
-                // const int chunkSize = 2000; // larger chunk to avoid mid-word splits
-                // for (var i = 0; i < pretty.length; i += chunkSize) {
-                //   final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
-                //   debugPrint(pretty.substring(i, end), wrapWidth: 1200);
-                // }
-                // debugPrint('--- END FULL RESPONSE ---', wrapWidth: 1200);
+                // Print full pretty JSON for conversation endpoints so developer
+                // can inspect all messages returned by the server (debug only).
+                try {
+                  final encoder = const JsonEncoder.withIndent('  ');
+                  final pretty = encoder.convert(response.data);
+                  debugPrint('--- FULL RESPONSE for ${response.requestOptions.uri} ---', wrapWidth: 1200);
+                  const int chunkSize = 2000;
+                  for (var i = 0; i < pretty.length; i += chunkSize) {
+                    final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
+                    debugPrint(pretty.substring(i, end), wrapWidth: 1200);
+                  }
+                  debugPrint('--- END FULL RESPONSE ---', wrapWidth: 1200);
+                } catch (e) {
+                  debugPrint('⚠️ Failed to pretty-print conversations response: $e', wrapWidth: 1200);
+                  debugPrint(response.data.toString(), wrapWidth: 1200);
+                }
               } else {
                 // For other endpoints print a concise summary
                 debugPrint('📦 Response data type: ${response.data.runtimeType}', wrapWidth: 1200);

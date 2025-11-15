@@ -1,5 +1,4 @@
 // chat_response_model.dart
-import 'package:hsc_chat/feature/home/model/message_model.dart';
 
 class ChatConversationResponse {
   final bool success;
@@ -27,6 +26,8 @@ class ChatConversationResponse {
 class ChatConversationData {
   final Map<String, dynamic> user;
   final dynamic group;
+  // Conversations are returned as raw JSON maps from the backend.
+  // Keep this as dynamic so callers can convert to Message models as needed.
   final List<dynamic> conversations;
   final List<dynamic> media;
   final bool chatRequest;
@@ -42,10 +43,11 @@ class ChatConversationData {
   });
 
   factory ChatConversationData.fromJson(Map<String, dynamic> json) {
+    final convs = (json['conversations'] as List<dynamic>?) ?? [];
     return ChatConversationData(
       user: json['user'] ?? {},
       group: json['group'],
-      conversations: json['conversations'] ?? [],
+      conversations: convs,
       media: json['media'] ?? [],
       chatRequest: json['chat_request'] ?? false,
       unreadCount: json['unread_count'] ?? 0,

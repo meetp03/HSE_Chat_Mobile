@@ -209,7 +209,25 @@ class SocketService {
     final userId = SharedPreferencesHelper.getCurrentUserId();
     return userId.toString();
   }
+// In SocketService.dart - Add method to send group events
+  void sendGroupEvent({
+    required String action,
+    required String groupId,
+    Map<String, dynamic>? groupData,
+  }) {
+    final eventData = {
+      'action': action,
+      'group_id': groupId,
+      'group': groupData,
+      'timestamp': DateTime.now().millisecondsSinceEpoch,
+    };
 
+    _socket?.emit('GroupEvent', eventData);
+
+    if (kDebugMode) {
+      print('👥 Emitted GroupEvent: $eventData');
+    }
+  }
   void _setupSocketListeners() {
     _socket?.onConnect((_) {
       _isConnected = true;
@@ -261,7 +279,13 @@ class SocketService {
         if (kDebugMode) print('⚠️ Failed to forward new_message: $e');
       }
     });
-
+    // NEW: Listen for block/unblock events
+    _socket?.on('user.block_unblock', (data) {
+      if (kDebugMode) {
+        print('🔒 Block/Unblock event received: $data');
+      }
+      _notifyMessageListeners({'event': 'user.block_unblock', 'data': data});
+    });
     _socket?.on('conversation_updated', (data) {
       if (kDebugMode) {
         print('🔄 conversation_updated received: $data');

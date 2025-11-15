@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+
 // message_model.dart (Key parts to check/update)
 
 class Message {
@@ -35,45 +37,91 @@ class Message {
 
   // ✅ CRITICAL: This determines message alignment
   factory Message.fromJson(Map<String, dynamic> json, int currentUserId) {
-    // Parse fromId properly (could be int or string)
-    final fromId = json['from_id'] is String
-        ? int.tryParse(json['from_id']) ?? 0
-        : (json['from_id'] as int? ?? 0);
+    // Helpers
+    int parseInt(dynamic v) {
+      if (v == null) return 0;
+      if (v is int) return v;
+      if (v is String) return int.tryParse(v) ?? 0;
+      return 0;
+    }
 
-    print('🔍 Parsing message - fromId: $fromId, currentUserId: $currentUserId');
-    // Build sender first so we can also use sender.id as fallback
-    final sender = Sender.fromJson(json['sender'] ?? {});
-    final bySenderId = sender.id;
-    final isSent = (fromId != 0 && fromId == currentUserId) || (bySenderId != 0 && bySenderId == currentUserId);
-    print('🔍 isSentByMe computed -> fromId==currentUserId: ${fromId == currentUserId}, sender.id==currentUserId: ${bySenderId == currentUserId} => $isSent');
+    String parseString(dynamic v) {
+      if (v == null) return '';
+      return v.toString();
+    }
 
-    return Message(
-      id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
-      fromId: fromId,
-      toId: json['to_id']?.toString() ?? '',
-      message: json['message']?.toString() ?? '',
-      status: json['status'] as int? ?? 0,
-      messageType: json['message_type'] as int? ?? 0,
-      fileName: json['file_name']?.toString(),
-      // Prefer a more specific 'other_file_url' when server provides it.
-      // Some server responses include a generic 'file_url' and a unique
-      // 'other_file_url' (with timestamped filename). Use the latter
-      // to reliably display distinct attachments.
-      fileUrl: json['other_file_url']?.toString() ?? json['file_url']?.toString(),
-      replyTo: json['reply_to']?.toString(),
-      createdAt: DateTime.parse(
-        json['created_at'] ?? DateTime.now().toIso8601String(),
-      ),
-      updatedAt: DateTime.parse(
-        json['updated_at'] ?? DateTime.now().toIso8601String(),
-      ),
-      sender: sender,
-      replyMessage: json['reply_message'] != null
-          ? Message.fromJson(json['reply_message'], currentUserId)
-          : null,
-      // ✅ This is the critical line for alignment
-      isSentByMe: isSent,
-    );
+    DateTime parseDate(dynamic v) {
+      if (v == null) return DateTime.now();
+      if (v is DateTime) return v;
+      if (v is int) {
+        // Heuristic: if it's > 10^12 it's milliseconds, else seconds
+        if (v > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(v);
+        return DateTime.fromMillisecondsSinceEpoch(v * 1000);
+      }
+      if (v is String) {
+        final parsed = DateTime.tryParse(v);
+        if (parsed != null) return parsed;
+        // try parsing as int string
+        final maybeInt = int.tryParse(v);
+        if (maybeInt != null) return parseDate(maybeInt);
+      }
+      return DateTime.now();
+    }
+
+    try {
+      // Parse fromId properly (could be int or string)
+      final fromId = parseInt(json['from_id']);
+
+      // Build sender robustly
+      final senderMap = (json['sender'] is Map<String, dynamic>) ? (json['sender'] as Map<String, dynamic>) : <String, dynamic>{};
+      final sender = Sender.fromJson(senderMap);
+      final bySenderId = sender.id;
+
+      final isSent = (fromId != 0 && fromId == currentUserId) || (bySenderId != 0 && bySenderId == currentUserId);
+
+      // Reply message may be a Map; if so, parse safely. If it's not a Map, ignore.
+      Message? replyMsg;
+      final replyRaw = json['reply_message'];
+      if (replyRaw is Map<String, dynamic>) {
+        replyMsg = Message.fromJson(replyRaw, currentUserId);
+      }
+
+      return Message(
+        id: parseString(json['_id'] ?? json['id']),
+        fromId: fromId,
+        toId: parseString(json['to_id']),
+        message: parseString(json['message']),
+        status: parseInt(json['status']),
+        messageType: parseInt(json['message_type']),
+        fileName: json['file_name'] != null ? parseString(json['file_name']) : null,
+        fileUrl: json['other_file_url'] != null ? parseString(json['other_file_url']) : (json['file_url'] != null ? parseString(json['file_url']) : null),
+        replyTo: json['reply_to'] != null ? parseString(json['reply_to']) : null,
+        createdAt: parseDate(json['created_at']),
+        updatedAt: parseDate(json['updated_at']),
+        sender: sender,
+        replyMessage: replyMsg,
+        isSentByMe: isSent,
+      );
+    } catch (e, st) {
+      // Fallback: create a minimal Message to avoid crashing the UI
+      debugPrint('⚠️ Message.fromJson error: $e\n$st');
+      return Message(
+        id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
+        fromId: parseInt(json['from_id']),
+        toId: json['to_id']?.toString() ?? '',
+        message: json['message']?.toString() ?? '',
+        status: parseInt(json['status']),
+        messageType: parseInt(json['message_type']),
+        fileName: json['file_name']?.toString(),
+        fileUrl: json['other_file_url']?.toString() ?? json['file_url']?.toString(),
+        replyTo: json['reply_to']?.toString(),
+        createdAt: DateTime.now(),
+        updatedAt: DateTime.now(),
+        sender: Sender(id: 0, name: 'Unknown'),
+        replyMessage: null,
+        isSentByMe: false,
+      );
+    }
   }
 
   Message copyWith({

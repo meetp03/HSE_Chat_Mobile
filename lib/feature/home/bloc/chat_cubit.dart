@@ -29,16 +29,16 @@ class ChatCubit extends Cubit<ChatState> {
     required ChatRepository chatRepository,
     required SocketService socketService,
   }) : _chatRepository = chatRepository,
-        _socketService = socketService,
-        super(ChatInitial());
+       _socketService = socketService,
+       super(ChatInitial());
 
   int get currentUserId => SharedPreferencesHelper.getCurrentUserId();
 
   Future<void> loadConversations(
-      int userId,
-      String otherUserId,
-      bool isGroup,
-      ) async {
+    int userId,
+    String otherUserId,
+    bool isGroup,
+  ) async {
     try {
       emit(ChatLoading());
 
@@ -79,8 +79,12 @@ class ChatCubit extends Cubit<ChatState> {
         if (conversations.isNotEmpty) {
           final first = conversations.first;
           final last = conversations.last;
-          print('🧭 Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}');
-          print('🧭 Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}');
+          print(
+            '🧭 Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}',
+          );
+          print(
+            '🧭 Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}',
+          );
         }
         print('🆔 Stored conversation ID: $_otherUserId');
 
@@ -99,6 +103,40 @@ class ChatCubit extends Cubit<ChatState> {
             ? (group?['photo_url']?.toString())
             : (user?['photo_url']?.toString());
 
+        // ✅ EXTRACT BLOCKED FROM USER DATA
+        final isTheyBlockedMe = user?['is_blocked'] == true;
+        final isIBlockedThem = user?['is_blocked_by_auth_user'] == true;
+
+        print('🔒 Maru block  status: $isTheyBlockedMe');
+        print('🔒 Me aane block kryo status: $isIBlockedThem');
+        print('🔍 User data keys: ${user?.keys.toList()}');
+
+        // ✅ BUILD GROUP DATA FROM API RESPONSE
+        Map<String, dynamic>? groupDataMap;
+        if (isGroup && group != null) {
+          // Extract members/users from group response
+          final users = group['users'] as List<dynamic>?;
+
+          groupDataMap = {
+            'id': group['id']?.toString() ?? group['_id']?.toString(),
+            'name': group['name']?.toString() ?? 'Unknown Group',
+            'photo_url': group['photo_url']?.toString(),
+            'description': group['description']?.toString() ?? '',
+            'members': (users ?? []).map((u) {
+              return {
+                'id': u['id']?.toString(),
+                'name': u['name']?.toString() ?? 'Unknown',
+                'email': u['email']?.toString(),
+                'photo_url': u['photo_url']?.toString(),
+                'role': u['pivot']?['role']?.toString() ?? 'member',
+              };
+            }).toList(),
+          };
+
+          print(
+            '✅ Group data extracted: ${groupDataMap['name']} with ${groupDataMap['members']?.length} members',
+          );
+        }
         emit(
           ChatLoaded(
             messages: conversations,
@@ -107,6 +145,9 @@ class ChatCubit extends Cubit<ChatState> {
             otherUserAvatar: otherUserAvatar,
             hasMore: _hasMore,
             isGroup: isGroup,
+            groupData: groupDataMap,
+            isIBlockedThem: isIBlockedThem,
+            isTheyBlockedMe: isTheyBlockedMe,
           ),
         );
       } else {
@@ -176,7 +217,11 @@ class ChatCubit extends Cubit<ChatState> {
   }
 
   /// Sends a message or file. Returns null on success, otherwise returns an error message.
-  Future<String?> sendMessage({required String message, String? replyTo, String? filePath}) async {
+  Future<String?> sendMessage({
+    required String message,
+    String? replyTo,
+    String? filePath,
+  }) async {
     if (state is! ChatLoaded || _otherUserId == null || _isGroup == null) {
       print('❌ Cannot send message - invalid state');
       return 'Invalid chat state';
@@ -211,7 +256,14 @@ class ChatCubit extends Cubit<ChatState> {
       int inferredMessageType = 1;
       if (['.png', '.jpg', '.jpeg', '.gif', '.webp'].contains(fileExt)) {
         inferredMessageType = 1; // images
-      } else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(fileExt)) {
+      } else if ([
+        '.mp4',
+        '.mov',
+        '.mkv',
+        '.webm',
+        '.avi',
+        '.3gp',
+      ].contains(fileExt)) {
         inferredMessageType = 5; // videos (server observed)
       } else if (['.mp3', '.m4a', '.wav', '.aac'].contains(fileExt)) {
         inferredMessageType = 4; // audio (fallback guess)
@@ -239,22 +291,32 @@ class ChatCubit extends Cubit<ChatState> {
       );
 
       // Append optimistic message
-      emit(currentState.copyWith(messages: [...currentState.messages, tempMessage]));
+      emit(
+        currentState.copyWith(
+          messages: [...currentState.messages, tempMessage],
+        ),
+      );
 
       // Upload with progress
       try {
         void onProgress(int sent, int total) {
-          final pct = total > 0 ? (sent / total * 100).clamp(0, 100).toInt() : 0;
+          final pct = total > 0
+              ? (sent / total * 100).clamp(0, 100).toInt()
+              : 0;
           if (this.state is ChatLoaded) {
             final s = this.state as ChatLoaded;
             final updatedMap = Map<String, int>.from(s.uploadProgress);
             updatedMap[tempId] = pct;
             emit(s.copyWith(uploadProgress: updatedMap));
           }
-          if (kDebugMode) print('📤 Upload progress for $tempId: $pct% ($sent/$total)');
+          if (kDebugMode)
+            print('📤 Upload progress for $tempId: $pct% ($sent/$total)');
         }
 
-        if (kDebugMode) print('📤 ChatCubit: calling repository.sendFileMultipart for $filePath');
+        if (kDebugMode)
+          print(
+            '📤 ChatCubit: calling repository.sendFileMultipart for $filePath',
+          );
         // IMPORTANT: backend expects `message_type = 1` for multipart attachments
         // Always send 1 for multipart payloads; use `inferredMessageType` only for optimistic UI rendering.
         final resp = await _chatRepository.sendFileMultipart(
@@ -263,13 +325,17 @@ class ChatCubit extends Cubit<ChatState> {
           filePath: file.path,
           // note: we intentionally pass 1 below (repo will set message_type=1)
           messageType: 1,
-          message: '', // backend may require non-empty; repo sends basename fallback
+          message:
+              '', // backend may require non-empty; repo sends basename fallback
           replyTo: replyTo,
           isMyContact: 1,
           onSendProgress: onProgress,
         );
 
-        if (kDebugMode) print('📦 ChatCubit: repository returned success=${resp.success} message=${resp.message}');
+        if (kDebugMode)
+          print(
+            '📦 ChatCubit: repository returned success=${resp.success} message=${resp.message}',
+          );
         if (resp.success && resp.data != null) {
           final serverMsgMap = resp.data!.data.message;
 
@@ -280,18 +346,24 @@ class ChatCubit extends Cubit<ChatState> {
             final s = this.state as ChatLoaded;
             final updatedMap = Map<String, int>.from(s.uploadProgress);
             updatedMap.remove(tempId);
-            final updated = s.messages.map((m) => m.id == tempId ? serverMsg : m).toList();
+            final updated = s.messages
+                .map((m) => m.id == tempId ? serverMsg : m)
+                .toList();
             final exists = updated.any((m) => m.id == serverMsg.id);
             final finalMessages = exists ? updated : [...updated, serverMsg];
-            emit(s.copyWith(messages: finalMessages, uploadProgress: updatedMap));
+            emit(
+              s.copyWith(messages: finalMessages, uploadProgress: updatedMap),
+            );
           }
 
-          if (kDebugMode) print('✅ File message sent successfully: ${resp.data}');
+          if (kDebugMode)
+            print('✅ File message sent successfully: ${resp.data}');
           return null;
         } else {
           final err = resp.message ?? 'Failed to send file. Please try again.';
           print('❌ ChatCubit: repository reported failure: $err');
-          if (kDebugMode) print('❌ ChatCubit: File send response payload: ${resp.data}');
+          if (kDebugMode)
+            print('❌ ChatCubit: File send response payload: ${resp.data}');
 
           // mark temp message as failed and clear progress
           _markMessageAsFailed(tempId);
@@ -341,7 +413,11 @@ class ChatCubit extends Cubit<ChatState> {
       isSentByMe: true,
     );
 
-    emit(currentState.copyWith(messages: [...currentState.messages, textTempMessage]));
+    emit(
+      currentState.copyWith(
+        messages: [...currentState.messages, textTempMessage],
+      ),
+    );
 
     try {
       final response = await _chatRepository.sendMessage(
@@ -362,7 +438,9 @@ class ChatCubit extends Cubit<ChatState> {
           }).toList();
 
           final exists = updatedMessages.any((m) => m.id == serverMessage.id);
-          final finalMessages = exists ? updatedMessages : [...updatedMessages, serverMessage];
+          final finalMessages = exists
+              ? updatedMessages
+              : [...updatedMessages, serverMessage];
 
           emit(latest.copyWith(messages: finalMessages));
         }
@@ -385,9 +463,7 @@ class ChatCubit extends Cubit<ChatState> {
     if (state is ChatLoaded) {
       final currentState = state as ChatLoaded;
       final failedMessages = currentState.messages.map((msg) {
-        return msg.id == messageId
-            ? msg.copyWith(status: -1)
-            : msg;
+        return msg.id == messageId ? msg.copyWith(status: -1) : msg;
       }).toList();
 
       emit(currentState.copyWith(messages: failedMessages));
@@ -411,6 +487,119 @@ class ChatCubit extends Cubit<ChatState> {
       print('❌ Failed to mark as read: $e');
     }
   }
+   void _handleBlockUnblockEvent(Map<String, dynamic> data) {
+    try {
+      final blockedBy = data['blockedBy']?.toString();
+      final blockedTo = data['blockedTo'] as Map<String, dynamic>?;
+      final isBlocked = data['isBlocked'] == true;
+      final type = data['type']?.toString();
+
+      print('🔒 Processing block/unblock event:');
+      print('   - blockedBy: $blockedBy');
+      print('   - currentUserId: $currentUserId');
+      print('   - isBlocked: $isBlocked');
+      print('   - type: $type');
+
+      // not relevant -> ignore
+      final blockedToId = blockedTo?['id']?.toString();
+
+      // Determine which flag to update:
+      // - If auth user performed the action (blockedBy == currentUserId)
+      //   and target is the other user -> update isIBlockedThem.
+      // - If other user performed the action (blockedBy == _otherUserId)
+      //   and target is the auth user -> update isTheyBlockedMe.
+      bool? newisIBlockedThem;
+      bool? newisTheyBlockedMe;
+
+      if (blockedBy == currentUserId.toString() &&
+          blockedToId == _otherUserId) {
+        newisIBlockedThem = isBlocked;
+      } else if (blockedBy == _otherUserId &&
+          blockedToId == currentUserId.toString()) {
+        newisTheyBlockedMe = isBlocked;
+      } else {
+        // if event references the other user as target (blockedTo == other),
+        // but blockedBy isn't explicit, we can conservatively set isIBlockedThem
+        if (blockedToId == _otherUserId && blockedBy != null) {
+          // if someone blocked the other user and the actor isn't the auth user,
+          // we can interpret that the auth user did not block them.
+          newisIBlockedThem = blockedBy == currentUserId.toString() ? isBlocked : null;
+        }
+      }
+
+      // Only proceed if event is relevant to this conversation
+      final relevant = blockedBy == _otherUserId ||
+          blockedToId == _otherUserId ||
+          blockedBy == currentUserId.toString() ||
+          blockedToId == currentUserId.toString();
+
+      if (!relevant) return;
+
+      if (isClosed) return; // avoid emitting after close
+
+      if (state is ChatLoaded) {
+        final currentState = state as ChatLoaded;
+        // fallback to existing values when null
+        final updatedisIBlockedThem = newisIBlockedThem ?? currentState.isIBlockedThem;
+        final updatedisTheyBlockedMe =
+            newisTheyBlockedMe ?? currentState.isTheyBlockedMe;
+
+        print('🔄 Updating block flags: isIBlockedThem=$updatedisIBlockedThem isTheyBlockedMe=$updatedisTheyBlockedMe');
+
+        emit(currentState.copyWith(
+          isIBlockedThem: updatedisIBlockedThem,
+          isTheyBlockedMe: updatedisTheyBlockedMe,
+        ));
+
+        try {
+          print('✅ Block status updated in UI');
+        } catch (e) {
+          print('⚠️ Error notifying conversation cubit: $e');
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling block/unblock event: $e');
+    }
+  }
+
+/*
+  void _handleBlockUnblockEvent(Map<String, dynamic> data) {
+    try {
+      final blockedBy = data['blockedBy']?.toString();
+      final blockedTo = data['blockedTo'] as Map<String, dynamic>?;
+      final isBlocked = data['isBlocked'] == true;
+      final type = data['type']?.toString();
+
+      print('🔒 Processing block/unblock event:');
+      print('   - blockedBy: $blockedBy');
+      print('   - currentUserId: $currentUserId');
+      print('   - isBlocked: $isBlocked');
+      print('   - type: $type');
+
+      // Check if this event is relevant to current chat
+      if (blockedBy == _otherUserId ||
+          (blockedTo != null && blockedTo['id']?.toString() == _otherUserId)) {
+        print('🔄 Updating block status for user $_otherUserId to: $isBlocked');
+
+        if (state is ChatLoaded) {
+          final currentState = state as ChatLoaded;
+          emit(currentState.copyWith(isIBlockedThem: isBlocked,isTheyBlockedMe: blockedBy));
+
+          // Also update the conversation cubit if needed
+          // This ensures the home screen reflects the updated block status
+          try {
+            // You might want to notify conversation cubit here
+            print('✅ Block status updated in UI');
+          } catch (e) {
+            print('⚠️ Error notifying conversation cubit: $e');
+          }
+        }
+      }
+    } catch (e) {
+      print('❌ Error handling block/unblock event: $e');
+    }
+  }
+*/
 
   void _setupSocketListeners() {
     if (_otherUserId == null || _isGroup == null) return;
@@ -419,12 +608,28 @@ class ChatCubit extends Cubit<ChatState> {
     print('👤 Current user ID: $currentUserId');
 
     _socketService.cleanupChatListeners(_otherUserId!);
+    _socketService.addMessageListener((dynamic raw) {
+      try {
+        if (raw is Map<String, dynamic>) {
+          final event = raw['event'];
+          final data = raw['data'];
+
+          if (event == 'user.block_unblock' && data is Map<String, dynamic>) {
+            _handleBlockUnblockEvent(data);
+          }
+        }
+      } catch (e) {
+        if (kDebugMode) print('⚠️ Error processing socket message: $e');
+      }
+    });
 
     _socketService.onNewMessage(_otherUserId!, _isGroup!, currentUserId, (
-        newMessage,
-        ) {
+      newMessage,
+    ) {
       print('📨 Received new message via socket: ${newMessage.id}');
-      print('👤 Message from: ${newMessage.fromId}, Current user: $currentUserId');
+      print(
+        '👤 Message from: ${newMessage.fromId}, Current user: $currentUserId',
+      );
       print('🔍 Is sent by me: ${newMessage.isSentByMe}');
 
       if (state is! ChatLoaded) return;
@@ -463,7 +668,9 @@ class ChatCubit extends Cubit<ChatState> {
       try {
         // raw may be {'event': 'UserEvent', 'data': {...}} or {'event':'new_message', 'data':...}
         final Map<String, dynamic> wrapper = raw is Map<String, dynamic>
-            ? (raw['data'] is Map<String, dynamic> ? {'event': raw['event'], 'data': raw['data']} : raw)
+            ? (raw['data'] is Map<String, dynamic>
+                  ? {'event': raw['event'], 'data': raw['data']}
+                  : raw)
             : {};
         final payload = wrapper['data'] ?? raw;
         if (payload == null || payload is! Map<String, dynamic>) return;
@@ -480,7 +687,10 @@ class ChatCubit extends Cubit<ChatState> {
           final currentState = state as ChatLoaded;
           final exists = _isDuplicateInList(currentState.messages, newMessage);
           if (!exists) {
-            if (kDebugMode) print('🔁 Fallback listener adding message ${newMessage.id} for conv $_otherUserId');
+            if (kDebugMode)
+              print(
+                '🔁 Fallback listener adding message ${newMessage.id} for conv $_otherUserId',
+              );
             final appended = [...currentState.messages, newMessage];
             final deduped = _dedupeMessages(appended);
             emit(currentState.copyWith(messages: deduped));
@@ -525,20 +735,26 @@ class ChatCubit extends Cubit<ChatState> {
   // Return true if `candidate` appears to be a duplicate of any in list
   bool _isDuplicateInList(List<Message> list, Message candidate) {
     final candText = _normalizeText(candidate.message);
-    final candFingerprint = '${candidate.fromId}|$candText|${candidate.fileUrl ?? ''}|${candidate.messageType}';
+    final candFingerprint =
+        '${candidate.fromId}|$candText|${candidate.fileUrl ?? ''}|${candidate.messageType}';
 
     for (var m in list) {
       // Exact id match
       if (m.id.isNotEmpty && candidate.id.isNotEmpty && m.id == candidate.id) {
-        print('🔁 Duplicate detected by id: existing=${m.id} candidate=${candidate.id}');
+        print(
+          '🔁 Duplicate detected by id: existing=${m.id} candidate=${candidate.id}',
+        );
         return true;
       }
 
       // Fingerprint match (same sender + content/file + type)
       final mText = _normalizeText(m.message);
-      final mFingerprint = '${m.fromId}|$mText|${m.fileUrl ?? ''}|${m.messageType}';
+      final mFingerprint =
+          '${m.fromId}|$mText|${m.fileUrl ?? ''}|${m.messageType}';
       if (mFingerprint == candFingerprint) {
-        print('🔁 Duplicate detected by fingerprint: existing=${m.id} candidate=${candidate.id} fp=$mFingerprint');
+        print(
+          '🔁 Duplicate detected by fingerprint: existing=${m.id} candidate=${candidate.id} fp=$mFingerprint',
+        );
         return true;
       }
 
@@ -546,9 +762,14 @@ class ChatCubit extends Cubit<ChatState> {
       final sameSender = m.fromId == candidate.fromId;
       final sameText = mText == candText && candText.isNotEmpty;
       // tighten fuzzy window to 5 seconds to avoid collapsing distinct messages
-      final timeDiff = m.createdAt.difference(candidate.createdAt).inSeconds.abs();
+      final timeDiff = m.createdAt
+          .difference(candidate.createdAt)
+          .inSeconds
+          .abs();
       if (sameSender && sameText && timeDiff <= 5) {
-        print('🔁 Duplicate detected by fuzzy match: existing=${m.id} candidate=${candidate.id} dt=$timeDiff s');
+        print(
+          '🔁 Duplicate detected by fuzzy match: existing=${m.id} candidate=${candidate.id} dt=$timeDiff s',
+        );
         return true;
       }
     }
@@ -578,7 +799,8 @@ class ChatCubit extends Cubit<ChatState> {
       }
 
       // For messages without id (temporary/edge cases), fall back to fingerprint
-      final fp = '${m.fromId}|${_normalizeText(m.message)}|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
+      final fp =
+          '${m.fromId}|${_normalizeText(m.message)}|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
       if (seenFp.contains(fp)) {
         print('🔇 Skipping duplicate fingerprint (no id): fp=$fp');
         continue;

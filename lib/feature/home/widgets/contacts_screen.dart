@@ -561,7 +561,7 @@ class _MessageScreenState extends State<MessageScreen>
                 userId: userId.toString(),
                 userName: userName,
                 userAvatar: null,
-                isGroup: isGroup,
+                isGroup: isGroup, userEmail: '',
               ),
             ),
           ),

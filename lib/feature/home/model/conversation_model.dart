@@ -78,6 +78,7 @@ class Conversation {
   final String id;
   final String? groupId;
   final String title; // group.name  OR  user.name
+  final String email;
   final String lastMessage;
   final DateTime timestamp;
   final int unreadCount;
@@ -93,6 +94,7 @@ class Conversation {
     required this.id,
     required this.groupId,
     required this.title,
+    required this.email,
     required this.lastMessage,
     required this.timestamp,
     required this.unreadCount,
@@ -122,6 +124,8 @@ class Conversation {
     final String title = isGroup
         ? (group?['name'] ?? 'Unknown Group')
         : (user?['name'] ?? 'Unknown User');
+    // ---- Title -------------------------------------------------
+    // (email extracted below using robust extractor)
 
     final String? avatar = isGroup
         ? (group?['photo_url'] as String?)
@@ -141,20 +145,66 @@ class Conversation {
         .toList();
 
     // ---- Participants ------------------------------------------
-    final List<Participant> participants =
-    (json['participants'] as List<dynamic>? ?? [])
-        .map((p) => Participant.fromJson(p))
-        .toList();
+    // Some backend responses include participants under `participants`,
+    // others embed them inside `group['users']`. Prefer `participants` if
+    // present; otherwise fall back to `group['users']`.
+    List<Participant> participants = [];
+    final rawParticipants = json['participants'] as List<dynamic>?;
+    if (rawParticipants != null && rawParticipants.isNotEmpty) {
+      participants = rawParticipants.map((p) => Participant.fromJson(p as Map<String, dynamic>)).toList();
+    } else if (group != null) {
+      final groupUsers = group['users'] as List<dynamic>?;
+      if (groupUsers != null && groupUsers.isNotEmpty) {
+        participants = groupUsers.map((u) {
+          // The 'users' object shape is compatible with Participant.fromJson
+          return Participant.fromJson(u as Map<String, dynamic>);
+        }).toList();
+      }
+    }
 
     // ---- sanitize last message: strip HTML tags and decode common entities
     String rawMsg = json['message']?.toString() ?? '';
     String cleanedMsg = rawMsg.replaceAll(RegExp(r'<[^>]*>'), '').trim();
     cleanedMsg = _decodeHtmlEntities(cleanedMsg);
 
+    // ---- Email extraction (robust) ----------------------------
+    String extractEmail() {
+      // 1) top-level email
+      if (json['email'] != null && json['email'].toString().trim().isNotEmpty) {
+        return json['email'].toString().trim();
+      }
+
+      // 2) user object
+      if (user != null) {
+        final uemail = (user['email'] ?? user['user_email'] ?? user['email_address']);
+        if (uemail != null && uemail.toString().trim().isNotEmpty) return uemail.toString().trim();
+      }
+
+      // 3) group object (sometimes group owner or first member email is provided)
+      if (group != null) {
+        if (group['email'] != null && group['email'].toString().trim().isNotEmpty) return group['email'].toString().trim();
+        // try members array first user email
+        final members = group['users'] as List<dynamic>?;
+        if (members != null && members.isNotEmpty) {
+          final first = members.first as Map<String, dynamic>?;
+          final memEmail = first != null ? (first['email'] ?? first['user_email']) : null;
+          if (memEmail != null && memEmail.toString().trim().isNotEmpty) return memEmail.toString().trim();
+        }
+      }
+
+      // 4) fallback fields sometimes used by backend
+      if (json['user_email'] != null && json['user_email'].toString().trim().isNotEmpty) return json['user_email'].toString().trim();
+
+      return 'Unknown';
+    }
+
+    final String email = extractEmail();
+
     return Conversation(
       id: convId,
       groupId: json['group_id']?.toString(),
       title: title,
+      email: email,
       lastMessage: cleanedMsg,
       timestamp: timestamp,
       unreadCount: unread,
@@ -186,6 +236,7 @@ class Conversation {
     String? id,
     String? groupId,
     String? title,
+    String? email,
     String? lastMessage,
     DateTime? timestamp,
     int? unreadCount,
@@ -202,6 +253,7 @@ class Conversation {
       id: id ?? this.id,
       groupId: groupId ?? this.groupId,
       title: title ?? this.title,
+      email: email ?? this.email,
       lastMessage: lastMessage ?? this.lastMessage,
       timestamp: timestamp ?? this.timestamp,
       unreadCount: unreadCount ?? this.unreadCount,
@@ -398,6 +450,7 @@ class Participant {
   final String id;
   final String name;
   final String? avatarUrl;
+  final String? email;
   final bool isOnline;
   final DateTime? lastSeenAt;
   final String role; // 'admin', 'member', etc.
@@ -405,6 +458,7 @@ class Participant {
     required this.id,
     required this.name,
     this.avatarUrl,
+    this.email,
     this.isOnline = false,
     this.lastSeenAt,
     this.role = 'member',
@@ -414,7 +468,9 @@ class Participant {
       id: json['id']?.toString() ?? '',
       name: json['name'] ?? 'Unknown User',
       avatarUrl: json['photo_url'] ?? json['avatar_url'],
-      isOnline: json['is_online'] ?? false,
+      email: json['email'] ?? json['user_email'] ?? json['email_address'],
+      // Server sometimes returns 0/1 for booleans. Coerce to a bool safely.
+      isOnline: (json['is_online'] == 1) || (json['is_online'] == true),
       lastSeenAt: json['last_seen_at'] != null
           ? DateTime.parse(json['last_seen_at'])
           : null,
@@ -426,6 +482,7 @@ class Participant {
       'id': id,
       'name': name,
       'photo_url': avatarUrl,
+      'email': email,
       'is_online': isOnline,
       'last_seen_at': lastSeenAt?.toIso8601String(),
       'role': role,

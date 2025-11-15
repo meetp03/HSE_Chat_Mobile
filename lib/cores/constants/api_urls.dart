@@ -12,10 +12,11 @@ class ApiUrls {
   static const String usersList = '${baseUrl}core/users/users-list';
   static const String blockedUsers = '${baseUrl}core/users/blocked-users';
   static const String createGroup = '${baseUrl}messages/group/create';
-
+  static const String commonGroup = '${baseUrl}messages/groups/common';
+  static const String groupBase = '${baseUrl}messages/groups';
+  static const String blockUnblockUsers = '${baseUrl}core/users';
   // Chat URLs
   static const String sendMessage = '${baseUrl}messages/send-message';
   static const String readMessage = '${baseUrl}messages/read-message';
   static const String sendChatRequest = '${baseUrl}messages/send-chat-request';
-
 }

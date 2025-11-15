@@ -12,6 +12,8 @@ import 'package:hsc_chat/cores/utils/utils.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
+import 'package:hsc_chat/feature/home/model/conversation_model.dart'
+    show Conversation;
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/home/widgets/user_info_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -36,16 +38,20 @@ import 'package:hsc_chat/feature/home/view/_audio_player_inline.dart';
 class ChatScreen extends StatefulWidget {
   final String userId;
   final String userName;
+  final String userEmail;
   final String? userAvatar;
   final bool isGroup;
+  final Conversation? groupData;
 
   const ChatScreen({
-    Key? key,
+    super.key,
     required this.userId,
+    required this.userEmail,
     required this.userName,
     this.userAvatar,
+    this.groupData,
     this.isGroup = false,
-  }) : super(key: key);
+  });
 
   @override
   _ChatScreenState createState() => _ChatScreenState();
@@ -59,24 +65,22 @@ class _ChatScreenState extends State<ChatScreen>
   Timer? _typingTimer;
   bool _isTyping = false;
   String? _attachedFilePath;
-  int? _attachedFileType; // 1=image,2=video,4=file
+  int? _attachedFileType;
+
   // Download/caching & playback helpers
   final Map<String, CancelToken> _downloadTokens = {};
   final Map<String, double> _downloadProgress = {};
   final Map<String, AudioPlayer> _audioPlayers = {};
-  // Memoization for in-flight fetches / thumbnails to avoid duplicate downloads
   final Map<String, Future<File?>> _fetchFutures = {};
   final Map<String, Future<File?>> _thumbFutures = {};
-  // Optional: last reported progress to reduce setState churn
   final Map<String, double> _lastReportedProgress = {};
-
-  // Load-more / scroll preservation helpers
-  bool _pendingLoadMore = false;
-  double? _prevMaxScrollExtent;
-  double? _prevScrollOffset;
-  // When true we recently restored viewport after a load-more and should
-  // suppress the usual auto-scroll-to-bottom triggered by ChatLoaded emits.
-  bool _restoringAfterLoadMore = false;
+  // Track local file paths for sent messages
+  final Map<String, String> _sentMessageLocalPaths = {};
+  // Scroll management for load-more
+  bool _isLoadingMore = false;
+  bool _shouldScrollToBottom = true;
+  double? _scrollOffsetBeforeLoad;
+  int? _messageCountBeforeLoad;
 
   @override
   void initState() {
@@ -86,21 +90,104 @@ class _ChatScreenState extends State<ChatScreen>
     _scrollController.addListener(_onScroll);
   }
 
-  // NEW: scroll to bottom **every time the cubit emits a new list**
+  void _onScroll() {
+    if (!_scrollController.hasClients) return;
+
+    final position = _scrollController.position;
+    final pixels = position.pixels;
+    final maxScroll = position.maxScrollExtent;
+
+    // Check if user scrolled to top (to load older messages)
+    // Top means pixels close to 0
+    if (pixels <= 100 && !_isLoadingMore) {
+      final state = context.read<ChatCubit>().state;
+      if (state is ChatLoaded && state.hasMore && !state.isLoadingMore) {
+        _loadMoreOldMessages();
+      }
+    }
+
+    // Determine if user is near bottom (within 200px of maxScroll)
+    // If user is at bottom, we should auto-scroll for new messages
+    _shouldScrollToBottom = (maxScroll - pixels) < 200;
+  }
+
+  Future<void> _loadMoreOldMessages() async {
+    if (_isLoadingMore) return;
+
+    setState(() {
+      _isLoadingMore = true;
+    });
+
+    // Save current scroll position and message count
+    if (_scrollController.hasClients) {
+      _scrollOffsetBeforeLoad = _scrollController.offset;
+      final state = context.read<ChatCubit>().state;
+      if (state is ChatLoaded) {
+        _messageCountBeforeLoad = state.messages.length;
+      }
+    }
+
+    // Trigger load more
+    await context.read<ChatCubit>().loadMoreMessages();
+
+    setState(() {
+      _isLoadingMore = false;
+    });
+  }
+
   void _scrollToBottom({bool animate = true}) {
+    if (!mounted) return;
+
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!_scrollController.hasClients) return;
-      final pos = _scrollController.position;
-      final target = pos.maxScrollExtent;
+
+      final position = _scrollController.position;
+      final target = position.maxScrollExtent;
+
+      if (target <= 0) return;
+
       if (animate) {
         _scrollController.animateTo(
           target,
-          duration: const Duration(milliseconds: 250),
+          duration: const Duration(milliseconds: 300),
           curve: Curves.easeOut,
         );
       } else {
         _scrollController.jumpTo(target);
       }
+    });
+  }
+
+  void _restoreScrollAfterLoadMore() {
+    if (!mounted || !_scrollController.hasClients) return;
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!_scrollController.hasClients) return;
+
+      final state = context.read<ChatCubit>().state;
+      if (state is! ChatLoaded) return;
+
+      final currentCount = state.messages.length;
+      final previousCount = _messageCountBeforeLoad ?? currentCount;
+      final newMessagesLoaded = currentCount - previousCount;
+
+      if (newMessagesLoaded > 0) {
+        // Calculate approximate height per message (adjust based on your design)
+        // This is a rough estimate - you may need to tune this value
+        final estimatedHeight = newMessagesLoaded * 80.0;
+
+        try {
+          final targetOffset = (_scrollOffsetBeforeLoad ?? 0) + estimatedHeight;
+          _scrollController.jumpTo(
+            targetOffset.clamp(0.0, _scrollController.position.maxScrollExtent),
+          );
+        } catch (e) {
+          print('⚠️ Error restoring scroll: $e');
+        }
+      }
+
+      _scrollOffsetBeforeLoad = null;
+      _messageCountBeforeLoad = null;
     });
   }
 
@@ -115,37 +202,61 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  void _onScroll() {
-    if (!_scrollController.hasClients) return;
-    final pos = _scrollController.position;
-    const threshold = 100.0;
-    // With normal ListView (oldest->newest), older messages are above. Load
-    // more when scrolled near the top (pixels <= threshold).
-    if (pos.pixels <= threshold) {
-      final state = context.read<ChatCubit>().state;
-      if (state is ChatLoaded && state.hasMore && !state.isLoadingMore) {
-        // Capture offsets so we can restore scroll position after prepend
-        try {
-          _pendingLoadMore = true;
-          _prevMaxScrollExtent = _scrollController.position.maxScrollExtent;
-          _prevScrollOffset = _scrollController.offset;
-        } catch (_) {
-          _prevMaxScrollExtent = null;
-          _prevScrollOffset = null;
-        }
-        context.read<ChatCubit>().loadMoreMessages();
-      }
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final s = context.read<ChatCubit>().state;
+    if (s is ChatLoaded && s.messages.isNotEmpty) {
+      Future.microtask(() => _scrollToBottom(animate: false));
     }
   }
 
-  Future<void> _sendMessage() async {
-    final caption = _messageController.text.trim();
+  @override
+  void dispose() {
+    print('🧹 Disposing chat screen');
+    WidgetsBinding.instance.removeObserver(this);
+    _scrollController.removeListener(_onScroll);
+    for (var p in _audioPlayers.values) {
+      p.dispose();
+    }
+    _messageController.dispose();
+    _scrollController.dispose();
+    _focusNode.dispose();
+    _typingTimer?.cancel();
+    super.dispose();
+  }
 
+  // NEW: Get local file path for sent messages
+  String? _getLocalFilePath(Message message) {
+    if (!message.isSentByMe) return null;
+    return _sentMessageLocalPaths[message.id];
+  }
+
+  // NEW: Check if file exists locally
+  Future<bool> _fileExistsLocally(String path) async {
+    try {
+      return await File(path).exists();
+    } catch (e) {
+      return false;
+    }
+  }
+
+  // Store local path when sending file
+  Future<void> _sendMessage() async {
+    final currentState = context.read<ChatCubit>().state;
+    if (currentState is ChatLoaded && currentState.isIBlockedThem) {
+      showCustomSnackBar(
+        context,
+        'You have blocked this user. Unblock to send messages.',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+    final caption = _messageController.text.trim();
     final hasFile = _attachedFilePath != null && _attachedFilePath!.isNotEmpty;
     final hasText = caption.isNotEmpty;
 
     if (hasFile && hasText) {
-      // Shouldn't happen due to UI constraints, but guard anyway
       showCustomSnackBar(
         context,
         'Cannot send text and file together.',
@@ -157,11 +268,12 @@ class _ChatScreenState extends State<ChatScreen>
     if (!hasFile && !hasText) return;
 
     if (hasFile) {
-      final path = _attachedFilePath!;
-      print('📤 Sending file: $path');
-      // Double-check validation right before send to avoid calling API with invalid files
+      final localPath = _attachedFilePath!;
+      print('📤 Sending file: $localPath');
+
+      // Validate file
       try {
-        final f = File(path);
+        final f = File(localPath);
         if (!await f.exists()) {
           showCustomSnackBar(
             context,
@@ -170,8 +282,8 @@ class _ChatScreenState extends State<ChatScreen>
           );
           return;
         }
-        // infer category
-        final ext = p.extension(path).toLowerCase();
+
+        final ext = p.extension(localPath).toLowerCase();
         FileCategory category = FileCategory.GENERIC;
         if ([
           '.png',
@@ -216,22 +328,35 @@ class _ChatScreenState extends State<ChatScreen>
         );
         return;
       }
-      if (kDebugMode)
-        print(
-          '✅ Local validation OK — calling ChatCubit.sendMessage for file: $path',
-        );
+
+      // Send the file
       final error = await context.read<ChatCubit>().sendMessage(
         message: '',
-        filePath: path,
+        filePath: localPath,
       );
-      // clear attachment after sending attempt
+
+      if (error != null) {
+        showCustomSnackBar(context, error, type: SnackBarType.error);
+      } else {
+        // SUCCESS: Store local path mapping
+        // Get the message ID from state after successful send
+        final state = context.read<ChatCubit>().state;
+        if (state is ChatLoaded && state.messages.isNotEmpty) {
+          final lastMessage = state.messages.last;
+          if (lastMessage.isSentByMe) {
+            // Map message ID to local file path
+            _sentMessageLocalPaths[lastMessage.id] = localPath;
+            print('✅ Mapped ${lastMessage.id} → $localPath');
+          }
+        }
+      }
+
+      // Clear attachment
       setState(() {
         _attachedFilePath = null;
         _attachedFileType = null;
       });
-      if (error != null) {
-        showCustomSnackBar(context, error, type: SnackBarType.error);
-      }
+
       _scrollToBottom();
       return;
     }
@@ -241,7 +366,6 @@ class _ChatScreenState extends State<ChatScreen>
     print('📤 Sending message: $message');
     final error = await context.read<ChatCubit>().sendMessage(message: message);
     if (error != null) {
-      // keep the typed text so user can retry/edit; show friendly error
       showCustomSnackBar(context, error, type: SnackBarType.error);
     } else {
       _messageController.clear();
@@ -351,41 +475,6 @@ class _ChatScreenState extends State<ChatScreen>
       // Send stop typing indicator
       // context.read<ChatCubit>().sendTypingIndicator(false);
     });
-  }
-
-  @override
-  void didChangeAppLifecycleState(AppLifecycleState state) {
-    super.didChangeAppLifecycleState(state);
-
-    // Mark as read when app comes back to foreground
-    if (state == AppLifecycleState.resumed) {
-      context.read<ChatCubit>().markAsRead();
-    }
-  }
-
-  @override
-  void didChangeDependencies() {
-    super.didChangeDependencies();
-    // First time the cubit is already ChatLoaded → scroll now
-    final s = context.read<ChatCubit>().state;
-    if (s is ChatLoaded && s.messages.isNotEmpty) {
-      Future.microtask(() => _scrollToBottom(animate: false));
-    }
-  }
-
-  @override
-  void dispose() {
-    print('🧹 Disposing chat screen');
-    WidgetsBinding.instance.removeObserver(this);
-    // Dispose audio players
-    for (var p in _audioPlayers.values) {
-      p.dispose();
-    }
-    _messageController.dispose();
-    _scrollController.dispose();
-    _focusNode.dispose();
-    _typingTimer?.cancel();
-    super.dispose();
   }
 
   @override
@@ -512,13 +601,13 @@ class _ChatScreenState extends State<ChatScreen>
                 : null,
             child: widget.userAvatar == null
                 ? Text(
-              Utils.getInitials(widget.userName),
-              style: const TextStyle(
-                color: Colors.white,
-                fontWeight: FontWeight.bold,
-                fontSize: 14,
-              ),
-            )
+                    Utils.getInitials(widget.userName),
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 14,
+                    ),
+                  )
                 : null,
           ),
           const SizedBox(width: 12),
@@ -566,7 +655,7 @@ class _ChatScreenState extends State<ChatScreen>
               value: 'info',
               child: Row(
                 children: [
-                  Icon(Icons.person_outline),
+                  Icon(Icons.person_outline, color: AppClr.black),
                   SizedBox(width: 8),
                   Text('User Info'),
                 ],
@@ -577,78 +666,48 @@ class _ChatScreenState extends State<ChatScreen>
       ],
     );
   }
-  void _openUserInfo() {
-    // TODO: Replace with actual user data from your state/cubit
-    final isCurrentlyBlocked = false; // Get this from your state management
 
+  void _openUserInfo() {
+    // Read ChatCubit data *before* pushing a new route. Using the new route's
+    // builder context to read providers can cause ProviderNotFoundException.
+    final cubit = context.read<ChatCubit>();
+    final state = cubit.state;
+    final isICurrentlyBlockedThisUser = (state is ChatLoaded) ? state.isIBlockedThem : false;
+    final isThemCurrentlyBlockedMe = (state is ChatLoaded) ? state.isTheyBlockedMe : false;
+    final groupData = (state is ChatLoaded) ? state.groupData : null;
+    print('ℹ️ Opening user info for $groupData');
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => UserInfoScreen(
+        builder: (ctx) => UserInfoScreen(
           userId: widget.userId,
           userName: widget.userName,
           userAvatar: widget.userAvatar,
-          userEmail: 'user@example.com', // TODO: Get actual user email
-          isBlocked: isCurrentlyBlocked,
+          userEmail: widget.userEmail,
+          isGroup: widget.isGroup,
+          groupData: groupData,
+          isIBlockedThem: isICurrentlyBlockedThisUser,
+          isTheyBlockedMe: isThemCurrentlyBlockedMe,
         ),
       ),
     );
   }
+
   Widget _buildMessagesList() {
     return BlocConsumer<ChatCubit, ChatState>(
       listener: (context, state) {
-        // Only act on ChatLoaded states
         if (state is! ChatLoaded) return;
 
-        // If we had requested load-more (older messages) restore previous
-        // viewport so the user remains looking at the same message.
-        if (_pendingLoadMore) {
-          // Wait for the new frame so ListView has the new children and
-          // updated scroll metrics. We set _restoringAfterLoadMore to true
-          // so that the subsequent ChatLoaded emit (with updated messages)
-          // doesn't trigger an unwanted scroll-to-bottom.
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (!_scrollController.hasClients) {
-              _pendingLoadMore = false;
-              _restoringAfterLoadMore = false;
-              return;
-            }
-
-            final newMax = _scrollController.position.maxScrollExtent;
-            if (_prevMaxScrollExtent != null && _prevScrollOffset != null) {
-              final delta = newMax - _prevMaxScrollExtent!;
-              // Keep the user's viewport anchored by adding the delta to
-              // previous offset. Use jumpTo to avoid animating unexpectedly.
-              final target = (_prevScrollOffset! + delta).clamp(0.0, newMax);
-              try {
-                _scrollController.jumpTo(target);
-              } catch (_) {
-                // ignore - if jump fails just continue
-              }
-            }
-            // Leave _restoringAfterLoadMore true until we've observed the
-            // next non-loading state to suppress auto-scroll there as well.
-            _pendingLoadMore = false;
-            _prevMaxScrollExtent = null;
-            _prevScrollOffset = null;
-            _restoringAfterLoadMore = true;
-          });
-
+        // If we just finished loading more old messages, restore scroll position
+        if (_scrollOffsetBeforeLoad != null &&
+            _messageCountBeforeLoad != null) {
+          _restoreScrollAfterLoadMore();
           return;
         }
 
-        // If we're in the middle of requesting older messages, don't auto-scroll.
-        if (state.isLoadingMore) return;
-
-        // If we just restored the viewport for load-more, suppress the
-        // automatic scroll-to-bottom for this emission so the user's
-        // position remains stable. Clear the flag afterwards.
-        if (_restoringAfterLoadMore) {
-          _restoringAfterLoadMore = false;
-          return;
+        // If user is near bottom and new message arrived, scroll to bottom
+        if (_shouldScrollToBottom && !state.isLoadingMore) {
+          _scrollToBottom(animate: true);
         }
-
-        // Normal new message arrival → scroll to bottom
-        _scrollToBottom();
       },
       builder: (context, state) {
         if (state is ChatLoading) {
@@ -675,9 +734,6 @@ class _ChatScreenState extends State<ChatScreen>
 
         if (state is ChatLoaded) {
           final messages = state.messages;
-          // UI-level dedupe: sometimes duplicates still arrive due to
-          // server overlap; remove adjacent/global duplicates before
-          // rendering to avoid duplicate bubbles.
           final visibleMessages = _uniqueMessages(messages);
 
           if (messages.isEmpty) {
@@ -705,25 +761,33 @@ class _ChatScreenState extends State<ChatScreen>
             );
           }
 
-          // Normal chronological ListView: oldest at top, newest at bottom.
           return ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            // Show loading indicator at TOP when loading more old messages
             itemCount: visibleMessages.length + (state.isLoadingMore ? 1 : 0),
             itemBuilder: (context, index) {
-              // Show loading indicator at top (index 0) when loading more
+              // Loading indicator at TOP (index 0)
               if (state.isLoadingMore && index == 0) {
-                return const Center(
-                  child: Padding(
-                    padding: EdgeInsets.all(16),
-                    child: CircularProgressIndicator(),
+                return Container(
+                  padding: const EdgeInsets.all(16),
+                  alignment: Alignment.center,
+                  child: const SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(strokeWidth: 2),
                   ),
                 );
               }
 
+              // Adjust index if loading indicator is present
               final messageIndex = state.isLoadingMore ? index - 1 : index;
               final msg = visibleMessages[messageIndex];
-              return _buildMessageBubble(msg);
+
+              return KeyedSubtree(
+                key: ValueKey(msg.id),
+                child: _buildMessageBubble(msg),
+              );
             },
           );
         }
@@ -826,9 +890,9 @@ class _ChatScreenState extends State<ChatScreen>
                     borderRadius: BorderRadius.circular(12),
                     boxShadow: [
                       BoxShadow(
-                        color: Colors.black.withOpacity(0.05),
+                        color: Colors.black.withValues(alpha: 0.05),
                         blurRadius: 4,
-                        offset: const Offset(0, 2),
+                        offset: const Offset(0, -2),
                       ),
                     ],
                   ),
@@ -1046,433 +1110,911 @@ class _ChatScreenState extends State<ChatScreen>
     if (kind == MessageKind.SYSTEM) {
       return const SizedBox.shrink();
     } else if (kind == MessageKind.IMAGE) {
-      final url = _buildMediaUrl(message);
-      if (url == null || url.isEmpty) return const SizedBox.shrink();
-      return GestureDetector(
-        onTap: () {
-          showDialog(
-            context: context,
-            builder: (ctx) => Dialog(
-              insetPadding: const EdgeInsets.all(8),
-              backgroundColor: Colors.transparent,
-              child: GestureDetector(
-                onTap: () => Navigator.of(ctx).pop(),
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: CachedNetworkImage(
-                    imageUrl: url,
-                    placeholder: (context, url) => Container(
-                      width: double.infinity,
-                      height: 300,
-                      color: Colors.black12,
-                      child: const Center(child: CircularProgressIndicator()),
-                    ),
-                    errorWidget: (context, url, error) => Container(
-                      width: double.infinity,
-                      height: 300,
-                      color: Colors.black12,
-                      child: const Icon(
-                        Icons.broken_image,
-                        color: Colors.white70,
-                      ),
-                    ),
-                    fit: BoxFit.contain,
-                  ),
+      return _buildImageContent(message);
+    } else if (kind == MessageKind.VIDEO) {
+      return _buildVideoContent(message);
+    } else if (kind == MessageKind.AUDIO) {
+      return _buildAudioContent(message);
+    } else if (kind == MessageKind.FILE) {
+      return _buildFileContent(message);
+    }
+
+    return const SizedBox.shrink();
+  }
+
+  // IMAGE: Show thumbnail, tap to view full screen
+  Widget _buildImageContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    // For SENDER: Check if we have local file path
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          final fileExists = snapshot.data ?? false;
+
+          if (fileExists) {
+            // SENDER: Show from local file (NO DOWNLOAD)
+            return GestureDetector(
+              onTap: () => _openImageViewerLocal(localPath, message.id),
+              onLongPress: () => _showSenderMediaOptions(message, localPath),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(localPath),
+                  width: 200,
+                  height: 150,
+                  fit: BoxFit.cover,
                 ),
               ),
-            ),
-          );
+            );
+          }
+
+          // Fallback: local file not found, download from server
+          return _buildImageContentReceiver(message, url);
         },
-        child: ClipRRect(
-          borderRadius: BorderRadius.circular(8),
-          child: CachedNetworkImage(
-            imageUrl: url,
-            placeholder: (context, url) => Container(
-              width: 180,
-              height: 120,
-              color: Colors.grey[200],
-              child: const Center(
-                child: CircularProgressIndicator(strokeWidth: 2),
-              ),
-            ),
-            errorWidget: (context, url, error) => Container(
-              width: 180,
-              height: 120,
-              color: Colors.grey[200],
-              child: const Icon(Icons.broken_image),
-            ),
-            width: 180,
-            height: 120,
-            fit: BoxFit.cover,
-          ),
-        ),
       );
-    } else if (kind == MessageKind.VIDEO) {
-      final url = _buildMediaUrl(message);
-      if (url == null || url.isEmpty) return const SizedBox.shrink();
+    }
 
-      // DON'T auto-generate thumbnail - just show placeholder with play button
-      return GestureDetector(
-        onLongPress: () => _showMediaOptions(message, url),
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            // Static placeholder - no thumbnail generation
-            Container(
-              width: 200,
-              height: 120,
-              decoration: BoxDecoration(
-                color: Colors.black26,
+    // RECEIVER: Download from server
+    return _buildImageContentReceiver(message, url);
+  }
+
+  Widget _buildImageContentReceiver(Message message, String url) {
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            if (isCached) {
+              _openImageViewer(url, message.id);
+            } else {
+              await _fetchAndCache(url, message.id);
+              if (mounted) {
+                _openImageViewer(url, message.id);
+              }
+            }
+          },
+          onLongPress: () => _showMediaOptions(message, url),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ClipRRect(
                 borderRadius: BorderRadius.circular(8),
+                child: isCached
+                    ? CachedNetworkImage(
+                        imageUrl: url,
+                        width: 200,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 200,
+                          height: 150,
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 200,
+                          height: 150,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, size: 40),
+                        ),
+                      )
+                    : Container(
+                        width: 200,
+                        height: 150,
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.image,
+                          size: 48,
+                          color: Colors.white70,
+                        ),
+                      ),
               ),
-              child: const Icon(
-                Icons.videocam,
-                size: 48,
-                color: Colors.white54,
-              ),
-            ),
-            // Play button
-            const Icon(Icons.play_circle_fill, size: 56, color: Colors.white70),
-            // Download indicator
-            Positioned(
-              right: 8,
-              top: 8,
-              child: FutureBuilder<FileInfo?>(
-                future: DefaultCacheManager().getFileFromCache(url),
-                builder: (context, snapshot) {
-                  final isCached = snapshot.data != null;
-                  final isDownloading =
-                      _downloadProgress[message.id] != null &&
-                      _downloadProgress[message.id]! < 1.0;
-
-                  if (isDownloading) {
-                    return SizedBox(
-                      width: 36,
-                      height: 36,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          CircularProgressIndicator(
+              if (!isCached)
+                Container(
+                  width: 200,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: isDownloading
+                        ? CircularProgressIndicator(
                             value: _downloadProgress[message.id],
                             backgroundColor: Colors.white24,
                             color: Colors.white,
-                          ),
-                          const Icon(
-                            Icons.downloading,
-                            size: 14,
+                          )
+                        : const Icon(
+                            Icons.download_rounded,
+                            size: 40,
                             color: Colors.white,
                           ),
-                        ],
-                      ),
-                    );
-                  }
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-                  if (!isCached) {
-                    return Container(
-                      padding: const EdgeInsets.all(4),
-                      decoration: BoxDecoration(
-                        color: Colors.black54,
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(
-                        Icons.cloud_download,
-                        color: Colors.white,
-                        size: 20,
-                      ),
-                    );
-                  }
+  // VIDEO: Show thumbnail with play button
+  Widget _buildVideoContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
 
-                  return Container(
-                    padding: const EdgeInsets.all(4),
+    // For SENDER: Check if we have local file path
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          final fileExists = snapshot.data ?? false;
+
+          if (fileExists) {
+            // SENDER: Show local video (NO DOWNLOAD)
+            return GestureDetector(
+              onTap: () => _openVideoPlayerLocal(localPath, message.id),
+              onLongPress: () => _showSenderMediaOptions(message, localPath),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 200,
+                    height: 150,
                     decoration: BoxDecoration(
-                      color: Colors.green.withOpacity(0.7),
-                      shape: BoxShape.circle,
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
                     ),
                     child: const Icon(
-                      Icons.check_circle,
-                      color: Colors.white,
-                      size: 20,
+                      Icons.videocam,
+                      size: 48,
+                      color: Colors.white54,
                     ),
-                  );
-                },
+                  ),
+                  const Icon(
+                    Icons.play_circle_fill,
+                    size: 56,
+                    color: Colors.white,
+                  ),
+                ],
               ),
-            ),
-            // Tap area
-            Positioned.fill(
-              child: Material(
-                color: Colors.transparent,
-                child: InkWell(
-                  onTap: () async {
-                    // Check if cached
-                    final cached = await DefaultCacheManager().getFileFromCache(
-                      url,
-                    );
-                    if (cached != null) {
-                      // Already cached, play directly
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) {
-                            return Scaffold(
-                              backgroundColor: Colors.black,
-                              appBar: AppBar(
-                                backgroundColor: Colors.black,
-                                iconTheme: const IconThemeData(
-                                  color: Colors.white,
-                                ),
-                              ),
-                              body: Center(
-                                child: AspectRatio(
-                                  aspectRatio: 16 / 9,
-                                  child: VideoPlayerViewer(
-                                    url: url,
-                                    messageId: message.id,
-                                  ),
-                                ),
-                              ),
-                            );
-                          },
-                        ),
-                      );
-                    } else {
-                      // Not cached, download first
-                      try {
-                        await _fetchAndCache(url, message.id);
-                        setState(() {}); // Refresh to show cached state
-                        showCustomSnackBar(
-                          context,
-                          'Download complete. Tap again to play.',
-                          type: SnackBarType.success,
-                        );
-                      } catch (e) {
-                        showCustomSnackBar(
-                          context,
-                          'Download failed: $e',
-                          type: SnackBarType.error,
-                        );
-                      }
-                    }
-                  },
+            );
+          }
+
+          // Fallback: download from server
+          return _buildVideoContentReceiver(message, url);
+        },
+      );
+    }
+
+    // RECEIVER: Download from server
+    return _buildVideoContentReceiver(message, url);
+  }
+
+  Widget _buildVideoContentReceiver(Message message, String url) {
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            if (isCached) {
+              await _openVideoPlayer(url, message.id);
+            } else {
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) {
+                  await _openVideoPlayer(url, message.id);
+                }
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          onLongPress: () => _showMediaOptions(message, url),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 200,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.videocam,
+                  size: 48,
+                  color: Colors.white54,
                 ),
               ),
-            ),
-          ],
+              if (!isCached)
+                Container(
+                  width: 200,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: isDownloading
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(
+                                value: _downloadProgress[message.id],
+                                backgroundColor: Colors.white24,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${(_downloadProgress[message.id]! * 100).toInt()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Icon(
+                            Icons.cloud_download,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.play_circle_fill,
+                  size: 56,
+                  color: Colors.white,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // AUDIO: Show audio tile with name and play button
+  Widget _buildAudioContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          if (snapshot.data == true) {
+            return _buildAudioTile(
+              message: message,
+              isLocal: true,
+              localPath: localPath,
+            );
+          }
+          return _buildAudioTile(message: message, isLocal: false, url: url);
+        },
+      );
+    }
+
+    return _buildAudioTile(message: message, isLocal: false, url: url);
+  }
+
+  Widget _buildAudioTile({
+    required Message message,
+    required bool isLocal,
+    String? localPath,
+    String? url,
+  }) {
+    if (isLocal && localPath != null) {
+      // SENDER: Show local audio
+      return GestureDetector(
+        onTap: () => _openAudioPlayerLocal(message, localPath),
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: message.isSentByMe
+                ? Colors.white.withValues(alpha: 0.2)
+                : Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.headphones,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message.fileName ?? 'Audio',
+                      style: TextStyle(
+                        color: message.isSentByMe
+                            ? Colors.white
+                            : Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap to play',
+                      style: TextStyle(
+                        color: message.isSentByMe
+                            ? Colors.white70
+                            : Colors.grey[600],
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.play_arrow, size: 24, color: Colors.green),
+            ],
+          ),
         ),
       );
-    } else if (kind == MessageKind.AUDIO) {
-      final url = _buildMediaUrl(message);
-      if (url == null || url.isEmpty) return const SizedBox.shrink();
+    }
+    // RECEIVER: Show download/cached audio
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url!),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
 
-      return FutureBuilder<FileInfo?>(
-        future: DefaultCacheManager().getFileFromCache(url),
-        builder: (context, snapshot) {
-          final isCached = snapshot.data != null;
-          final isDownloading =
-              _downloadProgress[message.id] != null &&
-              _downloadProgress[message.id]! < 1.0;
-
-          return Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        return GestureDetector(
+          onTap: () async {
+            if (isCached) {
+              _openAudioPlayer(message);
+            } else {
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) _openAudioPlayer(message);
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
             decoration: BoxDecoration(
-              color: Colors.grey[100],
+              color: message.isSentByMe
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100],
               borderRadius: BorderRadius.circular(8),
               border: Border.all(
-                color: isCached ? Colors.green : Colors.grey.withOpacity(0.5),
+                color: isCached
+                    ? Colors.green
+                    : Colors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isCached ? Colors.green : Colors.grey[300],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isDownloading
+                        ? Icons.downloading
+                        : (isCached ? Icons.headphones : Icons.audiotrack),
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.fileName ?? 'Audio',
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white
+                              : Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isDownloading
+                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
+                            : (isCached ? 'Tap to play' : 'Tap to download'),
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white70
+                              : Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isDownloading)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      value: _downloadProgress[message.id],
+                      strokeWidth: 2,
+                      color: message.isSentByMe ? Colors.white : Colors.green,
+                    ),
+                  )
+                else
+                  Icon(
+                    isCached ? Icons.play_arrow : Icons.download_rounded,
+                    size: 24,
+                    color: message.isSentByMe ? Colors.white : Colors.green,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  // NEW: Open local image viewer
+  void _openImageViewerLocal(String localPath, String messageId) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.file(File(localPath), fit: BoxFit.contain),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Open local video player
+  Future<void> _openVideoPlayerLocal(String localPath, String messageId) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+          ),
+          body: Center(
+            child: VideoPlayerViewerLocal(
+              localPath: localPath,
+              messageId: messageId,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // NEW: Open local audio player
+  void _openAudioPlayerLocal(Message message, String localPath) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: AudioPlayerInlineLocal(message: message, localPath: localPath),
+      ),
+    );
+  }
+
+  // NEW: Sender-specific media options (no download option)
+  void _showSenderMediaOptions(Message message, String localPath) {
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              ListTile(
+                leading: const Icon(Icons.info_outline),
+                title: const Text('File stored locally'),
+                subtitle: Text(localPath, style: const TextStyle(fontSize: 11)),
+                enabled: false,
+              ),
+              const Divider(),
+              ListTile(
+                leading: const Icon(Icons.save_alt),
+                title: const Text('Save to Gallery'),
+                onTap: () async {
+                  Navigator.of(ctx).pop();
+                  await _saveToGallery(File(localPath));
+                },
+              ),
+              ListTile(
+                leading: const Icon(Icons.share),
+                title: const Text('Share'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  // TODO: Implement share
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // FILE/DOCUMENT: Show document icon with name
+  Widget _buildFileContent(Message message) {
+    final url = message.fileUrl;
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    final ext = p.extension(message.fileName ?? url).toLowerCase();
+    IconData iconData = Icons.insert_drive_file;
+    Color iconColor = Colors.blue;
+
+    // Icon based on file type
+    if (ext == '.pdf') {
+      iconData = Icons.picture_as_pdf;
+      iconColor = Colors.red;
+    } else if (['.doc', '.docx'].contains(ext)) {
+      iconData = Icons.description;
+      iconColor = Colors.blue[700]!;
+    } else if (['.xls', '.xlsx'].contains(ext)) {
+      iconData = Icons.table_chart;
+      iconColor = Colors.green[700]!;
+    } else if (['.ppt', '.pptx'].contains(ext)) {
+      iconData = Icons.slideshow;
+      iconColor = Colors.orange[700]!;
+    } else if (ext == '.txt') {
+      iconData = Icons.text_snippet;
+      iconColor = Colors.grey[700]!;
+    }
+
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            if (isCached) {
+              await _openDocument(url, message.id, ext);
+            } else {
+              // Download first
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) {
+                  await _openDocument(url, message.id, ext);
+                }
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          onLongPress: () => _showMediaOptions(message, url),
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            constraints: const BoxConstraints(maxWidth: 250),
+            decoration: BoxDecoration(
+              color: message.isSentByMe
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCached
+                    ? iconColor
+                    : Colors.grey.withValues(alpha: 0.3),
                 width: 1.5,
               ),
             ),
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  Icons.audiotrack,
-                  size: 20,
-                  color: isCached ? Colors.green : Colors.grey[700],
+                // Document icon
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isCached
+                        ? iconColor.withValues(alpha: 0.2)
+                        : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    iconData,
+                    size: 28,
+                    color: isCached ? iconColor : Colors.grey[600],
+                  ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 12),
+                // File info
                 Flexible(
-                  child: Text(
-                    message.fileName ?? 'Audio',
-                    style: TextStyle(
-                      color: isCached ? Colors.green[700] : Colors.black87,
-                      fontSize: 14,
-                      fontWeight: FontWeight.w500,
-                    ),
-                    overflow: TextOverflow.ellipsis,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.fileName ?? 'Document',
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white
+                              : Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isDownloading
+                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
+                            : (isCached
+                                  ? ext.toUpperCase().replaceFirst('.', '')
+                                  : 'Tap to download'),
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white70
+                              : Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
                 const SizedBox(width: 8),
+                // Action indicator
                 if (isDownloading)
                   SizedBox(
-                    width: 20,
-                    height: 20,
+                    width: 24,
+                    height: 24,
                     child: CircularProgressIndicator(
                       value: _downloadProgress[message.id],
                       strokeWidth: 2,
+                      color: message.isSentByMe ? Colors.white : iconColor,
                     ),
                   )
-                else if (!isCached)
-                  IconButton(
-                    icon: const Icon(Icons.download_rounded, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () async {
-                      try {
-                        await _fetchAndCache(url, message.id);
-                        setState(() {});
-                        showCustomSnackBar(
-                          context,
-                          'Download complete',
-                          type: SnackBarType.success,
-                        );
-                      } catch (e) {
-                        showCustomSnackBar(
-                          context,
-                          'Download failed: $e',
-                          type: SnackBarType.error,
-                        );
-                      }
-                    },
-                  )
                 else
-                  IconButton(
-                    icon: const Icon(Icons.play_arrow, size: 20),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
-                    onPressed: () {
-                      showModalBottomSheet(
-                        context: context,
-                        builder: (_) => Padding(
-                          padding: const EdgeInsets.all(12.0),
-                          child: _audioPlayerWidget(message),
-                        ),
-                      );
-                    },
+                  Icon(
+                    isCached ? Icons.open_in_new : Icons.download_rounded,
+                    size: 20,
+                    color: message.isSentByMe ? Colors.white : iconColor,
                   ),
               ],
             ),
-          );
-        },
-      );
-    } else if (kind == MessageKind.FILE) {
-      final url = message.fileUrl;
-      if (url == null || url.isEmpty) return const SizedBox.shrink();
+          ),
+        );
+      },
+    );
+  }
 
-      return GestureDetector(
-        onLongPress: () => _showMediaOptions(message, url),
-        child: FutureBuilder<FileInfo?>(
-          future: DefaultCacheManager().getFileFromCache(url),
-          builder: (context, snapshot) {
-            final isCached = snapshot.data != null;
-            final isDownloading =
-                _downloadProgress[message.id] != null &&
-                _downloadProgress[message.id]! < 1.0;
+  // Helper methods for opening media
 
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: Colors.grey[100],
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                  color: isCached ? Colors.green : Colors.grey.withOpacity(0.5),
-                  width: 1.5,
+  void _openImageViewer(String url, String messageId, {bool isLocal = false}) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+            iconTheme: const IconThemeData(color: Colors.white),
+            actions: [
+              if (!isLocal)
+                IconButton(
+                  icon: const Icon(Icons.download_rounded),
+                  onPressed: () async {
+                    final file = await _fetchAndCache(url, messageId);
+                    if (file != null) {
+                      await _saveToGallery(file);
+                    }
+                  },
                 ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: CachedNetworkImage(
+                imageUrl: url,
+                placeholder: (context, url) =>
+                    const CircularProgressIndicator(),
+                errorWidget: (context, url, error) => const Icon(
+                  Icons.broken_image,
+                  color: Colors.white,
+                  size: 64,
+                ),
+                fit: BoxFit.contain,
               ),
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Icon(
-                    Icons.insert_drive_file,
-                    size: 20,
-                    color: isCached ? Colors.green : Colors.grey[700],
-                  ),
-                  const SizedBox(width: 8),
-                  Flexible(
-                    child: Text(
-                      message.fileName ?? 'File',
-                      style: TextStyle(
-                        color: isCached ? Colors.green[700] : Colors.black87,
-                        fontSize: 14,
-                        fontWeight: FontWeight.w500,
-                      ),
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (isDownloading)
-                    SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        value: _downloadProgress[message.id],
-                        strokeWidth: 2,
-                      ),
-                    )
-                  else if (!isCached)
-                    IconButton(
-                      icon: const Icon(Icons.download_rounded, size: 20),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () async {
-                        try {
-                          await _fetchAndCache(url, message.id);
-                          setState(() {});
-                          showCustomSnackBar(
-                            context,
-                            'Download complete',
-                            type: SnackBarType.success,
-                          );
-                        } catch (e) {
-                          showCustomSnackBar(
-                            context,
-                            'Download failed: $e',
-                            type: SnackBarType.error,
-                          );
-                        }
-                      },
-                    )
-                  else
-                    IconButton(
-                      icon: const Icon(Icons.open_in_new, size: 20),
-                      padding: EdgeInsets.zero,
-                      constraints: const BoxConstraints(),
-                      onPressed: () async {
-                        try {
-                          final file = await _fetchAndCache(url, message.id);
-                          if (file != null) {
-                            final ext = p.extension(file.path).toLowerCase();
-                            if (ext == '.pdf') {
-                              await _openPdfViewer(url, message.id);
-                            } else {
-                              final uri = Uri.file(file.path);
-                              if (await canLaunchUrl(uri)) {
-                                await launchUrl(uri);
-                              } else {
-                                showCustomSnackBar(
-                                  context,
-                                  'Cannot open file.',
-                                  type: SnackBarType.error,
-                                );
-                              }
-                            }
-                          }
-                        } catch (e) {
-                          showCustomSnackBar(
-                            context,
-                            'Failed to open file: $e',
-                            type: SnackBarType.error,
-                          );
-                        }
-                      },
-                    ),
-                ],
-              ),
-            );
-          },
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openVideoPlayer(String url, String messageId) async {
+    try {
+      final file = await _fetchAndCache(url, messageId);
+      if (file == null) {
+        showCustomSnackBar(
+          context,
+          'Video not available',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => Scaffold(
+            backgroundColor: Colors.black,
+            appBar: AppBar(
+              backgroundColor: Colors.transparent,
+              elevation: 0,
+              iconTheme: const IconThemeData(color: Colors.white),
+            ),
+            body: Center(
+              child: VideoPlayerViewer(url: url, messageId: messageId),
+            ),
+          ),
         ),
       );
+    } catch (e) {
+      showCustomSnackBar(
+        context,
+        'Failed to open video: $e',
+        type: SnackBarType.error,
+      );
     }
+  }
 
-    return const SizedBox.shrink();
+  void _openAudioPlayer(Message message) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) => Container(
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        ),
+        padding: const EdgeInsets.all(20),
+        child: AudioPlayerInline(
+          message: message,
+          fetchAndCache: _fetchAndCache,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _openDocument(String url, String messageId, String ext) async {
+    try {
+      final file = await _fetchAndCache(url, messageId);
+      if (file == null) {
+        showCustomSnackBar(
+          context,
+          'Document not available',
+          type: SnackBarType.error,
+        );
+        return;
+      }
+
+      if (ext == '.pdf') {
+        // Open PDF viewer
+        await Navigator.of(context).push(
+          MaterialPageRoute(
+            builder: (_) {
+              final controller = PdfController(
+                document: PdfDocument.openFile(file.path),
+              );
+              return Scaffold(
+                appBar: AppBar(
+                  title: Text(p.basename(file.path)),
+                  actions: [
+                    IconButton(
+                      icon: const Icon(Icons.share),
+                      onPressed: () {
+                        // Implement share functionality
+                      },
+                    ),
+                  ],
+                ),
+                body: PdfView(controller: controller),
+              );
+            },
+          ),
+        );
+      } else {
+        // For other document types, try to open with system viewer
+        final uri = Uri.file(file.path);
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          showCustomSnackBar(
+            context,
+            'No app available to open this file type',
+            type: SnackBarType.error,
+          );
+        }
+      }
+    } catch (e) {
+      showCustomSnackBar(
+        context,
+        'Failed to open document: $e',
+        type: SnackBarType.error,
+      );
+    }
   }
 
   String? _extractFirstImgSrc(String html) {
@@ -1495,7 +2037,7 @@ class _ChatScreenState extends State<ChatScreen>
       padding: const EdgeInsets.all(8),
       margin: const EdgeInsets.only(bottom: 8),
       decoration: BoxDecoration(
-        color: Colors.black.withOpacity(0.1),
+        color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
         border: Border(left: BorderSide(color: AppClr.primaryColor, width: 3)),
       ),
@@ -1563,95 +2105,116 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Widget _buildMessageInput() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 4,
-            offset: const Offset(0, -2),
-          ),
-        ],
-      ),
-      child: SafeArea(
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                constraints: const BoxConstraints(maxHeight: 100),
-                decoration: BoxDecoration(
-                  color: Colors.grey[100],
-                  borderRadius: BorderRadius.circular(25),
-                ),
-                child: TextField(
-                  controller: _messageController,
-                  focusNode: _focusNode,
-                  onChanged: (value) => _onTyping(),
-                  decoration: InputDecoration(
-                    hintText: 'Type a message...',
-                    hintStyle: TextStyle(color: Colors.grey[500]),
-                    border: InputBorder.none,
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 12,
-                    ),
-                  ),
-                  maxLines: null,
-                  textInputAction: TextInputAction.send,
-                  onSubmitted: (value) => _sendMessage(),
-                ),
+    return BlocBuilder<ChatCubit, ChatState>(
+      builder: (context, state) {
+        final isBlocked = state is ChatLoaded && (state.isIBlockedThem || state.isTheyBlockedMe);
+        if (isBlocked) {
+          // Show disabled composer when the other user is blocked
+          return Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Center(
+              child: Text(
+                'Messaging disabled — this user is blocked',
+                style: TextStyle(color: Colors.grey[600]),
               ),
             ),
-            const SizedBox(width: 8),
-            // Attach button
-            if (_attachedFilePath == null) ...[
-              IconButton(
-                icon: const Icon(Icons.attach_file, color: Colors.grey),
-                onPressed: _openFilePicker,
-              ),
-            ] else ...[
-              // show small preview
-              GestureDetector(
-                onTap: () {
-                  // remove attached
-                  setState(() {
-                    _attachedFilePath = null;
-                    _attachedFileType = null;
-                  });
-                },
-                child: Container(
-                  width: 44,
-                  height: 44,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[200],
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Center(
-                    child: _attachedFileType == 1
-                        ? const Icon(Icons.image, size: 20)
-                        : (_attachedFileType == 2
-                              ? const Icon(Icons.videocam, size: 20)
-                              : const Icon(Icons.insert_drive_file, size: 20)),
-                  ),
-                ),
+          );
+        }
+        return Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
               ),
             ],
-            const SizedBox(width: 8),
-            Container(
-              decoration: BoxDecoration(
-                color: AppClr.primaryColor,
-                shape: BoxShape.circle,
-              ),
-              child: IconButton(
-                icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                onPressed: _sendMessage,
-              ),
+          ),
+          child: SafeArea(
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    constraints: const BoxConstraints(maxHeight: 100),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(25),
+                    ),
+                    child: TextField(
+                      controller: _messageController,
+                      focusNode: _focusNode,
+                      onChanged: (value) => _onTyping(),
+                      decoration: InputDecoration(
+                        hintText: 'Type a message...',
+                        hintStyle: TextStyle(color: Colors.grey[500]),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      maxLines: null,
+                      textInputAction: TextInputAction.send,
+                      onSubmitted: (value) => _sendMessage(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                // Attach button
+                if (_attachedFilePath == null) ...[
+                  IconButton(
+                    icon: const Icon(Icons.attach_file, color: Colors.grey),
+                    onPressed: _openFilePicker,
+                  ),
+                ] else ...[
+                  // show small preview
+                  GestureDetector(
+                    onTap: () {
+                      // remove attached
+                      setState(() {
+                        _attachedFilePath = null;
+                        _attachedFileType = null;
+                      });
+                    },
+                    child: Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.grey[200],
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Center(
+                        child: _attachedFileType == 1
+                            ? const Icon(Icons.image, size: 20)
+                            : (_attachedFileType == 2
+                                  ? const Icon(Icons.videocam, size: 20)
+                                  : const Icon(
+                                      Icons.insert_drive_file,
+                                      size: 20,
+                                    )),
+                      ),
+                    ),
+                  ),
+                ],
+                const SizedBox(width: 8),
+                Container(
+                  decoration: BoxDecoration(
+                    color: AppClr.primaryColor,
+                    shape: BoxShape.circle,
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
+                    onPressed: _sendMessage,
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
+          ),
+        );
+      },
     );
   }
 
@@ -1660,10 +2223,8 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   bool get wantKeepAlive => true;
 
-  // Create a stable fingerprint for a message for UI-level dedupe
   String _fingerprint(Message m) {
     final txt = _parseMessage(m.message);
-    // include server id to make fingerprint unique per message
     return '${m.id}|${m.fromId}|$txt|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
   }
 
@@ -2148,5 +2709,249 @@ class _VideoPlayerViewerState extends State<VideoPlayerViewer> {
       return const Center(child: CircularProgressIndicator());
     }
     return Chewie(controller: _chewie!);
+  }
+}
+
+// NEW: Local video player widget
+class VideoPlayerViewerLocal extends StatefulWidget {
+  final String localPath;
+  final String messageId;
+
+  const VideoPlayerViewerLocal({
+    Key? key,
+    required this.localPath,
+    required this.messageId,
+  }) : super(key: key);
+
+  @override
+  State<VideoPlayerViewerLocal> createState() => _VideoPlayerViewerLocalState();
+}
+
+class _VideoPlayerViewerLocalState extends State<VideoPlayerViewerLocal> {
+  VideoPlayerController? _controller;
+  ChewieController? _chewie;
+
+  @override
+  void initState() {
+    super.initState();
+    _initialize();
+  }
+
+  Future<void> _initialize() async {
+    try {
+      _controller = VideoPlayerController.file(File(widget.localPath));
+      await _controller!.initialize();
+      _chewie = ChewieController(
+        videoPlayerController: _controller!,
+        autoPlay: true,
+        looping: false,
+      );
+      setState(() {});
+    } catch (e) {
+      debugPrint('⚠️ Local video init failed: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _chewie?.dispose();
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_chewie == null ||
+        _controller == null ||
+        !_controller!.value.isInitialized) {
+      return const Center(child: CircularProgressIndicator());
+    }
+    return Chewie(controller: _chewie!);
+  }
+}
+
+// NEW: Local audio player widget
+class AudioPlayerInlineLocal extends StatefulWidget {
+  final Message message;
+  final String localPath;
+
+  const AudioPlayerInlineLocal({
+    super.key,
+    required this.message,
+    required this.localPath,
+  });
+
+  @override
+  State<AudioPlayerInlineLocal> createState() => _AudioPlayerInlineLocalState();
+}
+
+class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
+  AudioPlayer? _player;
+  bool _isLoading = true;
+  String? _error;
+  Duration _duration = Duration.zero;
+  Duration _position = Duration.zero;
+  bool _isPlaying = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _initializePlayer();
+  }
+
+  Future<void> _initializePlayer() async {
+    try {
+      _player = AudioPlayer();
+      await _player!.setFilePath(widget.localPath);
+
+      _player!.playerStateStream.listen((state) {
+        if (mounted) setState(() => _isPlaying = state.playing);
+      });
+
+      _player!.durationStream.listen((duration) {
+        if (mounted && duration != null) setState(() => _duration = duration);
+      });
+
+      _player!.positionStream.listen((position) {
+        if (mounted) setState(() => _position = position);
+      });
+
+      setState(() => _isLoading = false);
+    } catch (e) {
+      setState(() {
+        _error = 'Error loading audio: $e';
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _player?.dispose();
+    super.dispose();
+  }
+
+  String _formatDuration(Duration duration) {
+    String twoDigits(int n) => n.toString().padLeft(2, '0');
+    final minutes = twoDigits(duration.inMinutes.remainder(60));
+    final seconds = twoDigits(duration.inSeconds.remainder(60));
+    return '$minutes:$seconds';
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (_isLoading) {
+      return const Center(
+        child: Padding(
+          padding: EdgeInsets.all(40.0),
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
+    if (_error != null) {
+      return Center(
+        child: Padding(
+          padding: const EdgeInsets.all(20.0),
+          child: Text(_error!, style: const TextStyle(color: Colors.red)),
+        ),
+      );
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 20),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.green.withValues(alpha: 0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.audiotrack,
+                  size: 32,
+                  color: Colors.green,
+                ),
+              ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.message.fileName ?? 'Audio',
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Playing from local file',
+                      style: TextStyle(fontSize: 12, color: Colors.green),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 24),
+          Slider(
+            value: _position.inMilliseconds.toDouble(),
+            max: _duration.inMilliseconds.toDouble().clamp(
+              1.0,
+              double.infinity,
+            ),
+            onChanged: (val) {
+              _player?.seek(Duration(milliseconds: val.toInt()));
+            },
+            activeColor: Colors.green,
+          ),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  _formatDuration(_position),
+                  style: const TextStyle(fontSize: 12),
+                ),
+                Text(
+                  _formatDuration(_duration),
+                  style: const TextStyle(fontSize: 12),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Container(
+            decoration: BoxDecoration(
+              color: Colors.green,
+              shape: BoxShape.circle,
+            ),
+            child: IconButton(
+              icon: Icon(
+                _isPlaying ? Icons.pause : Icons.play_arrow,
+                color: Colors.white,
+              ),
+              iconSize: 40,
+              onPressed: () {
+                if (_isPlaying) {
+                  _player!.pause();
+                } else {
+                  _player!.play();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
   }
 }

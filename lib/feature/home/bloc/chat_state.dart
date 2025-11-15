@@ -15,7 +15,10 @@ class ChatLoaded extends ChatState {
   final bool hasMore;
   final bool isLoadingMore;
   final bool isGroup;
-  final Map<String, int> uploadProgress; // percent 0-100 per temp message id
+  final Map<String, int> uploadProgress;
+  final bool isIBlockedThem;
+  final bool isTheyBlockedMe;
+  final Map<String, dynamic>? groupData;
 
   ChatLoaded({
     required this.messages,
@@ -26,6 +29,9 @@ class ChatLoaded extends ChatState {
     this.isLoadingMore = false,
     this.uploadProgress = const {},
     required this.isGroup,
+    this.groupData,
+    this.isIBlockedThem = false,
+    this.isTheyBlockedMe = false,
   });
 
   ChatLoaded copyWith({
@@ -33,6 +39,9 @@ class ChatLoaded extends ChatState {
     bool? hasMore,
     bool? isLoadingMore,
     Map<String, int>? uploadProgress,
+    bool? isIBlockedThem,
+    bool? isTheyBlockedMe,
+    Map<String, dynamic>? groupData,
   }) {
     return ChatLoaded(
       messages: messages ?? this.messages,
@@ -43,6 +52,9 @@ class ChatLoaded extends ChatState {
       isLoadingMore: isLoadingMore ?? this.isLoadingMore,
       uploadProgress: uploadProgress ?? this.uploadProgress,
       isGroup: isGroup,
+      isTheyBlockedMe: isTheyBlockedMe ?? this.isTheyBlockedMe,
+      isIBlockedThem: isIBlockedThem ?? this.isIBlockedThem,
+      groupData: groupData ?? this.groupData,
     );
   }
 }
