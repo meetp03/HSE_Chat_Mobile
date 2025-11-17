@@ -4,6 +4,7 @@ import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/network/api_response.dart';
 import 'package:hsc_chat/cores/network/dio_client.dart';
 import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
+import 'package:hsc_chat/feature/home/model/group_action.dart';
 
 class UserRepository {
   final DioClient _dio = DioClient();
@@ -87,6 +88,57 @@ class UserRepository {
     } catch (e) {
       print('❌ Delete group repository error: $e');
       return ApiResponse.error('Network error: $e');
+    }
+  }
+
+  /// Make a member admin in a group. Returns GroupActionResponse parsed from server.
+  Future<GroupActionResponse> makeAdmin({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId/make-admin';
+      final resp = await _dio.put(path);
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
+      }
+      throw Exception('Failed to make admin: ${resp.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  /// Dismiss a member from admin role
+  Future<GroupActionResponse> dismissAdmin({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId/dismiss-as-admin';
+      final resp = await _dio.put(path);
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
+      }
+      throw Exception('Failed to dismiss admin: ${resp.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
+    }
+  }
+
+  /// Remove member from group
+  Future<GroupActionResponse> removeMember({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId';
+      final resp = await _dio.delete(path);
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
+      }
+      throw Exception('Failed to remove member: ${resp.statusCode}');
+    } catch (e) {
+      throw Exception('Network error: $e');
     }
   }
 }

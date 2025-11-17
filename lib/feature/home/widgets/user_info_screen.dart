@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
-import 'package:hsc_chat/cores/network/socket_service.dart';
+import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:hsc_chat/cores/utils/utils.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/user_info_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/user_info_state.dart';
+import 'package:hsc_chat/feature/home/model/chat_models.dart';
 import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
 import 'package:hsc_chat/feature/home/repository/user_repository.dart';
 
@@ -19,10 +20,10 @@ class UserInfoScreen extends StatefulWidget {
   final bool isIBlockedThem;
   final bool isTheyBlockedMe;
   final bool isGroup;
-  final Map<String, dynamic>? groupData;
+  final ChatGroup? groupData;
 
   const UserInfoScreen({
-    Key? key,
+    super.key,
     required this.userId,
     required this.userName,
     this.userAvatar,
@@ -31,7 +32,7 @@ class UserInfoScreen extends StatefulWidget {
     required this.isTheyBlockedMe,
     this.isGroup = false,
     this.groupData,
-  }) : super(key: key);
+  });
 
   @override
   State<UserInfoScreen> createState() => _UserInfoScreenState();
@@ -40,7 +41,7 @@ class UserInfoScreen extends StatefulWidget {
 class _UserInfoScreenState extends State<UserInfoScreen> {
   late bool _isIBlockedThem;
   late bool _isTheyBlockedMe;
-  List<dynamic> _commonGroups = [];
+  List<GroupModel> _commonGroups = [];
   late final UserInfoCubit _cubit;
   bool _isDeleting = false;
 
@@ -48,7 +49,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   void initState() {
     super.initState();
     _isIBlockedThem = widget.isIBlockedThem;
-    print('🔒 Initial isIBlockedThem: $_isIBlockedThem');
     _isTheyBlockedMe = widget.isTheyBlockedMe;
     _cubit = UserInfoCubit(UserRepository());
     _cubit.loadUserInfo(otherUserId: int.tryParse(widget.userId) ?? 0);
@@ -127,18 +127,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   fontWeight: FontWeight.bold,
                   color: AppClr.primaryColor,
                 ),
-              ),
-              if (!widget.isGroup && widget.userEmail != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  widget.userEmail!,
-                  style: TextStyle(fontSize: 16, color: Colors.grey[600]),
-                ),
-              ],
-              const SizedBox(height: 8),
-              Text(
-                'User ID: ${widget.userId}',
-                style: TextStyle(fontSize: 14, color: Colors.grey[500]),
               ),
             ],
           ),
@@ -258,40 +246,16 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         ),
       ),
       subtitle: Text('${group.members} members'),
-      onTap: () {
-        // TODO: Navigate to group chat
-      },
+      onTap: () {},
     );
   }
 
   Widget _buildGroupDetailSection() {
-    final raw = widget.groupData;
-    if (raw == null) {
-      print('❌ No group data provided');
-      return const SizedBox.shrink();
-    }
+    final grp = widget.groupData;
+    if (grp == null || grp.id.isEmpty) return const SizedBox.shrink();
 
-    print('🔍 Raw group data type: ${raw.runtimeType}');
-    print('🔍 Raw group data: $raw');
-
-    // Handle both Map and Conversation types
-    Map<String, dynamic>? groupMap;
-    groupMap = raw;
-    print('✅ Using raw Map directly');
-
-    // Extract data using the actual field names from your debug output
-    final groupId = groupMap['id']?.toString() ?? '';
-    final groupName = groupMap['name']?.toString() ?? 'Unnamed Group';
-    final groupPhotoUrl = groupMap['photo_url']?.toString() ?? '';
-    final groupDescription = groupMap['description']?.toString() ?? '';
-    final members = groupMap['members'] as List<dynamic>? ?? [];
-
-    print('📍 Group ID: $groupId');
-    print('📍 Group Name: $groupName');
-    print('📍 Group Photo: $groupPhotoUrl');
-    print('📍 Group Description: $groupDescription');
-    print('📍 Group members count: ${members.length}');
-    print('📍 Group members: ${members.map((m) => m['name']).toList()}');
+    final groupId = grp.id;
+    final members = grp.members;
 
     return Card(
       elevation: 1,
@@ -302,7 +266,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Channel Details',
+              'Channel Information',
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -310,47 +274,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               ),
             ),
             const SizedBox(height: 12),
-
-            // Group Photo
-            if (groupPhotoUrl.isNotEmpty)
-              Center(
-                child: ClipOval(
-                  child: CachedNetworkImage(
-                    imageUrl: groupPhotoUrl,
-                    width: 80,
-                    height: 80,
-                    fit: BoxFit.cover,
-                    errorWidget: (context, url, error) => Container(
-                      width: 80,
-                      height: 80,
-                      decoration: BoxDecoration(
-                        color: AppClr.primaryColor.withAlpha(30),
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(Icons.group, color: AppClr.primaryColor),
-                    ),
-                  ),
-                ),
-              ),
-
-            const SizedBox(height: 12),
-
-            // Group Name
-            Text(
-              groupName,
-              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
-            ),
-
-            // Group Description
-            if (groupDescription.isNotEmpty) ...[
-              const SizedBox(height: 8),
-              Text(
-                groupDescription,
-                style: const TextStyle(color: Colors.grey),
-              ),
-            ],
-
-            const SizedBox(height: 16),
 
             // Members Section
             Row(
@@ -367,27 +290,21 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             ),
             const SizedBox(height: 12),
 
-            // Members List - using the actual member structure from your debug output
+            // Members List - using the typed ChatMember
             ...members.map((member) {
-              final memberMap = member as Map<String, dynamic>;
-              final memberName = memberMap['name']?.toString() ?? 'Unknown';
-              final memberEmail = memberMap['email']?.toString() ?? '';
-              final memberAvatarUrl = memberMap['photo_url']?.toString();
-              final memberRole = memberMap['role'] ?? 0;
-              final isGroupAdmin = memberRole == 1;
-print(memberMap['role']);
-               return ListTile(
+              final m = member;
+              final isAdmin = (m.role == 1);
+              return ListTile(
                 contentPadding: EdgeInsets.zero,
                 leading: CircleAvatar(
                   radius: 20,
                   backgroundColor: AppClr.primaryColor.withAlpha(30),
-                  backgroundImage:
-                      memberAvatarUrl != null && memberAvatarUrl.isNotEmpty
-                      ? CachedNetworkImageProvider(memberAvatarUrl)
+                  backgroundImage: m.photoUrl != null && m.photoUrl!.isNotEmpty
+                      ? CachedNetworkImageProvider(m.photoUrl!)
                       : null,
-                  child: memberAvatarUrl == null
+                  child: m.photoUrl == null
                       ? Text(
-                          Utils.getInitials(memberName),
+                          Utils.getInitials(m.name),
                           style: TextStyle(
                             color: AppClr.primaryColor,
                             fontWeight: FontWeight.bold,
@@ -396,200 +313,213 @@ print(memberMap['role']);
                       : null,
                 ),
                 title: Text(
-                  memberName,
+                  m.name,
                   style: TextStyle(fontWeight: FontWeight.w500),
                 ),
-                subtitle: memberEmail.isNotEmpty ? Text(memberEmail) : null,
-                trailing: memberRole.isNotEmpty
-                    ? Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: isGroupAdmin ? Colors.orange : Colors.grey,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          isGroupAdmin ? 'Admin' : 'Member',
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 10,
-                            fontWeight: FontWeight.bold,
-                          ),
-                        ),
-                      )
+                subtitle: m.email != null && m.email!.isNotEmpty
+                    ? Text(m.email!)
                     : null,
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Role badge
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isAdmin ? Colors.orange : Colors.grey,
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Text(
+                        isAdmin ? 'Admin' : 'Member',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ),
+
+                    // 3-dot menu for admin users (don't show for current user)
+                    if (_isCurrentUserAdmin(grp)) ...[
+                      const SizedBox(width: 8),
+                      PopupMenuButton<String>(
+                        icon: Icon(
+                          Icons.more_vert,
+                          color: AppClr.primaryColor,
+                          size: 20,
+                        ),
+                        onSelected: (value) =>
+                            _handleMemberMenuAction(value, m, grp),
+                        itemBuilder: (BuildContext context) {
+                          // Show different options based on member role
+                          if (isAdmin) {
+                            // For admin members: Dismiss as Admin and Remove Member
+                            return [
+                              PopupMenuItem<String>(
+                                value: 'dismiss_admin',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.admin_panel_settings_outlined,
+                                      size: 20,
+                                      color: Colors.orange,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('Dismiss as Admin'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'remove_member',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.person_remove,
+                                      size: 20,
+                                      color: Colors.red,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Remove Member',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ];
+                          } else {
+                            // For regular members: Make Admin and Remove Member
+                            return [
+                              PopupMenuItem<String>(
+                                value: 'make_admin',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.admin_panel_settings,
+                                      size: 20,
+                                      color: Colors.green,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text('Make Admin'),
+                                  ],
+                                ),
+                              ),
+                              PopupMenuItem<String>(
+                                value: 'remove_member',
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.person_remove,
+                                      size: 20,
+                                      color: Colors.red,
+                                    ),
+                                    const SizedBox(width: 8),
+                                    Text(
+                                      'Remove Member',
+                                      style: TextStyle(color: Colors.red),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ];
+                          }
+                        },
+                      ),
+                    ],
+                  ],
+                ),
               );
             }),
 
             const SizedBox(height: 16),
 
-            // Delete Button (only show if user is admin/owner)
-            /*
-            ElevatedButton.icon(
-              onPressed: _isDeleting
-                  ? null
-                  : () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Delete Channel'),
-                          content: const Text(
-                            'Are you sure you want to delete this channel? This action cannot be undone.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Cancel'),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: _isDeleting
+                    ? null
+                    : () async {
+                        final confirm = await showDialog<bool>(
+                          context: context,
+                          builder: (ctx) => AlertDialog(
+                            title: const Text('Delete Channel'),
+                            content: const Text(
+                              'Are you sure you want to delete this channel? This action cannot be undone.',
                             ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
+                            actions: [
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(false),
+                                child: const Text('Cancel'),
                               ),
-                            ),
-                          ],
-                        ),
-                      );
-
-                      if (confirm != true) return;
-
-                      if (groupId.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Invalid group id'),
-                            backgroundColor: Colors.red,
+                              TextButton(
+                                onPressed: () => Navigator.of(ctx).pop(true),
+                                child: const Text(
+                                  'Delete',
+                                  style: TextStyle(color: Colors.red),
+                                ),
+                              ),
+                            ],
                           ),
                         );
-                        return;
-                      }
 
-                      setState(() {
-                        _isDeleting = true;
-                      });
-                      final otherUserId = int.tryParse(widget.userId) ?? 0;
+                        if (confirm != true) return;
 
-                      try {
-                        final ok = await _cubit.deleteGroup(
-                          groupId: groupId,
-                          otherUserId: otherUserId,
-                        );
-
-                        if (ok) {
+                        if (groupId.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Channel deleted'),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                          Navigator.of(
-                            context,
-                          ).pop(); // Close user info after deletion
-                        } else {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('Failed to delete channel'),
+                              content: Text('Invalid group id'),
                               backgroundColor: Colors.red,
                             ),
                           );
+                          return;
                         }
-                      } catch (e) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text('Error deleting channel: $e'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                      } finally {
-                        if (mounted) {
-                          setState(() {
-                            _isDeleting = false;
-                          });
-                        }
-                      }
-                    },
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete Channel'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
-              ),
-            ),
-*/
-            ElevatedButton.icon(
-              onPressed: _isDeleting
-                  ? null
-                  : () async {
-                      final confirm = await showDialog<bool>(
-                        context: context,
-                        builder: (ctx) => AlertDialog(
-                          title: const Text('Delete Channel'),
-                          content: const Text(
-                            'Are you sure you want to delete this channel? This action cannot be undone.',
-                          ),
-                          actions: [
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(false),
-                              child: const Text('Cancel'),
-                            ),
-                            TextButton(
-                              onPressed: () => Navigator.of(ctx).pop(true),
-                              child: const Text(
-                                'Delete',
-                                style: TextStyle(color: Colors.red),
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
 
-                      if (confirm != true) return;
+                        setState(() {
+                          _isDeleting = true;
+                        });
+                        final otherUserId = int.tryParse(widget.userId) ?? 0;
 
-                      if (groupId.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text('Invalid group id'),
-                            backgroundColor: Colors.red,
-                          ),
-                        );
-                        return;
-                      }
+                        try {
+                          final ok = await _cubit.deleteGroup(
+                            groupId: groupId,
+                            otherUserId: otherUserId,
+                          );
 
-                      setState(() {
-                        _isDeleting = true;
-                      });
-                      final otherUserId = int.tryParse(widget.userId) ?? 0;
+                          if (ok) {
+                            final conversationCubit = context
+                                .read<ConversationCubit>();
 
-                      try {
-                        final ok = await _cubit.deleteGroup(
-                          groupId: groupId,
-                          otherUserId: otherUserId,
-                        );
+                            await conversationCubit.refresh();
+                            await conversationCubit.refreshUnread();
 
-                        if (ok) {
-                          final conversationCubit = context
-                              .read<ConversationCubit>();
+                            if (mounted) {
+                              showCustomSnackBar(
+                                context,
+                                'Channel deleted successfully',
+                                type: SnackBarType.success,
+                              );
+                            }
 
-                          await conversationCubit.refresh();
-                          await conversationCubit.refreshUnread();
-
-                          if (mounted) {
-                            showCustomSnackBar(
-                              context,
-                              'Channel deleted successfully',
-                              type: SnackBarType.success,
-                            );
+                            if (mounted) {
+                              Navigator.of(
+                                context,
+                              ).popUntil((route) => route.isFirst);
+                            }
+                          } else {
+                            print('❌ Channel deletion returned false');
+                            if (mounted) {
+                              showCustomSnackBar(
+                                context,
+                                'Failed to delete channel',
+                                type: SnackBarType.error,
+                              );
+                            }
                           }
-
-                          if (mounted) {
-                            Navigator.of(
-                              context,
-                            ).popUntil((route) => route.isFirst);
-                          }
-                        } else {
-                          print('❌ Channel deletion returned false');
+                        } catch (e) {
+                          print('❌ Error in delete channel: $e');
                           if (mounted) {
                             showCustomSnackBar(
                               context,
@@ -597,29 +527,20 @@ print(memberMap['role']);
                               type: SnackBarType.error,
                             );
                           }
+                        } finally {
+                          if (mounted) {
+                            setState(() {
+                              _isDeleting = false;
+                            });
+                          }
                         }
-                      } catch (e) {
-                        print('❌ Error in delete channel: $e');
-                        if (mounted) {
-                          showCustomSnackBar(
-                            context,
-                            'Failed to delete channel',
-                            type: SnackBarType.error,
-                          );
-                        }
-                      } finally {
-                        if (mounted) {
-                          setState(() {
-                            _isDeleting = false;
-                          });
-                        }
-                      }
-                    },
-              icon: const Icon(Icons.delete_outline),
-              label: const Text('Delete Channel'),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.red,
-                foregroundColor: Colors.white,
+                      },
+                icon: const Icon(Icons.delete_outline),
+                label: const Text('Delete Channel'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.red,
+                  foregroundColor: Colors.white,
+                ),
               ),
             ),
           ],
@@ -638,7 +559,7 @@ print(memberMap['role']);
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            color: Colors.red.withOpacity(0.05),
+            color: Colors.red.withAlpha((0.05 * 255).round()),
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
@@ -753,8 +674,10 @@ print(memberMap['role']);
                           }
                         }
                       },
-                      activeColor: Colors.red,
-                      activeTrackColor: Colors.red.withOpacity(0.5),
+                      activeThumbColor: Colors.red,
+                      activeTrackColor: Colors.red.withAlpha(
+                        (0.5 * 255).round(),
+                      ),
                       inactiveThumbColor: AppClr.primaryColor,
                       inactiveTrackColor: AppClr.primaryColor.withValues(
                         alpha: 0.4,
@@ -768,5 +691,242 @@ print(memberMap['role']);
         ),
       ],
     );
+  }
+
+  // Check if current user is admin of the group
+  bool _isCurrentUserAdmin(ChatGroup group) {
+    final currentUserId = SharedPreferencesHelper.getCurrentUserId();
+    final currentMember = group.members.firstWhere(
+      (member) => member.id == currentUserId,
+      orElse: () => ChatMember(id: 0, name: '', role: 0),
+    );
+    return currentMember.role == 1;
+  }
+
+  // Check if the member is the current user
+  bool _isCurrentUser(ChatMember member) {
+    final currentUserId = SharedPreferencesHelper.getCurrentUserId();
+    return member.id == currentUserId;
+  }
+
+  // Handle member menu actions
+  void _handleMemberMenuAction(
+    String action,
+    ChatMember member,
+    ChatGroup group,
+  ) {
+    switch (action) {
+      case 'make_admin':
+        _showMakeAdminConfirmation(member, group);
+        break;
+      case 'dismiss_admin':
+        _showDismissAdminConfirmation(member, group);
+        break;
+      case 'remove_member':
+        _showRemoveMemberConfirmation(member, group);
+        break;
+    }
+  }
+
+  void _showMakeAdminConfirmation(ChatMember member, ChatGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Make Admin'),
+        content: Text('Are you sure you want to make ${member.name} an admin?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _makeAdmin(member, group);
+            },
+            child: const Text(
+              'Make Admin',
+              style: TextStyle(color: Colors.green),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showDismissAdminConfirmation(ChatMember member, ChatGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Dismiss as Admin'),
+        content: Text(
+          'Are you sure you want to dismiss ${member.name} as admin?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _dismissAsAdmin(member, group);
+            },
+            child: const Text(
+              'Dismiss',
+              style: TextStyle(color: Colors.orange),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showRemoveMemberConfirmation(ChatMember member, ChatGroup group) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove Member'),
+        content: Text(
+          'Are you sure you want to remove ${member.name} from this channel?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              _removeMember(member, group);
+            },
+            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _makeAdmin(ChatMember member, ChatGroup group) {
+    // Call cubit to make admin
+    final memberId = member.id ?? 0;
+    final groupId = group.id;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    _cubit
+        .makeAdmin(groupId: groupId, memberId: memberId)
+        .then((ok) {
+          Navigator.of(context).pop();
+          if (ok) {
+            // Update local member role
+            setState(() {
+              final idx = group.members.indexWhere((m) => m.id == member.id);
+              if (idx >= 0)
+                group.members[idx] = ChatMember(
+                  id: member.id,
+                  name: member.name,
+                  email: member.email,
+                  photoUrl: member.photoUrl,
+                  role: 1,
+                );
+            });
+            showCustomSnackBar(
+              context,
+              '${member.name} is now an admin',
+              type: SnackBarType.success,
+            );
+          } else {
+            showCustomSnackBar(
+              context,
+              'Failed to make ${member.name} admin',
+              type: SnackBarType.error,
+            );
+          }
+        })
+        .catchError((e) {
+          Navigator.of(context).pop();
+          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+        });
+  }
+
+  void _dismissAsAdmin(ChatMember member, ChatGroup group) {
+    final memberId = member.id ?? 0;
+    final groupId = group.id;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    _cubit
+        .dismissAdmin(groupId: groupId, memberId: memberId)
+        .then((ok) {
+          Navigator.of(context).pop();
+          if (ok) {
+            setState(() {
+              final idx = group.members.indexWhere((m) => m.id == member.id);
+              if (idx >= 0)
+                group.members[idx] = ChatMember(
+                  id: member.id,
+                  name: member.name,
+                  email: member.email,
+                  photoUrl: member.photoUrl,
+                  role: 0,
+                );
+            });
+            showCustomSnackBar(
+              context,
+              '${member.name} dismissed as admin',
+              type: SnackBarType.success,
+            );
+          } else {
+            showCustomSnackBar(
+              context,
+              'Failed to dismiss ${member.name}',
+              type: SnackBarType.error,
+            );
+          }
+        })
+        .catchError((e) {
+          Navigator.of(context).pop();
+          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+        });
+  }
+
+  void _removeMember(ChatMember member, ChatGroup group) {
+    final memberId = member.id ?? 0;
+    final groupId = group.id;
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (_) => const Center(child: CircularProgressIndicator()),
+    );
+    _cubit
+        .removeMember(groupId: groupId, memberId: memberId)
+        .then((ok) {
+          Navigator.of(context).pop();
+          if (ok) {
+            setState(() {
+              group.members.removeWhere((m) => m.id == member.id);
+            });
+            showCustomSnackBar(
+              context,
+              '${member.name} removed from channel',
+              type: SnackBarType.success,
+            );
+          } else {
+            showCustomSnackBar(
+              context,
+              'Failed to remove ${member.name}',
+              type: SnackBarType.error,
+            );
+          }
+        })
+        .catchError((e) {
+          Navigator.of(context).pop();
+          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+        });
   }
 }

@@ -261,6 +261,28 @@ class ConversationCubit extends Cubit<ConversationState> {
   Future<void> refresh() => loadConversations(refresh: true);
   Future<void> refreshUnread() => loadUnreadConversations(refresh: true);
 
+  /// Delete a conversation (by groupId or user conv id). Returns true on success.
+  Future<bool> deleteConversation(String conversationId) async {
+    try {
+      final resp = await _repo.deleteConversation(conversationId: conversationId);
+      if (!resp.success) {
+        print('❌ deleteConversation API failed: ${resp.message}');
+        return false;
+      }
+
+      // Remove from in-memory lists
+      _allConversations.removeWhere((c) => (c.isGroup ? c.groupId == conversationId : c.id == conversationId));
+      _unreadConversations.removeWhere((c) => (c.isGroup ? c.groupId == conversationId : c.id == conversationId));
+
+      // Update filtered lists if needed
+      _emitUnifiedLoadedState();
+      return true;
+    } catch (e) {
+      print('❌ Error in deleteConversation: $e');
+      return false;
+    }
+  }
+
   // Public getters
   List<Conversation> get allChats => List.unmodifiable(_allConversations);
   List<Conversation> get filteredAllChats => _getFilteredAllChats();
@@ -1103,8 +1125,8 @@ class ConversationCubit extends Cubit<ConversationState> {
 
   String _conversationIdFromMessage(Map<String, dynamic> msg) {
     final groupId = msg['group_id']?.toString();
-    final toId = msg['to_id']?.toString();
     final toType = msg['to_type']?.toString();
+    final toId = msg['to_id']?.toString();
 
     // Priority 1: Group ID
     if (groupId != null && groupId.isNotEmpty && groupId != '0') {
@@ -1145,3 +1167,4 @@ class ConversationCubit extends Cubit<ConversationState> {
     return isGroup;
   }
 }
+

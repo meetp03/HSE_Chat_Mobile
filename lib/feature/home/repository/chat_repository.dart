@@ -30,10 +30,47 @@ abstract class IChatRepository {
     int isMyContact = 1,
   });
 
+  /// Multipart file upload helper for sending files with a message.
+  Future<ApiResponse<MessageResponse>> sendFileMultipart({
+    required String toId,
+    required bool isGroup,
+    required String filePath,
+    int messageType = 1,
+    String? message,
+    String? replyTo,
+    int isMyContact = 1,
+    ProgressCallback? onSendProgress,
+  });
+
   Future<ApiResponse<MessageReadResponse>> markAsRead({
     required int userId,
     required String otherUserId,
     required bool isGroup,
+  });
+
+  /// Delete a single message from the current user's view.
+  /// Endpoint: POST /messages/conversations/message/{conversationId}/delete
+  Future<ApiResponse<dynamic>> deleteMessageForMe({
+    required String conversationId,
+    required String previousMessageId,
+  });
+
+  /// Delete a message for everyone in the conversation.
+  /// Endpoint: POST /messages/conversations/{conversationId}/delete-for-everyone
+  Future<ApiResponse<dynamic>> deleteMessageForEveryone({
+    required String conversationId,
+    required String previousMessageId,
+  });
+
+  /// Convenience wrappers with shorter names used in some callers.
+  Future<ApiResponse<dynamic>> deleteForMe({
+    required String conversationId,
+    required String previousMessageId,
+  });
+
+  Future<ApiResponse<dynamic>> deleteForEveryone({
+    required String conversationId,
+    required String previousMessageId,
   });
 }
 
@@ -306,5 +343,72 @@ class ChatRepository implements IChatRepository {
     } catch (e) {
       return ApiResponse<MessageReadResponse>.error('Unexpected error: $e');
     }
+  }
+
+  @override
+  Future<ApiResponse<dynamic>> deleteMessageForMe({
+    required String conversationId,
+    required String previousMessageId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/conversations/message/$conversationId/delete';
+      final response = await _dio.post(path, data: {'previousMessageId': previousMessageId});
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>?;
+        if (data != null && data['success'] == true) {
+          return ApiResponse.success(data, message: data['message']?.toString());
+        }
+        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete message');
+      }
+
+      return ApiResponse.error('Delete failed with status: ${response.statusCode}');
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse.error(networkException.message);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  @override
+  Future<ApiResponse<dynamic>> deleteMessageForEveryone({
+    required String conversationId,
+    required String previousMessageId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete-for-everyone';
+      final response = await _dio.post(path, data: {'previousMessageId': previousMessageId});
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>?;
+        if (data != null && data['success'] == true) {
+          return ApiResponse.success(data, message: data['message']?.toString());
+        }
+        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete message for everyone');
+      }
+
+      return ApiResponse.error('Delete-for-everyone failed with status: ${response.statusCode}');
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse.error(networkException.message);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  // Public wrapper methods to avoid static analyzer confusion in other files.
+  Future<ApiResponse<dynamic>> deleteForMe({
+    required String conversationId,
+    required String previousMessageId,
+  }) async {
+    return deleteMessageForMe(conversationId: conversationId, previousMessageId: previousMessageId);
+  }
+
+  Future<ApiResponse<dynamic>> deleteForEveryone({
+    required String conversationId,
+    required String previousMessageId,
+  }) async {
+    return deleteMessageForEveryone(conversationId: conversationId, previousMessageId: previousMessageId);
   }
 }

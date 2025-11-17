@@ -15,6 +15,10 @@ abstract class IConversationRepository {
     int page = 1,
     String query = '',
   });
+
+  Future<ApiResponse<dynamic>> deleteConversation({
+    required String conversationId,
+  });
 }
 
 class ConversationRepository implements IConversationRepository {
@@ -129,6 +133,30 @@ class ConversationRepository implements IConversationRepository {
     } catch (e) {
       print('❌ Exception (Unread): $e');
       return ApiResponse<ConversationResponse>.error('Unexpected error: $e');
+    }
+  }
+
+  /// Delete a conversation by id (user or group). Endpoint: POST /messages/conversations/{id}/delete
+  Future<ApiResponse<dynamic>> deleteConversation({
+    required String conversationId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete';
+      final response = await _dio.post(path);
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>?;
+        if (data != null && data['success'] == true) {
+          return ApiResponse.success(data, message: data['message']?.toString());
+        }
+        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete conversation');
+      }
+      return ApiResponse.error('Delete failed with status: ${response.statusCode}');
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse.error(networkException.message);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
     }
   }
 }

@@ -1,5 +1,6 @@
 // chat_state.dart
 import 'package:hsc_chat/feature/home/model/message_model.dart';
+import 'package:hsc_chat/feature/home/model/chat_models.dart';
 
 abstract class ChatState {}
 
@@ -18,7 +19,7 @@ class ChatLoaded extends ChatState {
   final Map<String, int> uploadProgress;
   final bool isIBlockedThem;
   final bool isTheyBlockedMe;
-  final Map<String, dynamic>? groupData;
+  final ChatGroup? groupData;
 
   ChatLoaded({
     required this.messages,
@@ -41,7 +42,7 @@ class ChatLoaded extends ChatState {
     Map<String, int>? uploadProgress,
     bool? isIBlockedThem,
     bool? isTheyBlockedMe,
-    Map<String, dynamic>? groupData,
+    ChatGroup? groupData,
   }) {
     return ChatLoaded(
       messages: messages ?? this.messages,

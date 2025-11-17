@@ -482,13 +482,11 @@ class _ChatScreenState extends State<ChatScreen>
     super.build(context); // required by AutomaticKeepAliveClientMixin
     return WillPopScope(
       onWillPop: () async {
-        // When popping, return the latest message payload so the
-        // conversation list can be updated without an API refresh.
+        // Mirror previous WillPopScope behavior: forward latest message to
+        // ConversationCubit and then pop the route. Return false to prevent
+        // default pop handler (we manually pop).
         print('⬅️ Going back from chat');
         final state = context.read<ChatCubit>().state;
-        // If we have messages, mark last message as read via ConversationCubit
-        // so the HomeScreen gets an immediate local update (and socket will
-        // broadcast to other clients). This avoids waiting for API roundtrip.
         if (state is ChatLoaded && state.messages.isNotEmpty) {
           final last = state.messages.last;
           try {
@@ -500,8 +498,6 @@ class _ChatScreenState extends State<ChatScreen>
             print('⚠️ Failed to notify ConversationCubit about read: $e');
           }
 
-          // Also forward the last message payload so conversation list shows
-          // the latest message immediately even if HomeScreen reloads data.
           try {
             final payload = {
               'conversation': {
@@ -672,10 +668,16 @@ class _ChatScreenState extends State<ChatScreen>
     // builder context to read providers can cause ProviderNotFoundException.
     final cubit = context.read<ChatCubit>();
     final state = cubit.state;
-    final isICurrentlyBlockedThisUser = (state is ChatLoaded) ? state.isIBlockedThem : false;
-    final isThemCurrentlyBlockedMe = (state is ChatLoaded) ? state.isTheyBlockedMe : false;
-    final groupData = (state is ChatLoaded) ? state.groupData : null;
-    print('ℹ️ Opening user info for $groupData');
+    final isICurrentlyBlockedThisUser = (state is ChatLoaded)
+        ? state.isIBlockedThem
+        : false;
+    final isThemCurrentlyBlockedMe = (state is ChatLoaded)
+        ? state.isTheyBlockedMe
+        : false;
+    // state.groupData is already a ChatGroup? (typed in ChatLoaded)
+    final groupModel = (state is ChatLoaded) ? state.groupData : null;
+
+    print('ℹ️ Opening user info for $groupModel');
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (ctx) => UserInfoScreen(
@@ -684,7 +686,7 @@ class _ChatScreenState extends State<ChatScreen>
           userAvatar: widget.userAvatar,
           userEmail: widget.userEmail,
           isGroup: widget.isGroup,
-          groupData: groupData,
+          groupData: groupModel,
           isIBlockedThem: isICurrentlyBlockedThisUser,
           isTheyBlockedMe: isThemCurrentlyBlockedMe,
         ),
@@ -797,6 +799,205 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  Widget _buildMessageBubble(Message message) {
+    final kind = message.kind();
+
+    // If it's a SYSTEM message render it as a standalone centered blue bubble
+    if (kind == MessageKind.SYSTEM) {
+      final maxWidth = MediaQuery.of(context).size.width * 0.85;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppClr.primaryColor.withValues(alpha: 0.15),
+                border: Border.all(
+                  color: AppClr.primaryColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _parseMessage(message.message),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppClr.primaryColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final showAvatar = !message.isSentByMe && widget.isGroup;
+
+    // Determine upload progress for temp messages
+    int? uploadPct;
+    final s = context.read<ChatCubit>().state;
+    if (s is ChatLoaded) uploadPct = s.uploadProgress[message.id];
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Incoming message avatar
+          if (showAvatar) ...[
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: AppClr.primaryColor.withAlpha(
+                (0.1 * 255).round(),
+              ),
+              backgroundImage: message.sender.photoUrl != null
+                  ? CachedNetworkImageProvider(message.sender.photoUrl!)
+                  : null,
+              child: message.sender.photoUrl == null
+                  ? Text(
+                      message.sender.name[0].toUpperCase(),
+                      style: const TextStyle(fontSize: 10),
+                    )
+                  : null,
+            ),
+            const SizedBox(width: 8),
+          ],
+
+          // Message bubble
+          Flexible(
+            child: Align(
+              alignment: message.isSentByMe
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.72,
+                ),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: message.isSentByMe
+                        ? AppClr.sentMessageColor
+                        : Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.05),
+                        blurRadius: 4,
+                        offset: const Offset(0, -2),
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: message.isSentByMe
+                        ? CrossAxisAlignment.end
+                        : CrossAxisAlignment.start,
+                    children: [
+                      // Group sender name
+                      if (widget.isGroup && !message.isSentByMe) ...[
+                        Text(
+                          message.sender.name,
+                          style: TextStyle(
+                            color: AppClr.primaryColor,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+
+                      // Reply message
+                      if (message.replyMessage != null)
+                        _buildReplyMessage(message.replyMessage!),
+
+                      // ✅ Message content (media types have their own gestures)
+                      _buildMessageContent(message),
+
+                      // Spacing
+                      if (kind != MessageKind.TEXT)
+                        const SizedBox(height: 6)
+                      else
+                        const SizedBox(height: 8),
+
+                      // ✅ For TEXT messages, wrap text in GestureDetector
+                      if (kind == MessageKind.TEXT) ...[
+                        GestureDetector(
+                          onLongPress: () {
+                            print('🔍 Long pressed TEXT message ${message.id}');
+                            _showMessageActions(message);
+                          },
+
+                          child: Text(
+                            _parseMessage(message.message),
+                            style: const TextStyle(
+                              color: Colors.black87,
+                              fontSize: 16,
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                      ],
+
+                      // Timestamp and status
+                      Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            _formatTime(message.createdAt),
+                            style: TextStyle(
+                              color: message.isSentByMe
+                                  ? Colors.black54
+                                  : Colors.grey[600],
+                              fontSize: 11,
+                            ),
+                          ),
+                          if (uploadPct != null) ...[
+                            const SizedBox(width: 6),
+                            SizedBox(
+                              width: 60,
+                              child: LinearProgressIndicator(
+                                value: (uploadPct / 100),
+                                minHeight: 6,
+                              ),
+                            ),
+                          ],
+                          if (message.isSentByMe) ...[
+                            const SizedBox(width: 4),
+                            Icon(
+                              message.status == -1
+                                  ? Icons.error_outline
+                                  : (message.status == 1
+                                        ? Icons.done_all
+                                        : Icons.done),
+                              size: 14,
+                              color: message.status == -1
+                                  ? Colors.red
+                                  : (message.status == 1
+                                        ? Colors.blue[600]
+                                        : Colors.grey),
+                            ),
+                          ],
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+  /*
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
 
@@ -1029,6 +1230,12 @@ class _ChatScreenState extends State<ChatScreen>
                                   }
                                 }
                               }
+                              print('🔍 Long pressed message ${message.id}');
+                            },
+                            behavior: HitTestBehavior.opaque,
+                            onLongPress: () {
+                              print('🔍 Long pressed message ${message.id}');
+                              _showMessageActions(message);
                             },
                             child: _buildMessageContent(message),
                           ),
@@ -1103,7 +1310,27 @@ class _ChatScreenState extends State<ChatScreen>
       ),
     );
   }
+*/
 
+  /*
+  Widget _buildMessageContent(Message message) {
+    final kind = message.kind();
+
+    if (kind == MessageKind.SYSTEM) {
+      return const SizedBox.shrink();
+    } else if (kind == MessageKind.IMAGE) {
+      return _buildImageContent(message);
+    } else if (kind == MessageKind.VIDEO) {
+      return _buildVideoContent(message);
+    } else if (kind == MessageKind.AUDIO) {
+      return _buildAudioContent(message);
+    } else if (kind == MessageKind.FILE) {
+      return _buildFileContent(message);
+    }
+
+    return const SizedBox.shrink();
+  }
+*/
   Widget _buildMessageContent(Message message) {
     final kind = message.kind();
 
@@ -1122,7 +1349,49 @@ class _ChatScreenState extends State<ChatScreen>
     return const SizedBox.shrink();
   }
 
+  // ✅ IMAGE: Already has gesture handling
+  Widget _buildImageContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          final fileExists = snapshot.data ?? false;
+
+          if (fileExists) {
+            return GestureDetector(
+              onTap: () {
+                print('🖼️ Tapped local image ${message.id}');
+                _openImageViewerLocal(localPath, message.id);
+              },
+              onLongPress: () {
+                print('🔍 Long pressed local image ${message.id}');
+                _showSenderMediaOptions(message, localPath);
+              },
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.file(
+                  File(localPath),
+                  width: 200,
+                  height: 150,
+                  fit: BoxFit.cover,
+                ),
+              ),
+            );
+          }
+
+          return _buildImageContentReceiver(message, url);
+        },
+      );
+    }
+
+    return _buildImageContentReceiver(message, url);
+  }
   // IMAGE: Show thumbnail, tap to view full screen
+  /*
   Widget _buildImageContent(Message message) {
     final url = _buildMediaUrl(message);
     if (url == null || url.isEmpty) return const SizedBox.shrink();
@@ -1161,7 +1430,9 @@ class _ChatScreenState extends State<ChatScreen>
     // RECEIVER: Download from server
     return _buildImageContentReceiver(message, url);
   }
+*/
 
+  /*
   Widget _buildImageContentReceiver(Message message, String url) {
     return FutureBuilder<FileInfo?>(
       future: DefaultCacheManager().getFileFromCache(url),
@@ -1248,7 +1519,99 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
+  Widget _buildImageContentReceiver(Message message, String url) {
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
 
+        return GestureDetector(
+          onTap: () async {
+            print('🖼️ Tapped remote image ${message.id}');
+            if (isCached) {
+              _openImageViewer(url, message.id);
+            } else {
+              await _fetchAndCache(url, message.id);
+              if (mounted) {
+                _openImageViewer(url, message.id);
+              }
+            }
+          },
+          onLongPress: () {
+            print('🔍 Long pressed remote image ${message.id}');
+            _showMediaOptions(message, url);
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: isCached
+                    ? CachedNetworkImage(
+                        imageUrl: url,
+                        width: 200,
+                        height: 150,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 200,
+                          height: 150,
+                          color: Colors.grey[300],
+                          child: const Center(
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 200,
+                          height: 150,
+                          color: Colors.grey[300],
+                          child: const Icon(Icons.broken_image, size: 40),
+                        ),
+                      )
+                    : Container(
+                        width: 200,
+                        height: 150,
+                        color: Colors.grey[300],
+                        child: const Icon(
+                          Icons.image,
+                          size: 48,
+                          color: Colors.white70,
+                        ),
+                      ),
+              ),
+              if (!isCached)
+                Container(
+                  width: 200,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.black38,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: isDownloading
+                        ? CircularProgressIndicator(
+                            value: _downloadProgress[message.id],
+                            backgroundColor: Colors.white24,
+                            color: Colors.white,
+                          )
+                        : const Icon(
+                            Icons.download_rounded,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /*
   // VIDEO: Show thumbnail with play button
   Widget _buildVideoContent(Message message) {
     final url = _buildMediaUrl(message);
@@ -1395,7 +1758,160 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
+  Widget _buildVideoContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
 
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          final fileExists = snapshot.data ?? false;
+
+          if (fileExists) {
+            return GestureDetector(
+              onTap: () {
+                print('🎥 Tapped local video ${message.id}');
+                _openVideoPlayerLocal(localPath, message.id);
+              },
+              onLongPress: () {
+                print('🔍 Long pressed local video ${message.id}');
+                _showSenderMediaOptions(message, localPath);
+              },
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Container(
+                    width: 200,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      color: Colors.black87,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: const Icon(
+                      Icons.videocam,
+                      size: 48,
+                      color: Colors.white54,
+                    ),
+                  ),
+                  const Icon(
+                    Icons.play_circle_fill,
+                    size: 56,
+                    color: Colors.white,
+                  ),
+                ],
+              ),
+            );
+          }
+
+          return _buildVideoContentReceiver(message, url);
+        },
+      );
+    }
+
+    return _buildVideoContentReceiver(message, url);
+  }
+
+  Widget _buildVideoContentReceiver(Message message, String url) {
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            print('🎥 Tapped remote video ${message.id}');
+            if (isCached) {
+              await _openVideoPlayer(url, message.id);
+            } else {
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) {
+                  await _openVideoPlayer(url, message.id);
+                }
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          onLongPress: () {
+            print('🔍 Long pressed remote video ${message.id}');
+            _showMediaOptions(message, url);
+          },
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              Container(
+                width: 200,
+                height: 150,
+                decoration: BoxDecoration(
+                  color: Colors.black87,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Icon(
+                  Icons.videocam,
+                  size: 48,
+                  color: Colors.white54,
+                ),
+              ),
+              if (!isCached)
+                Container(
+                  width: 200,
+                  height: 150,
+                  decoration: BoxDecoration(
+                    color: Colors.black45,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Center(
+                    child: isDownloading
+                        ? Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              CircularProgressIndicator(
+                                value: _downloadProgress[message.id],
+                                backgroundColor: Colors.white24,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                '${(_downloadProgress[message.id]! * 100).toInt()}%',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                ),
+                              ),
+                            ],
+                          )
+                        : const Icon(
+                            Icons.cloud_download,
+                            size: 40,
+                            color: Colors.white,
+                          ),
+                  ),
+                )
+              else
+                const Icon(
+                  Icons.play_circle_fill,
+                  size: 56,
+                  color: Colors.white,
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /*
   // AUDIO: Show audio tile with name and play button
   Widget _buildAudioContent(Message message) {
     final url = _buildMediaUrl(message);
@@ -1603,6 +2119,225 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
+  Widget _buildAudioContent(Message message) {
+    final url = _buildMediaUrl(message);
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    final localPath = _getLocalFilePath(message);
+    if (localPath != null && message.isSentByMe) {
+      return FutureBuilder<bool>(
+        future: _fileExistsLocally(localPath),
+        builder: (context, snapshot) {
+          if (snapshot.data == true) {
+            return _buildAudioTile(
+              message: message,
+              isLocal: true,
+              localPath: localPath,
+            );
+          }
+          return _buildAudioTile(message: message, isLocal: false, url: url);
+        },
+      );
+    }
+
+    return _buildAudioTile(message: message, isLocal: false, url: url);
+  }
+
+  Widget _buildAudioTile({
+    required Message message,
+    required bool isLocal,
+    String? localPath,
+    String? url,
+  }) {
+    if (isLocal && localPath != null) {
+      return GestureDetector(
+        onTap: () {
+          print('🎵 Tapped local audio ${message.id}');
+          _openAudioPlayerLocal(message, localPath);
+        },
+        onLongPress: () {
+          print('🔍 Long pressed local audio ${message.id}');
+          _showSenderMediaOptions(message, localPath);
+        },
+        child: Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: message.isSentByMe
+                ? Colors.white.withValues(alpha: 0.2)
+                : Colors.grey[100],
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: Colors.green, width: 1),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: const BoxDecoration(
+                  color: Colors.green,
+                  shape: BoxShape.circle,
+                ),
+                child: const Icon(
+                  Icons.headphones,
+                  size: 20,
+                  color: Colors.white,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Flexible(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      message.fileName ?? 'Audio',
+                      style: TextStyle(
+                        color: message.isSentByMe
+                            ? Colors.white
+                            : Colors.black87,
+                        fontSize: 14,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      'Tap to play',
+                      style: TextStyle(
+                        color: message.isSentByMe
+                            ? Colors.white70
+                            : Colors.grey[600],
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(width: 8),
+              const Icon(Icons.play_arrow, size: 24, color: Colors.green),
+            ],
+          ),
+        ),
+      );
+    }
+
+    // Remote audio
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url!),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            print('🎵 Tapped remote audio ${message.id}');
+            if (isCached) {
+              _openAudioPlayer(message);
+            } else {
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) _openAudioPlayer(message);
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          onLongPress: () {
+            print('🔍 Long pressed remote audio ${message.id}');
+            _showMediaOptions(message, url);
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: message.isSentByMe
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCached
+                    ? Colors.green
+                    : Colors.grey.withValues(alpha: 0.3),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: isCached ? Colors.green : Colors.grey[300],
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    isDownloading
+                        ? Icons.downloading
+                        : (isCached ? Icons.headphones : Icons.audiotrack),
+                    size: 20,
+                    color: Colors.white,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.fileName ?? 'Audio',
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white
+                              : Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        isDownloading
+                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
+                            : (isCached ? 'Tap to play' : 'Tap to download'),
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white70
+                              : Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isDownloading)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      value: _downloadProgress[message.id],
+                      strokeWidth: 2,
+                      color: message.isSentByMe ? Colors.white : Colors.green,
+                    ),
+                  )
+                else
+                  Icon(
+                    isCached ? Icons.play_arrow : Icons.download_rounded,
+                    size: 24,
+                    color: message.isSentByMe ? Colors.white : Colors.green,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   // NEW: Open local image viewer
   void _openImageViewerLocal(String localPath, String messageId) {
@@ -1706,7 +2441,155 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  Widget _buildFileContent(Message message) {
+    final url = message.fileUrl;
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
+
+    final ext = p.extension(message.fileName ?? url).toLowerCase();
+    IconData iconData = Icons.insert_drive_file;
+    Color iconColor = Colors.blue;
+
+    if (ext == '.pdf') {
+      iconData = Icons.picture_as_pdf;
+      iconColor = Colors.red;
+    } else if (['.doc', '.docx'].contains(ext)) {
+      iconData = Icons.description;
+      iconColor = Colors.blue[700]!;
+    } else if (['.xls', '.xlsx'].contains(ext)) {
+      iconData = Icons.table_chart;
+      iconColor = Colors.green[700]!;
+    } else if (['.ppt', '.pptx'].contains(ext)) {
+      iconData = Icons.slideshow;
+      iconColor = Colors.orange[700]!;
+    } else if (ext == '.txt') {
+      iconData = Icons.text_snippet;
+      iconColor = Colors.grey[700]!;
+    }
+
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+            _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          onTap: () async {
+            print('📄 Tapped file ${message.id}');
+            if (isCached) {
+              await _openDocument(url, message.id, ext);
+            } else {
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) {
+                  await _openDocument(url, message.id, ext);
+                }
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          onLongPress: () {
+            print('🔍 Long pressed file ${message.id}');
+            _showMediaOptions(message, url);
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            constraints: const BoxConstraints(maxWidth: 250),
+            decoration: BoxDecoration(
+              color: message.isSentByMe
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCached
+                    ? iconColor
+                    : Colors.grey.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isCached
+                        ? iconColor.withValues(alpha: 0.2)
+                        : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    iconData,
+                    size: 28,
+                    color: isCached ? iconColor : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.fileName ?? 'Document',
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white
+                              : Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isDownloading
+                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
+                            : (isCached
+                                  ? ext.toUpperCase().replaceFirst('.', '')
+                                  : 'Tap to download'),
+                        style: TextStyle(
+                          color: message.isSentByMe
+                              ? Colors.white70
+                              : Colors.grey[600],
+                          fontSize: 11,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isDownloading)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      value: _downloadProgress[message.id],
+                      strokeWidth: 2,
+                      color: message.isSentByMe ? Colors.white : iconColor,
+                    ),
+                  )
+                else
+                  Icon(
+                    isCached ? Icons.open_in_new : Icons.download_rounded,
+                    size: 20,
+                    color: message.isSentByMe ? Colors.white : iconColor,
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
   // FILE/DOCUMENT: Show document icon with name
+  /*
   Widget _buildFileContent(Message message) {
     final url = message.fileUrl;
     if (url == null || url.isEmpty) return const SizedBox.shrink();
@@ -1855,6 +2738,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
 
   // Helper methods for opening media
 
@@ -2107,7 +2991,9 @@ class _ChatScreenState extends State<ChatScreen>
   Widget _buildMessageInput() {
     return BlocBuilder<ChatCubit, ChatState>(
       builder: (context, state) {
-        final isBlocked = state is ChatLoaded && (state.isIBlockedThem || state.isTheyBlockedMe);
+        final isBlocked =
+            state is ChatLoaded &&
+            (state.isIBlockedThem || state.isTheyBlockedMe);
         if (isBlocked) {
           // Show disabled composer when the other user is blocked
           return Container(
@@ -2345,7 +3231,7 @@ class _ChatScreenState extends State<ChatScreen>
           cancelToken: cancelToken,
         );
 
-        final bytes = resp.data as List<int>?;
+        final bytes = resp.data; // List<int>? from DioClient.downloadBytes
         if (bytes == null) throw Exception('Empty download');
 
         await cacheManager.putFile(
@@ -2374,62 +3260,6 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  Future<File?> _getVideoThumbnail(String url, String messageId) async {
-    if (url.isEmpty) return null;
-
-    final cacheManager = DefaultCacheManager();
-    final thumbKey = '${url}_thumb.jpg';
-
-    // If thumb cached, return quickly
-    try {
-      final cached = await cacheManager.getFileFromCache(thumbKey);
-      if (cached != null) {
-        debugPrint('📥 Thumbnail cache hit for $url');
-        return cached.file;
-      }
-    } catch (e) {
-      debugPrint('⚠️ Thumb cache check failed: $e');
-    }
-
-    // Reuse in-flight thumbnail generation
-    if (_thumbFutures.containsKey(thumbKey)) {
-      debugPrint('🔁 Reusing in-flight thumbnail for $url');
-      return _thumbFutures[thumbKey];
-    }
-
-    final future = (() async {
-      // Ensure video is downloaded first (reuses _fetchAndCache which also memoizes)
-      final videoFile = await _fetchAndCache(url, messageId);
-      if (videoFile == null) return null;
-
-      final data = await VideoThumbnail.thumbnailData(
-        video: videoFile.path,
-        imageFormat: ImageFormat.JPEG,
-        maxWidth: 480,
-        quality: 75,
-      );
-      if (data == null) return null;
-
-      await cacheManager.putFile(thumbKey, data, fileExtension: '.jpg');
-      final info = await cacheManager.getFileFromCache(thumbKey);
-      return info?.file;
-    })();
-
-    // Store the future for reuse
-    _thumbFutures[thumbKey] = future;
-
-    try {
-      final result = await future;
-      return result;
-    } catch (e) {
-      if (kDebugMode) print('⚠️ Thumbnail generation failed: $e');
-      return null;
-    } finally {
-      // Clean up the future cache when done
-      _thumbFutures.remove(thumbKey);
-    }
-  }
-
   // Save a file (image/video) to the gallery. Requests permissions where required.
   Future<void> _saveToGallery(File file) async {
     try {
@@ -2455,7 +3285,6 @@ class _ChatScreenState extends State<ChatScreen>
         }
       }
 
-      final bytes = await file.readAsBytes();
       final pathStr = file.path;
       final ext = p.extension(pathStr).toLowerCase();
       bool saved = false;
@@ -2648,6 +3477,329 @@ class _ChatScreenState extends State<ChatScreen>
         );
       },
     );
+  }
+
+/*
+  // Show actions for a message (Delete for me / Delete for everyone)
+  void _showMessageActions(Message message) {
+    final isSender = message.isSentByMe;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isSender) ...[
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Delete for me'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Delete message'),
+                        content: const Text('Delete this message for you?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+
+                    final prevId = _findPreviousMessageId(message.id);
+                    final cubit = context.read<ChatCubit>();
+                    final err = await cubit.deleteForMe(
+                      conversationId: message.id,
+                      previousMessageId: prevId ?? '',
+                      targetMessageId: message.id,
+                    );
+                    if (err == null) {
+                      showCustomSnackBar(
+                        context,
+                        'Message deleted',
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever),
+                  title: const Text('Delete for everyone'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Delete for everyone'),
+                        content: const Text(
+                          'This will remove the message for all participants. Continue?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    final prevId = _findPreviousMessageId(message.id);
+                    final cubit = context.read<ChatCubit>();
+                    final err = await cubit.deleteForEveryone(
+                      conversationId: message.id,
+                      previousMessageId: prevId ?? '',
+                      targetMessageId: message.id,
+                    );
+                    if (err == null) {
+                      showCustomSnackBar(
+                        context,
+                        'Message deleted for everyone',
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+                ),
+              ] else ...[
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Delete for me'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Delete message'),
+                        content: const Text('Delete this message for you?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    final prevId = _findPreviousMessageId(message.id);
+                    final cubit = context.read<ChatCubit>();
+                    final err = await cubit.deleteForMe(
+                      conversationId: message.id,
+                      previousMessageId: prevId ?? '',
+                      targetMessageId: message.id,
+                    );
+                    if (err == null) {
+                      showCustomSnackBar(
+                        context,
+                        'Message deleted',
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+                ),
+              ],
+              ListTile(
+                leading: const Icon(Icons.cancel),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+*/
+  void _showMessageActions(Message message) {
+    final isSender = message.isSentByMe;
+    showModalBottomSheet(
+      context: context,
+      builder: (ctx) {
+        return SafeArea(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Reply option - shown for both sender and receiver
+              ListTile(
+                leading: const Icon(Icons.reply),
+                title: const Text('Reply'),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  // TODO: Implement reply functionality
+                  // You can set a state variable to store the message being replied to
+                  // and show it in the message input area
+                  showCustomSnackBar(
+                    context,
+                    'Reply feature - Coming soon',
+                    type: SnackBarType.info,
+                  );
+                },
+              ),
+
+              // Additional options only for sender (my messages)
+              if (isSender) ...[
+                ListTile(
+                  leading: const Icon(Icons.edit),
+                  title: const Text('Edit'),
+                  onTap: () {
+                    Navigator.of(ctx).pop();
+                    // TODO: Implement edit functionality
+                    // You can populate the message input field with the existing message text
+                    // and show an "Editing" indicator
+                    showCustomSnackBar(
+                      context,
+                      'Edit feature - Coming soon',
+                      type: SnackBarType.info,
+                    );
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_outline),
+                  title: const Text('Delete for me'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Delete message'),
+                        content: const Text('Delete this message for you?'),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    final prevId = _findPreviousMessageId(message.id);
+                    final cubit = context.read<ChatCubit>();
+                    final err = await cubit.deleteForMe(
+                      conversationId: message.id,
+                      previousMessageId: prevId ?? '',
+                      targetMessageId: message.id,
+                    );
+                    if (err == null) {
+                      showCustomSnackBar(
+                        context,
+                        'Message deleted',
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+                ),
+                ListTile(
+                  leading: const Icon(Icons.delete_forever),
+                  title: const Text('Delete for everyone'),
+                  onTap: () async {
+                    Navigator.of(ctx).pop();
+                    final ok = await showDialog<bool>(
+                      context: context,
+                      builder: (dctx) => AlertDialog(
+                        title: const Text('Delete for everyone'),
+                        content: const Text(
+                          'This will remove the message for all participants. Continue?',
+                        ),
+                        actions: [
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(false),
+                            child: const Text('Cancel'),
+                          ),
+                          TextButton(
+                            onPressed: () => Navigator.of(dctx).pop(true),
+                            child: const Text('Delete'),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (ok != true) return;
+                    final prevId = _findPreviousMessageId(message.id);
+                    final cubit = context.read<ChatCubit>();
+                    final err = await cubit.deleteForEveryone(
+                      conversationId: message.id,
+                      previousMessageId: prevId ?? '',
+                      targetMessageId: message.id,
+                    );
+                    if (err == null) {
+                      showCustomSnackBar(
+                        context,
+                        'Message deleted for everyone',
+                        type: SnackBarType.success,
+                      );
+                    } else {
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
+                ),
+              ],
+
+              // Cancel option - shown for everyone
+              ListTile(
+                leading: const Icon(Icons.cancel),
+                title: const Text('Cancel'),
+                onTap: () => Navigator.of(ctx).pop(),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+  // Find previous message id in current loaded messages; returns null if none
+  String? _findPreviousMessageId(String messageId) {
+    final state = context.read<ChatCubit>().state;
+    if (state is! ChatLoaded) return null;
+    final msgs = state.messages;
+    final idx = msgs.indexWhere((m) => m.id == messageId);
+    if (idx <= 0) return '';
+    return msgs[idx - 1].id;
   }
 }
 

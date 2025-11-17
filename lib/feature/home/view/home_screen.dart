@@ -660,15 +660,6 @@ class _HomeScreenState extends State<HomeScreen>
           const SizedBox(height: 4),
           Row(
             children: [
-              // if (conv.isGroup) ...[
-              //   Icon(Icons.group, size: 14, color: Colors.grey[600]),
-              //   const SizedBox(width: 6),
-              //   Text(
-              //     '${conv.participants?.length ?? 0} members',
-              //     style: const TextStyle(color: Colors.grey, fontSize: 12),
-              //   ),
-              //   const SizedBox(width: 12),
-              // ],
               Text(
                 conv.formattedTime,
                 style: const TextStyle(color: Colors.grey, fontSize: 12),
@@ -678,56 +669,88 @@ class _HomeScreenState extends State<HomeScreen>
         ],
       ),
 
-      onTap: () {
-        print('🎯 Opening chat: ${conv.title}');
-        print('📝 Conversation ID: ${conv.id}');
-        print('👥 Is Group: ${conv.isGroup}');
-        print('🆔 Group ID: ${conv.groupId}');
-        print('👤 User ID: ${conv.id}');
-
-        final chatId = conv.groupId;
-
-        if (chatId!.isEmpty) {
-          print('❌ Error: Invalid chat ID');
-          showCustomSnackBar(
-            context,
-            'Cannot open chat: Invalid ID',
-            type: SnackBarType.error,
-          );
-          return;
-        }
-
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => BlocProvider(
-              create: (context) => ChatCubit(
-                chatRepository: ChatRepository(DioClient()),
-                socketService: SocketService(),
+      // Popup menu for actions (delete conversation)
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          if (value == 'delete') {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Delete Conversation'),
+                content: const Text('Are you sure you want to delete this conversation?'),
+                actions: [
+                  TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+                  TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+                ],
               ),
-              child: ChatScreen(
-                userId: conv.id,
-                userName: conv.title,
-                userEmail: conv.email,
-                userAvatar: conv.avatarUrl,
-                isGroup: conv.isGroup,
-                groupData: conv,
+            );
 
-              ),
-            ),
-          ),
-        ).then((result) {
-          // If ChatScreen returned a payload (latest message), update
-          // ConversationCubit locally without calling the API.
-          if (result != null) {
-            try {
-              context.read<ConversationCubit>().processRawMessage(result);
-            } catch (e) {
-              print('⚠️ Failed to process returned message: $e');
-            }
+            if (confirmed == true) {
+              final convId = conv.isGroup ? (conv.groupId ?? '') : conv.id;
+              final ok = await context.read<ConversationCubit>().deleteConversation(convId);
+               if (ok) {
+                 showCustomSnackBar(context, 'Conversation deleted', type: SnackBarType.success);
+               } else {
+                 showCustomSnackBar(context, 'Failed to delete conversation', type: SnackBarType.error);
+               }
+             }
           }
-        });
-      },
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(value: 'delete', child: Text('Delete Conversation', style: TextStyle(color: Colors.red))),
+        ],
+      ),
+
+      onTap: () {
+       print('🎯 Opening chat: ${conv.title}');
+       print('📝 Conversation ID: ${conv.id}');
+       print('👥 Is Group: ${conv.isGroup}');
+       print('🆔 Group ID: ${conv.groupId}');
+       print('👤 User ID: ${conv.id}');
+
+       final chatId = conv.groupId;
+
+       if (chatId!.isEmpty) {
+         print('❌ Error: Invalid chat ID');
+         showCustomSnackBar(
+           context,
+           'Cannot open chat: Invalid ID',
+           type: SnackBarType.error,
+         );
+         return;
+       }
+
+       Navigator.push(
+         context,
+         MaterialPageRoute(
+           builder: (context) => BlocProvider(
+             create: (context) => ChatCubit(
+               chatRepository: ChatRepository(DioClient()),
+               socketService: SocketService(),
+             ),
+             child: ChatScreen(
+               userId: conv.id,
+               userName: conv.title,
+               userEmail: conv.email,
+               userAvatar: conv.avatarUrl,
+               isGroup: conv.isGroup,
+               groupData: conv,
+
+             ),
+           ),
+         ),
+       ).then((result) {
+         // If ChatScreen returned a payload (latest message), update
+         // ConversationCubit locally without calling the API.
+         if (result != null) {
+           try {
+             context.read<ConversationCubit>().processRawMessage(result);
+           } catch (e) {
+             print('⚠️ Failed to process returned message: $e');
+           }
+         }
+       });
+     },
     );
   }
 }

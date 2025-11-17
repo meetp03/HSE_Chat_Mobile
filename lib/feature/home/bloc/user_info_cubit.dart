@@ -79,4 +79,49 @@ class UserInfoCubit extends Cubit<UserInfoState> {
       return false;
     }
   }
+
+  Future<bool> makeAdmin({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final resp = await _repo.makeAdmin(groupId: groupId, memberId: memberId);
+      if (resp.success) {
+        // Optionally update local state or refetch groups
+        return true;
+      }
+      return false;
+    } catch (e) {
+      print('❌ makeAdmin error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> dismissAdmin({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final resp = await _repo.dismissAdmin(groupId: groupId, memberId: memberId);
+      if (resp.success) return true;
+      return false;
+    } catch (e) {
+      print('❌ dismissAdmin error: $e');
+      return false;
+    }
+  }
+
+  Future<bool> removeMember({
+    required String groupId,
+    required int memberId,
+  }) async {
+    try {
+      final resp = await _repo.removeMember(groupId: groupId, memberId: memberId);
+      if (resp.success) return true;
+      return false;
+    } catch (e) {
+      print('❌ removeMember error: $e');
+      return false;
+    }
+  }
 }

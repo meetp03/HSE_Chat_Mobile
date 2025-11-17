@@ -1,4 +1,3 @@
-// chat_cubit.dart
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
@@ -6,12 +5,13 @@ import 'package:hsc_chat/cores/network/socket_service.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
 import 'package:hsc_chat/feature/home/model/message_model.dart';
+import 'package:hsc_chat/feature/home/model/chat_models.dart';
 import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 
 class ChatCubit extends Cubit<ChatState> {
-  final ChatRepository _chatRepository;
+  final IChatRepository _chatRepository;
   final SocketService _socketService;
   StreamSubscription? _socketSubscription;
   // Generic fallback listener registered with SocketService.addMessageListener
@@ -26,7 +26,7 @@ class ChatCubit extends Cubit<ChatState> {
   bool? _isGroup;
 
   ChatCubit({
-    required ChatRepository chatRepository,
+    required IChatRepository chatRepository,
     required SocketService socketService,
   }) : _chatRepository = chatRepository,
        _socketService = socketService,
@@ -112,30 +112,17 @@ class ChatCubit extends Cubit<ChatState> {
         print('🔍 User data keys: ${user?.keys.toList()}');
 
         // ✅ BUILD GROUP DATA FROM API RESPONSE
-        Map<String, dynamic>? groupDataMap;
+        ChatGroup? groupModel;
         if (isGroup && group != null) {
-          // Extract members/users from group response
-          final users = group['users'] as List<dynamic>?;
-
-          groupDataMap = {
-            'id': group['id']?.toString() ?? group['_id']?.toString(),
-            'name': group['name']?.toString() ?? 'Unknown Group',
-            'photo_url': group['photo_url']?.toString(),
-            'description': group['description']?.toString() ?? '',
-            'members': (users ?? []).map((u) {
-              return {
-                'id': u['id']?.toString(),
-                'name': u['name']?.toString() ?? 'Unknown',
-                'email': u['email']?.toString(),
-                'photo_url': u['photo_url']?.toString(),
-                'role': u['pivot']?['role']?.toString() ?? 'member',
-              };
-            }).toList(),
-          };
-
-          print(
-            '✅ Group data extracted: ${groupDataMap['name']} with ${groupDataMap['members']?.length} members',
-          );
+          try {
+            groupModel = ChatGroup.fromJson(group);
+            print(
+              '✅ Group data extracted: ${groupModel.name} with ${groupModel.members.length} members',
+            );
+          } catch (e) {
+            print('⚠️ Failed to parse group into ChatGroup: $e');
+            groupModel = null;
+          }
         }
         emit(
           ChatLoaded(
@@ -145,7 +132,7 @@ class ChatCubit extends Cubit<ChatState> {
             otherUserAvatar: otherUserAvatar,
             hasMore: _hasMore,
             isGroup: isGroup,
-            groupData: groupDataMap,
+            groupData: groupModel,
             isIBlockedThem: isIBlockedThem,
             isTheyBlockedMe: isTheyBlockedMe,
           ),
@@ -487,7 +474,8 @@ class ChatCubit extends Cubit<ChatState> {
       print('❌ Failed to mark as read: $e');
     }
   }
-   void _handleBlockUnblockEvent(Map<String, dynamic> data) {
+
+  void _handleBlockUnblockEvent(Map<String, dynamic> data) {
     try {
       final blockedBy = data['blockedBy']?.toString();
       final blockedTo = data['blockedTo'] as Map<String, dynamic>?;
@@ -523,12 +511,15 @@ class ChatCubit extends Cubit<ChatState> {
         if (blockedToId == _otherUserId && blockedBy != null) {
           // if someone blocked the other user and the actor isn't the auth user,
           // we can interpret that the auth user did not block them.
-          newisIBlockedThem = blockedBy == currentUserId.toString() ? isBlocked : null;
+          newisIBlockedThem = blockedBy == currentUserId.toString()
+              ? isBlocked
+              : null;
         }
       }
 
       // Only proceed if event is relevant to this conversation
-      final relevant = blockedBy == _otherUserId ||
+      final relevant =
+          blockedBy == _otherUserId ||
           blockedToId == _otherUserId ||
           blockedBy == currentUserId.toString() ||
           blockedToId == currentUserId.toString();
@@ -540,16 +531,21 @@ class ChatCubit extends Cubit<ChatState> {
       if (state is ChatLoaded) {
         final currentState = state as ChatLoaded;
         // fallback to existing values when null
-        final updatedisIBlockedThem = newisIBlockedThem ?? currentState.isIBlockedThem;
+        final updatedisIBlockedThem =
+            newisIBlockedThem ?? currentState.isIBlockedThem;
         final updatedisTheyBlockedMe =
             newisTheyBlockedMe ?? currentState.isTheyBlockedMe;
 
-        print('🔄 Updating block flags: isIBlockedThem=$updatedisIBlockedThem isTheyBlockedMe=$updatedisTheyBlockedMe');
+        print(
+          '🔄 Updating block flags: isIBlockedThem=$updatedisIBlockedThem isTheyBlockedMe=$updatedisTheyBlockedMe',
+        );
 
-        emit(currentState.copyWith(
-          isIBlockedThem: updatedisIBlockedThem,
-          isTheyBlockedMe: updatedisTheyBlockedMe,
-        ));
+        emit(
+          currentState.copyWith(
+            isIBlockedThem: updatedisIBlockedThem,
+            isTheyBlockedMe: updatedisTheyBlockedMe,
+          ),
+        );
 
         try {
           print('✅ Block status updated in UI');
@@ -562,7 +558,7 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-/*
+  /*
   void _handleBlockUnblockEvent(Map<String, dynamic> data) {
     try {
       final blockedBy = data['blockedBy']?.toString();
@@ -815,5 +811,93 @@ class ChatCubit extends Cubit<ChatState> {
       out.add(m);
     }
     return out;
+  }
+
+  /// Delete a message for me (remove from this client's view). Returns null on success or error message.
+  Future<String?> deleteMessageForMe({
+    required String conversationId,
+    required String previousMessageId,
+    required String targetMessageId,
+  }) async {
+    if (state is! ChatLoaded) return 'Chat not loaded';
+    try {
+      print('🗑️ Requesting delete-for-me: $targetMessageId in conv $conversationId');
+      final resp = await _chatRepository.deleteMessageForMe(
+        conversationId: conversationId,
+        previousMessageId: previousMessageId,
+      );
+
+      if (resp.success) {
+        // Remove the message locally
+        if (this.state is ChatLoaded) {
+          final s = this.state as ChatLoaded;
+          final updated = s.messages.where((m) => m.id != targetMessageId).toList();
+          emit(s.copyWith(messages: updated));
+        }
+        return null;
+      } else {
+        return resp.message ?? 'Failed to delete message';
+      }
+    } catch (e) {
+      print('❌ deleteMessageForMe error: $e');
+      return 'Failed to delete message: $e';
+    }
+  }
+
+  /// Delete message for everyone in the conversation (server-side). Returns null on success else error.
+  Future<String?> deleteMessageForEveryone({
+    required String conversationId,
+    required String previousMessageId,
+    required String targetMessageId,
+  }) async {
+    if (state is! ChatLoaded) return 'Chat not loaded';
+    try {
+      print('🗑️ Requesting delete-for-everyone: $targetMessageId in conv $conversationId');
+      final resp = await _chatRepository.deleteMessageForEveryone(
+        conversationId: conversationId,
+        previousMessageId: previousMessageId,
+      );
+
+      if (resp.success) {
+        // Remove locally as well
+        if (this.state is ChatLoaded) {
+          final s = this.state as ChatLoaded;
+          final updated = s.messages.where((m) => m.id != targetMessageId).toList();
+          emit(s.copyWith(messages: updated));
+        }
+        return null;
+      } else {
+        return resp.message ?? 'Failed to delete message for everyone';
+      }
+    } catch (e) {
+      print('❌ deleteMessageForEveryone error: $e');
+      return 'Failed to delete message for everyone: $e';
+    }
+  }
+
+  /// Public aliases so UI code can call either `deleteMessageForMe`/`deleteMessageForEveryone`
+  /// or the shorter `deleteForMe`/`deleteForEveryone` depending on preference.
+  Future<String?> deleteForMe({
+    required String conversationId,
+    required String previousMessageId,
+    required String targetMessageId,
+  }) async {
+    return deleteMessageForMe(
+      conversationId: conversationId,
+      previousMessageId: previousMessageId,
+      targetMessageId: targetMessageId,
+    );
+  }
+
+  Future<String?> deleteForEveryone({
+    required String conversationId,
+    required String previousMessageId,
+    required String targetMessageId,
+  }) async {
+    return deleteMessageForEveryone(
+      conversationId: conversationId,
+      previousMessageId: previousMessageId,
+      targetMessageId: targetMessageId,
+    );
   }
 }
