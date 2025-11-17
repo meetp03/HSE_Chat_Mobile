@@ -1,4 +1,4 @@
-// cubit/message_state.dart
+// cubit/contacts_state.dart
 import 'package:hsc_chat/feature/home/model/blocked_user_model.dart';
 import 'package:hsc_chat/feature/home/model/contact_model.dart';
 import 'package:hsc_chat/feature/home/model/pagination_model.dart';

@@ -9,7 +9,7 @@ import 'package:hsc_chat/feature/auth/repository/auth_repository.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
  import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
-import 'package:hsc_chat/feature/home/bloc/messege_cubit.dart';
+import 'package:hsc_chat/feature/home/bloc/contacts_cubit.dart';
 import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
 import 'package:hsc_chat/feature/home/repository/conversation_repository.dart';
 import 'package:hsc_chat/feature/home/repository/message_repository.dart';
