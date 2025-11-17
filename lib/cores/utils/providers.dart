@@ -39,7 +39,7 @@ class Providers {
     BlocProvider<MessageCubit>(
       create: (_) => MessageCubit(
         repository: _messageRepository,
-        userId: SharedPreferencesHelper.getCurrentUserId(),
+
       ),
     ),
     BlocProvider<GroupCubit>(

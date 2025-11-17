@@ -9,6 +9,7 @@ import 'package:hsc_chat/feature/home/view/chat_screen.dart';
 import 'package:hsc_chat/cores/utils/providers.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:hsc_chat/feature/home/repository/user_repository.dart';
 
 class MessageScreen extends StatefulWidget {
   const MessageScreen({Key? key}) : super(key: key);
@@ -510,7 +511,7 @@ class _MessageScreenState extends State<MessageScreen>
           subtitle: Text(user.email),
           trailing: TextButton(
             onPressed: () {
-              // pass the actual user id
+              // open confirmation and perform unblock via UserRepository
               _showUnblockDialog(user.name, user.id);
             },
             child: const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
@@ -587,30 +588,69 @@ class _MessageScreenState extends State<MessageScreen>
   void _showUnblockDialog(String username, int userId) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Unblock User'),
-        content: Text('Are you sure you want to unblock $username?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('CANCEL'),
-          ),
-          TextButton(
-            onPressed: () {
-              // Add unblock API call here
-              Navigator.pop(context);
-              showCustomSnackBar(
-                context,
-                '$username has been unblocked',
-                type: SnackBarType.success,
-              );
-              // Refresh blocked users list
-              context.read<MessageCubit>().loadBlockedUsers(refresh: true);
-            },
-            child: const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
-          ),
-        ],
-      ),
+      builder: (context) {
+        bool isLoading = false;
+        return StatefulBuilder(builder: (context, setState) {
+          return AlertDialog(
+            title: const Text('Unblock User'),
+            content: Text('Are you sure you want to unblock $username?'),
+            actions: [
+              TextButton(
+                onPressed: isLoading ? null : () => Navigator.pop(context),
+                child: const Text('CANCEL'),
+              ),
+              TextButton(
+                onPressed: isLoading
+                    ? null
+                    : () async {
+                        setState(() => isLoading = true);
+                        try {
+                          final currentUserId = context.read<MessageCubit>().userId;
+                          final repo = UserRepository();
+                          final success = await repo.blockUnblock(
+                            currentUserId: currentUserId,
+                            userId: userId,
+                            isBlocked: false,
+                          );
+
+                          // close dialog
+                          if (mounted) Navigator.pop(context);
+
+                          if (success) {
+                            showCustomSnackBar(
+                              context,
+                              '$username has been unblocked',
+                              type: SnackBarType.success,
+                            );
+
+                            // refresh blocked list
+                            try {
+                              context.read<MessageCubit>().loadBlockedUsers(refresh: true);
+                            } catch (_) {}
+                          } else {
+                            showCustomSnackBar(
+                              context,
+                              'Failed to unblock $username. Please try again.',
+                              type: SnackBarType.error,
+                            );
+                          }
+                        } catch (e) {
+                          if (mounted) Navigator.pop(context);
+                          showCustomSnackBar(
+                            context,
+                            'Error while unblocking: ${e.toString()}',
+                            type: SnackBarType.error,
+                          );
+                        }
+                      },
+                child: isLoading
+                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
+                    : const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
+              ),
+            ],
+          );
+        });
+      },
     );
   }
 }

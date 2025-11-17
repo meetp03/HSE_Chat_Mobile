@@ -72,12 +72,124 @@ abstract class IChatRepository {
     required String conversationId,
     required String previousMessageId,
   });
+  Future<ApiResponse<MessageResponse>> editMessage({
+    required String messageId,
+    required String newMessage,
+  });
+
+  /// Reply to a message
+  Future<ApiResponse<MessageResponse>> replyToMessage({
+    required String conversationId,
+    required String message,
+    required String replyToMessageId,
+    required String toId,
+    required bool isGroup,
+  });
 }
 
 class ChatRepository implements IChatRepository {
   final DioClient _dio;
 
   const ChatRepository(this._dio);
+
+  @override
+  Future<ApiResponse<MessageResponse>> editMessage({
+    required String messageId,
+    required String newMessage,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/$messageId/update';
+      final response = await _dio.post(path, data: {'message': newMessage});
+
+      if (response.statusCode == 200) {
+        final respData = response.data;
+        if (respData is Map<String, dynamic>) {
+          if (respData['success'] == true) {
+            // Wrap the response in expected format
+            final wrappedResponse = {
+              'success': true,
+              'data': {'message': respData['message']},
+              'message': 'Message updated successfully',
+            };
+            final messageData = MessageResponse.fromJson(wrappedResponse);
+            return ApiResponse<MessageResponse>.success(
+              messageData,
+              message: 'Message updated successfully',
+              statusCode: response.statusCode,
+            );
+          } else {
+            return ApiResponse<MessageResponse>.error(
+              respData['message']?.toString() ?? 'Failed to edit message',
+            );
+          }
+        }
+        return ApiResponse<MessageResponse>.error('Unexpected response format');
+      }
+
+      return ApiResponse<MessageResponse>.error(
+        'Failed to edit message (status ${response.statusCode})',
+      );
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse<MessageResponse>.error(networkException.message);
+    } catch (e) {
+      return ApiResponse<MessageResponse>.error('Unexpected error: $e');
+    }
+  }
+
+  @override
+  Future<ApiResponse<MessageResponse>> replyToMessage({
+    required String conversationId,
+    required String message,
+    required String replyToMessageId,
+    required String toId,
+    required bool isGroup,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/reply-message';
+      final payload = {
+        'conversation_id': conversationId,
+        'message': message,
+        'reply_to': replyToMessageId,
+        'to_id': toId,
+        'is_group': isGroup ? 1 : 0,
+      };
+      final response = await _dio.post(path, data: payload);
+
+      print('🌐 API REQUEST to reply-message:');
+      print('   Payload: $payload');
+      if (response.statusCode == 200) {
+        final respData = response.data;
+        // 🐛 DEBUG: Log raw response
+        print('🌐 API RAW RESPONSE:');
+        print('   ${response.data}');
+        if (respData is Map<String, dynamic>) {
+          if (respData['success'] == true) {
+            final messageData = MessageResponse.fromJson(respData);
+            return ApiResponse<MessageResponse>.success(
+              messageData,
+              message: messageData.message,
+              statusCode: response.statusCode,
+            );
+          } else {
+            return ApiResponse<MessageResponse>.error(
+              respData['message']?.toString() ?? 'Failed to send reply',
+            );
+          }
+        }
+        return ApiResponse<MessageResponse>.error('Unexpected response format');
+      }
+
+      return ApiResponse<MessageResponse>.error(
+        'Failed to send reply (status ${response.statusCode})',
+      );
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse<MessageResponse>.error(networkException.message);
+    } catch (e) {
+      return ApiResponse<MessageResponse>.error('Unexpected error: $e');
+    }
+  }
 
   @override
   Future<ApiResponse<ChatConversationResponse>> getConversations({
@@ -118,7 +230,9 @@ class ChatRepository implements IChatRepository {
       }
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
-      return ApiResponse<ChatConversationResponse>.error(networkException.message);
+      return ApiResponse<ChatConversationResponse>.error(
+        networkException.message,
+      );
     } catch (e) {
       return ApiResponse<ChatConversationResponse>.error(
         'Unexpected error: $e',
@@ -174,11 +288,13 @@ class ChatRepository implements IChatRepository {
           }
         } else {
           // Non-JSON response — surface its string for debugging/user info
-          final bodyStr = response.data?.toString() ?? 'Unexpected server response.';
+          final bodyStr =
+              response.data?.toString() ?? 'Unexpected server response.';
           return ApiResponse<MessageResponse>.error(bodyStr);
         }
       } else {
-        final respMsg = (response.data is Map && response.data['message'] != null)
+        final respMsg =
+            (response.data is Map && response.data['message'] != null)
             ? response.data['message'].toString()
             : (response.statusMessage ?? response.data?.toString());
         final friendly = (respMsg != null && respMsg.isNotEmpty)
@@ -190,12 +306,16 @@ class ChatRepository implements IChatRepository {
       // Inspect response if present to present a friendly message for 5xx
       final status = e.response?.statusCode;
       if (status != null && status >= 500) {
-        return ApiResponse<MessageResponse>.error('Server error while sending message. Please try again later.');
+        return ApiResponse<MessageResponse>.error(
+          'Server error while sending message. Please try again later.',
+        );
       }
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse<MessageResponse>.error(networkException.message);
     } catch (e) {
-      return ApiResponse<MessageResponse>.error('Unexpected error: ${e.toString()}');
+      return ApiResponse<MessageResponse>.error(
+        'Unexpected error: ${e.toString()}',
+      );
     }
   }
 
@@ -221,17 +341,36 @@ class ChatRepository implements IChatRepository {
       // that invokes this method cannot bypass client-side rules.
       final ext = p.extension(file.path).toLowerCase();
       FileCategory category = FileCategory.GENERIC;
-      if (['.png', '.jpg', '.jpeg', '.gif', '.webp', '.bmp', '.heic', '.heif'].contains(ext)) category = FileCategory.IMAGE;
-      else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(ext)) category = FileCategory.VIDEO;
-      else if (ValidationRules.audioExt.contains(ext)) category = FileCategory.AUDIO;
-      else if (ValidationRules.docExt.contains(ext)) category = FileCategory.DOCUMENT;
+      if ([
+        '.png',
+        '.jpg',
+        '.jpeg',
+        '.gif',
+        '.webp',
+        '.bmp',
+        '.heic',
+        '.heif',
+      ].contains(ext))
+        category = FileCategory.IMAGE;
+      else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(ext))
+        category = FileCategory.VIDEO;
+      else if (ValidationRules.audioExt.contains(ext))
+        category = FileCategory.AUDIO;
+      else if (ValidationRules.docExt.contains(ext))
+        category = FileCategory.DOCUMENT;
 
       final validation = await validateFileByCategory(file, category);
       if (!validation.isValid) {
-        if (kDebugMode) print('⚠️ Repository validation failed for $filePath: ${validation.message}');
+        if (kDebugMode)
+          print(
+            '⚠️ Repository validation failed for $filePath: ${validation.message}',
+          );
         return ApiResponse<MessageResponse>.error(validation.message);
       }
-      if (kDebugMode) print('✅ Repository validation passed for $filePath (size=${validation.sizeBytes}, mime=${validation.mime})');
+      if (kDebugMode)
+        print(
+          '✅ Repository validation passed for $filePath (size=${validation.sizeBytes}, mime=${validation.mime})',
+        );
 
       // Ensure server receives a non-empty message string
       final inferredMessage = (message != null && message.trim().isNotEmpty)
@@ -250,7 +389,10 @@ class ChatRepository implements IChatRepository {
         if (replyTo != null) 'reply_to': replyTo,
       };
 
-      if (kDebugMode) print('📤 Repository: starting upload to ${ApiUrls.sendMessage} for file: $filePath');
+      if (kDebugMode)
+        print(
+          '📤 Repository: starting upload to ${ApiUrls.sendMessage} for file: $filePath',
+        );
       // Upload using DioClient.uploadFile which builds FormData and sends
       final response = await _dio.uploadFile(
         ApiUrls.sendMessage,
@@ -258,7 +400,10 @@ class ChatRepository implements IChatRepository {
         data: formMap,
         onSendProgress: onSendProgress,
       );
-      if (kDebugMode) print('📦 Repository: upload completed for file: $filePath status=${response.statusCode}');
+      if (kDebugMode)
+        print(
+          '📦 Repository: upload completed for file: $filePath status=${response.statusCode}',
+        );
 
       if (response.statusCode == 200) {
         final respData = response.data;
@@ -278,11 +423,13 @@ class ChatRepository implements IChatRepository {
             return ApiResponse<MessageResponse>.error(friendly);
           }
         } else {
-          final bodyStr = response.data?.toString() ?? 'Unexpected server response.';
+          final bodyStr =
+              response.data?.toString() ?? 'Unexpected server response.';
           return ApiResponse<MessageResponse>.error(bodyStr);
         }
       } else {
-        final respMsg = (response.data is Map && response.data['message'] != null)
+        final respMsg =
+            (response.data is Map && response.data['message'] != null)
             ? response.data['message'].toString()
             : (response.statusMessage ?? response.data?.toString());
         final friendly = (respMsg != null && respMsg.isNotEmpty)
@@ -293,12 +440,16 @@ class ChatRepository implements IChatRepository {
     } on DioException catch (e) {
       final status = e.response?.statusCode;
       if (status != null && status >= 500) {
-        return ApiResponse<MessageResponse>.error('Server error while uploading file. Please try again later.');
+        return ApiResponse<MessageResponse>.error(
+          'Server error while uploading file. Please try again later.',
+        );
       }
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse<MessageResponse>.error(networkException.message);
     } catch (e) {
-      return ApiResponse<MessageResponse>.error('Unexpected error: ${e.toString()}');
+      return ApiResponse<MessageResponse>.error(
+        'Unexpected error: ${e.toString()}',
+      );
     }
   }
 
@@ -320,7 +471,6 @@ class ChatRepository implements IChatRepository {
 
       if (response.statusCode == 200) {
         if (response.data['success'] == true) {
-
           final data = MessageReadResponse.fromJson(response.data);
           return ApiResponse<MessageReadResponse>.success(
             data,
@@ -351,18 +501,29 @@ class ChatRepository implements IChatRepository {
     required String previousMessageId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/conversations/message/$conversationId/delete';
-      final response = await _dio.post(path, data: {'previousMessageId': previousMessageId});
+      final path =
+          '${ApiUrls.baseUrl}messages/conversations/message/$conversationId/delete';
+      final response = await _dio.post(
+        path,
+        data: {'previousMessageId': previousMessageId},
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
         if (data != null && data['success'] == true) {
-          return ApiResponse.success(data, message: data['message']?.toString());
+          return ApiResponse.success(
+            data,
+            message: data['message']?.toString(),
+          );
         }
-        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete message');
+        return ApiResponse.error(
+          data?['message']?.toString() ?? 'Failed to delete message',
+        );
       }
 
-      return ApiResponse.error('Delete failed with status: ${response.statusCode}');
+      return ApiResponse.error(
+        'Delete failed with status: ${response.statusCode}',
+      );
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse.error(networkException.message);
@@ -377,18 +538,30 @@ class ChatRepository implements IChatRepository {
     required String previousMessageId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete-for-everyone';
-      final response = await _dio.post(path, data: {'previousMessageId': previousMessageId});
+      final path =
+          '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete-for-everyone';
+      final response = await _dio.post(
+        path,
+        data: {'previousMessageId': previousMessageId},
+      );
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
         if (data != null && data['success'] == true) {
-          return ApiResponse.success(data, message: data['message']?.toString());
+          return ApiResponse.success(
+            data,
+            message: data['message']?.toString(),
+          );
         }
-        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete message for everyone');
+        return ApiResponse.error(
+          data?['message']?.toString() ??
+              'Failed to delete message for everyone',
+        );
       }
 
-      return ApiResponse.error('Delete-for-everyone failed with status: ${response.statusCode}');
+      return ApiResponse.error(
+        'Delete-for-everyone failed with status: ${response.statusCode}',
+      );
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse.error(networkException.message);
@@ -402,13 +575,19 @@ class ChatRepository implements IChatRepository {
     required String conversationId,
     required String previousMessageId,
   }) async {
-    return deleteMessageForMe(conversationId: conversationId, previousMessageId: previousMessageId);
+    return deleteMessageForMe(
+      conversationId: conversationId,
+      previousMessageId: previousMessageId,
+    );
   }
 
   Future<ApiResponse<dynamic>> deleteForEveryone({
     required String conversationId,
     required String previousMessageId,
   }) async {
-    return deleteMessageForEveryone(conversationId: conversationId, previousMessageId: previousMessageId);
+    return deleteMessageForEveryone(
+      conversationId: conversationId,
+      previousMessageId: previousMessageId,
+    );
   }
 }

@@ -226,7 +226,7 @@ class MessageRepository implements IMessageRepository {
         queryParameters: queryParams,
         data: {'user_id': userId},
       );
-
+print('🚀 Blocked Users ID: $userId');
       if (response.statusCode == 200) {
         if (response.data['success'] == true) {
           final data = BlockedUserResponse.fromJson(response.data);

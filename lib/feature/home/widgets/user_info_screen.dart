@@ -905,17 +905,34 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     );
     _cubit
         .removeMember(groupId: groupId, memberId: memberId)
-        .then((ok) {
+        .then((ok) async {
           Navigator.of(context).pop();
           if (ok) {
+            // Update local member list
             setState(() {
               group.members.removeWhere((m) => m.id == member.id);
             });
+
             showCustomSnackBar(
               context,
               '${member.name} removed from channel',
               type: SnackBarType.success,
             );
+
+            // Refresh conversations and unread counts on home screen
+            try {
+              final conversationCubit = context.read<ConversationCubit>();
+              await conversationCubit.refresh();
+              await conversationCubit.refreshUnread();
+            } catch (e) {
+              // ignore errors here but log if needed
+              print('⚠️ Failed to refresh conversations after removeMember: $e');
+            }
+
+            // Navigate back to home (first route)
+            if (mounted) {
+              Navigator.of(context).popUntil((route) => route.isFirst);
+            }
           } else {
             showCustomSnackBar(
               context,

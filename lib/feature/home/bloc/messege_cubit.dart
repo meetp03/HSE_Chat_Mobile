@@ -8,9 +8,10 @@ import 'package:hsc_chat/feature/home/model/pagination_model.dart';
 import 'package:hsc_chat/feature/home/model/user_model.dart';
 import 'package:hsc_chat/feature/home/repository/message_repository.dart';
 
+import '../../../cores/utils/shared_preferences.dart';
+
 class MessageCubit extends Cubit<MessageState> {
   final MessageRepository _repository;
-  final int userId;
 
   // My Contacts pagination & search
   int _contactsCurrentPage = 1;
@@ -33,11 +34,11 @@ class MessageCubit extends Cubit<MessageState> {
   String _blockedUsersCurrentQuery = ''; // Add search query
   List<BlockedUserModel> _blockedUsers = [];
 
-  MessageCubit({
-    required MessageRepository repository,
-    required this.userId,
-  })  : _repository = repository,
-        super(MessageInitial());
+  int get userId => SharedPreferencesHelper.getCurrentUserId();
+
+  MessageCubit({required MessageRepository repository})
+    : _repository = repository,
+      super(MessageInitial());
 
   /* --------------------------------------------------------------------- /
   /                         SEARCH METHODS                                /
@@ -124,12 +125,13 @@ class MessageCubit extends Cubit<MessageState> {
     try {
       _contactsIsLoadingMore = !refresh;
 
-      final ApiResponse<ContactResponse> response = await _repository.getMyContacts(
-        userId: userId,
-        page: _contactsCurrentPage,
-        perPage: 10,
-        query: _contactsCurrentQuery, // Pass search query
-      );
+      final ApiResponse<ContactResponse> response = await _repository
+          .getMyContacts(
+            userId: userId,
+            page: _contactsCurrentPage,
+            perPage: 10,
+            query: _contactsCurrentQuery, // Pass search query
+          );
 
       if (!response.success || response.data == null) {
         emit(MyContactsError(response.message ?? 'Failed to load contacts'));
@@ -145,7 +147,9 @@ class MessageCubit extends Cubit<MessageState> {
       } else {
         // Remove duplicates and add new contacts
         for (var newContact in newContacts) {
-          final isDuplicate = _contacts.any((contact) => contact.id == newContact.id);
+          final isDuplicate = _contacts.any(
+            (contact) => contact.id == newContact.id,
+          );
           if (!isDuplicate) {
             _contacts.add(newContact);
           }
@@ -157,13 +161,15 @@ class MessageCubit extends Cubit<MessageState> {
         _contactsCurrentPage = pagination.currentPage + 1;
       }
 
-      emit(MyContactsLoaded(
-        contacts: List.from(_contacts),
-        pagination: pagination,
-        hasMore: _contactsHasMore,
-        isLoadingMore: false,
-        currentQuery: _contactsCurrentQuery, // Pass current query
-      ));
+      emit(
+        MyContactsLoaded(
+          contacts: List.from(_contacts),
+          pagination: pagination,
+          hasMore: _contactsHasMore,
+          isLoadingMore: false,
+          currentQuery: _contactsCurrentQuery, // Pass current query
+        ),
+      );
 
       _contactsIsLoadingMore = false;
     } catch (e) {
@@ -223,13 +229,15 @@ class MessageCubit extends Cubit<MessageState> {
         _usersCurrentPage = pagination.currentPage + 1;
       }
 
-      emit(UsersListLoaded(
-        users: List.from(_users),
-        pagination: pagination,
-        hasMore: _usersHasMore,
-        isLoadingMore: false,
-        currentQuery: _usersCurrentQuery, // Pass current query
-      ));
+      emit(
+        UsersListLoaded(
+          users: List.from(_users),
+          pagination: pagination,
+          hasMore: _usersHasMore,
+          isLoadingMore: false,
+          currentQuery: _usersCurrentQuery, // Pass current query
+        ),
+      );
 
       _usersIsLoadingMore = false;
     } catch (e) {
@@ -256,15 +264,18 @@ class MessageCubit extends Cubit<MessageState> {
     try {
       _blockedUsersIsLoadingMore = !refresh;
 
-      final ApiResponse<BlockedUserResponse> response = await _repository.getBlockedUsers(
-        userId: userId,
-        page: _blockedUsersCurrentPage,
-        perPage: 10,
-        query: _blockedUsersCurrentQuery, // Pass search query
-      );
+      final ApiResponse<BlockedUserResponse> response = await _repository
+          .getBlockedUsers(
+            userId: userId,
+            page: _blockedUsersCurrentPage,
+            perPage: 10,
+            query: _blockedUsersCurrentQuery, // Pass search query
+          );
 
       if (!response.success || response.data == null) {
-        emit(BlockedUsersError(response.message ?? 'Failed to load blocked users'));
+        emit(
+          BlockedUsersError(response.message ?? 'Failed to load blocked users'),
+        );
         _blockedUsersIsLoadingMore = false;
         return;
       }
@@ -277,7 +288,9 @@ class MessageCubit extends Cubit<MessageState> {
       } else {
         // Remove duplicates and add new blocked users
         for (var newBlockedUser in newBlockedUsers) {
-          final isDuplicate = _blockedUsers.any((user) => user.id == newBlockedUser.id);
+          final isDuplicate = _blockedUsers.any(
+            (user) => user.id == newBlockedUser.id,
+          );
           if (!isDuplicate) {
             _blockedUsers.add(newBlockedUser);
           }
@@ -289,13 +302,15 @@ class MessageCubit extends Cubit<MessageState> {
         _blockedUsersCurrentPage = pagination.currentPage + 1;
       }
 
-      emit(BlockedUsersLoaded(
-        blockedUsers: List.from(_blockedUsers),
-        pagination: pagination,
-        hasMore: _blockedUsersHasMore,
-        isLoadingMore: false,
-        currentQuery: _blockedUsersCurrentQuery, // Pass current query
-      ));
+      emit(
+        BlockedUsersLoaded(
+          blockedUsers: List.from(_blockedUsers),
+          pagination: pagination,
+          hasMore: _blockedUsersHasMore,
+          isLoadingMore: false,
+          currentQuery: _blockedUsersCurrentQuery, // Pass current query
+        ),
+      );
 
       _blockedUsersIsLoadingMore = false;
     } catch (e) {
@@ -303,6 +318,7 @@ class MessageCubit extends Cubit<MessageState> {
       emit(BlockedUsersError(e.toString()));
     }
   }
+
   Future<void> loadMoreContacts() async {
     if (_contactsHasMore && !_contactsIsLoadingMore) {
       await loadMyContacts(refresh: false);
@@ -366,7 +382,10 @@ class MessageCubit extends Cubit<MessageState> {
   /// Send chat request to a user (from current user)
   Future<ApiResponse<void>> sendChatRequestTo(String toId) async {
     try {
-      final resp = await _repository.sendChatRequest(fromId: userId, toId: toId);
+      final resp = await _repository.sendChatRequest(
+        fromId: userId,
+        toId: toId,
+      );
       return resp;
     } catch (e) {
       return ApiResponse<void>.error('Failed to send chat request: $e');

@@ -34,6 +34,147 @@ class ChatCubit extends Cubit<ChatState> {
 
   int get currentUserId => SharedPreferencesHelper.getCurrentUserId();
 
+  Message? _replyingToMessage;
+  Message? _editingMessage;
+
+  /// Get the message being replied to
+  Message? get replyingToMessage => _replyingToMessage;
+
+  /// Get the message being edited
+  Message? get editingMessage => _editingMessage;
+
+  /// Set a message to reply to
+  void setReplyingTo(Message? message) {
+    _replyingToMessage = message;
+    _editingMessage = null; // Clear edit mode when replying
+    if (state is ChatLoaded) {
+      final currentState = state as ChatLoaded;
+      emit(currentState.copyWith(messages: currentState.messages));
+    }
+  }
+
+  /// Set a message to edit
+  void setEditingMessage(Message? message) {
+    _editingMessage = message;
+    _replyingToMessage = null; // Clear reply mode when editing
+    if (state is ChatLoaded) {
+      final currentState = state as ChatLoaded;
+      emit(currentState.copyWith(messages: currentState.messages));
+    }
+  }
+
+  /// Clear reply/edit mode
+  void clearReplyEditMode() {
+    _replyingToMessage = null;
+    _editingMessage = null;
+    if (state is ChatLoaded) {
+      final currentState = state as ChatLoaded;
+      emit(currentState.copyWith(messages: currentState.messages));
+    }
+  }
+
+  /// Edit an existing message
+  Future<String?> editMessage({
+    required String messageId,
+    required String newMessage,
+  }) async {
+    if (state is! ChatLoaded) return 'Chat not loaded';
+
+    try {
+      print('✏️ Editing message: $messageId');
+
+      final response = await _chatRepository.editMessage(
+        messageId: messageId,
+        newMessage: newMessage,
+      );
+
+      if (response.success && response.data != null) {
+        final updatedMessageData = response.data!.data.message;
+        final updatedMessage = Message.fromJson(
+          updatedMessageData,
+          currentUserId,
+        );
+
+        // Update the message in the list
+        if (state is ChatLoaded) {
+          final currentState = state as ChatLoaded;
+          final updatedMessages = currentState.messages.map((msg) {
+            return msg.id == messageId ? updatedMessage : msg;
+          }).toList();
+
+          emit(currentState.copyWith(messages: updatedMessages));
+        }
+
+        // Clear editing mode
+        clearReplyEditMode();
+
+        print('✅ Message edited successfully');
+        return null;
+      } else {
+        return response.message ?? 'Failed to edit message';
+      }
+    } catch (e) {
+      print('❌ Error editing message: $e');
+      return 'Failed to edit message: $e';
+    }
+  }
+
+  /// Send a reply to a message
+  Future<String?> sendReply({
+    required String message,
+    required Message replyToMessage,
+  }) async {
+    if (state is! ChatLoaded || _otherUserId == null || _isGroup == null) {
+      return 'Invalid chat state';
+    }
+    // 🐛 DEBUG: Log what we're sending
+    print('🚀 SENDING REPLY:');
+    print('   To Message ID: ${replyToMessage.id}');
+    print('   To Message Text: ${replyToMessage.message}');
+    print('   Reply Text: $message');
+    try {
+      print('💬 Sending reply to message: ${replyToMessage.id}');
+
+      // ✅ CORRECT - Use the full MongoDB _id directly
+      final replyToId = replyToMessage.id;
+
+      final response = await _chatRepository.replyToMessage(
+        conversationId: _otherUserId!,
+        message: message,
+        replyToMessageId: replyToId,
+        toId: _otherUserId!,
+        isGroup: _isGroup ?? false,
+      );
+
+      if (response.success && response.data != null) {
+        final messageData = response.data!.data.message;
+        final newMessage = Message.fromJson(messageData, currentUserId);
+        print('📥 API RESPONSE:');
+        print('   reply_to: ${messageData['reply_to']}');
+        print('   reply_message: ${messageData['reply_message']}');
+        // Add the new reply message to the list
+        if (state is ChatLoaded) {
+          final currentState = state as ChatLoaded;
+          final updatedMessages = [...currentState.messages, newMessage];
+          final dedupedMessages = _dedupeMessages(updatedMessages);
+
+          emit(currentState.copyWith(messages: dedupedMessages));
+        }
+
+        // Clear reply mode
+        clearReplyEditMode();
+
+        print('✅ Reply sent successfully');
+        return null;
+      } else {
+        return response.message ?? 'Failed to send reply';
+      }
+    } catch (e) {
+      print('❌ Error sending reply: $e');
+      return 'Failed to send reply: $e';
+    }
+  }
+
   Future<void> loadConversations(
     int userId,
     String otherUserId,
@@ -715,6 +856,8 @@ class ChatCubit extends Cubit<ChatState> {
     }
 
     _socketSubscription?.cancel();
+    _replyingToMessage = null;
+    _editingMessage = null;
   }
 
   @override
@@ -821,7 +964,9 @@ class ChatCubit extends Cubit<ChatState> {
   }) async {
     if (state is! ChatLoaded) return 'Chat not loaded';
     try {
-      print('🗑️ Requesting delete-for-me: $targetMessageId in conv $conversationId');
+      print(
+        '🗑️ Requesting delete-for-me: $targetMessageId in conv $conversationId',
+      );
       final resp = await _chatRepository.deleteMessageForMe(
         conversationId: conversationId,
         previousMessageId: previousMessageId,
@@ -831,7 +976,9 @@ class ChatCubit extends Cubit<ChatState> {
         // Remove the message locally
         if (this.state is ChatLoaded) {
           final s = this.state as ChatLoaded;
-          final updated = s.messages.where((m) => m.id != targetMessageId).toList();
+          final updated = s.messages
+              .where((m) => m.id != targetMessageId)
+              .toList();
           emit(s.copyWith(messages: updated));
         }
         return null;
@@ -852,7 +999,9 @@ class ChatCubit extends Cubit<ChatState> {
   }) async {
     if (state is! ChatLoaded) return 'Chat not loaded';
     try {
-      print('🗑️ Requesting delete-for-everyone: $targetMessageId in conv $conversationId');
+      print(
+        '🗑️ Requesting delete-for-everyone: $targetMessageId in conv $conversationId',
+      );
       final resp = await _chatRepository.deleteMessageForEveryone(
         conversationId: conversationId,
         previousMessageId: previousMessageId,
@@ -862,7 +1011,9 @@ class ChatCubit extends Cubit<ChatState> {
         // Remove locally as well
         if (this.state is ChatLoaded) {
           final s = this.state as ChatLoaded;
-          final updated = s.messages.where((m) => m.id != targetMessageId).toList();
+          final updated = s.messages
+              .where((m) => m.id != targetMessageId)
+              .toList();
           emit(s.copyWith(messages: updated));
         }
         return null;

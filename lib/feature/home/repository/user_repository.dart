@@ -46,8 +46,8 @@ class UserRepository {
     required int userId,
     required bool isBlocked,
   }) async {
-    final path = '${ApiUrls.blockUnblockUsers}/$currentUserId/block-unblock';
-    final payload = {'user_id': userId, 'is_blocked': isBlocked};
+    final path = '${ApiUrls.blockUnblockUsers}/$userId/block-unblock';
+    final payload = {'user_id': currentUserId, 'is_blocked': isBlocked};
     try {
       final resp = await _dio.put(path, data: payload);
       if (resp.statusCode == 200 || resp.statusCode == 201) {

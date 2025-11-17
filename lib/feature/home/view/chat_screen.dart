@@ -81,6 +81,7 @@ class _ChatScreenState extends State<ChatScreen>
   bool _shouldScrollToBottom = true;
   double? _scrollOffsetBeforeLoad;
   int? _messageCountBeforeLoad;
+  bool _isSending = false;
 
   @override
   void initState() {
@@ -252,6 +253,9 @@ class _ChatScreenState extends State<ChatScreen>
       );
       return;
     }
+    // Clear reply/edit mode when sending new message
+    context.read<ChatCubit>().clearReplyEditMode();
+
     final caption = _messageController.text.trim();
     final hasFile = _attachedFilePath != null && _attachedFilePath!.isNotEmpty;
     final hasText = caption.isNotEmpty;
@@ -801,7 +805,9 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
-
+    if (message.replyMessage != null) {
+    _debugReplyMessage(message);
+  }
     // If it's a SYSTEM message render it as a standalone centered blue bubble
     if (kind == MessageKind.SYSTEM) {
       final maxWidth = MediaQuery.of(context).size.width * 0.85;
@@ -2914,8 +2920,37 @@ class _ChatScreenState extends State<ChatScreen>
     final m = reg.firstMatch(html);
     return m?.group(1);
   }
+// DEBUGGING: Add this method to help identify the issue
+// ============================================================================
 
+  void _debugReplyMessage(Message message) {
+    if (message.replyMessage != null) {
+      print('🔍 DEBUG Reply Info:');
+      print('  Current Message ID: ${message.id}');
+      print('  Current Message Text: ${_parseMessage(message.message)}');
+      print('  Reply To ID: ${message.replyTo}');
+      print('  Reply Message ID: ${message.replyMessage!.id}');
+      print('  Reply Message Text: ${_parseMessage(message.replyMessage!.message)}');
+      print('  Reply Sender Name: ${message.replyMessage!.sender.name}');
+      print('  Reply isSentByMe: ${message.replyMessage!.isSentByMe}');
+    }
+  }
   Widget _buildReplyMessage(Message replyMessage) {
+    // Get the display name based on context
+    String displayName;
+
+    if (widget.isGroup) {
+      // In group chat: always show sender's name
+      displayName = replyMessage.sender.name;
+    } else {
+      // In personal chat: show "You" for your messages, contact name for theirs
+      if (replyMessage.isSentByMe) {
+        displayName = 'You';
+      } else {
+        displayName = widget.userName;
+      }
+    }
+
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.all(8),
@@ -2923,13 +2958,15 @@ class _ChatScreenState extends State<ChatScreen>
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border(left: BorderSide(color: AppClr.primaryColor, width: 3)),
+        border: Border(
+          left: BorderSide(color: AppClr.primaryColor, width: 3),
+        ),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            replyMessage.sender.name,
+            displayName,
             style: const TextStyle(
               fontWeight: FontWeight.bold,
               fontSize: 12,
@@ -2993,22 +3030,26 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (context, state) {
         final isBlocked =
             state is ChatLoaded &&
-            (state.isIBlockedThem || state.isTheyBlockedMe);
+                (state.isIBlockedThem || state.isTheyBlockedMe);
+
         if (isBlocked) {
-          // Show disabled composer when the other user is blocked
           return Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
             child: Center(
               child: Text(
-                'Messaging disabled — this user is blocked',
+                'Messaging disabled – this user is blocked',
                 style: TextStyle(color: Colors.grey[600]),
               ),
             ),
           );
         }
+
+        final cubit = context.read<ChatCubit>();
+        final replyingTo = cubit.replyingToMessage;
+        final editing = cubit.editingMessage;
+
         return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
           decoration: BoxDecoration(
             color: Colors.white,
             boxShadow: [
@@ -3019,94 +3060,249 @@ class _ChatScreenState extends State<ChatScreen>
               ),
             ],
           ),
-          child: SafeArea(
-            child: Row(
-              children: [
-                Expanded(
-                  child: Container(
-                    constraints: const BoxConstraints(maxHeight: 100),
-                    decoration: BoxDecoration(
-                      color: Colors.grey[100],
-                      borderRadius: BorderRadius.circular(25),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Reply/Edit indicator
+              if (replyingTo != null || editing != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[300]!),
                     ),
-                    child: TextField(
-                      controller: _messageController,
-                      focusNode: _focusNode,
-                      onChanged: (value) => _onTyping(),
-                      decoration: InputDecoration(
-                        hintText: 'Type a message...',
-                        hintStyle: TextStyle(color: Colors.grey[500]),
-                        border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(
-                          horizontal: 16,
-                          vertical: 12,
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        editing != null ? Icons.edit : Icons.reply,
+                        size: 20,
+                        color: AppClr.primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              editing != null ? 'Edit message' : 'Replying to ${replyingTo!.sender.name}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppClr.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _parseMessage(editing?.message ?? replyingTo!.message),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
                         ),
                       ),
-                      maxLines: null,
-                      textInputAction: TextInputAction.send,
-                      onSubmitted: (value) => _sendMessage(),
-                    ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          cubit.clearReplyEditMode();
+                          _messageController.clear();
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
                   ),
                 ),
-                const SizedBox(width: 8),
-                // Attach button
-                if (_attachedFilePath == null) ...[
-                  IconButton(
-                    icon: const Icon(Icons.attach_file, color: Colors.grey),
-                    onPressed: _openFilePicker,
-                  ),
-                ] else ...[
-                  // show small preview
-                  GestureDetector(
-                    onTap: () {
-                      // remove attached
-                      setState(() {
-                        _attachedFilePath = null;
-                        _attachedFileType = null;
-                      });
-                    },
-                    child: Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: Colors.grey[200],
-                        borderRadius: BorderRadius.circular(8),
+
+              // Message input area
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 100),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _focusNode,
+                            onChanged: (value) => _onTyping(),
+                            decoration: InputDecoration(
+                              hintText: editing != null ? 'Edit message...' : 'Type a message...',
+                              hintStyle: TextStyle(color: Colors.grey[500]),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (value) => _handleSendOrEdit(),
+                          ),
+                        ),
                       ),
-                      child: Center(
-                        child: _attachedFileType == 1
-                            ? const Icon(Icons.image, size: 20)
-                            : (_attachedFileType == 2
+                      const SizedBox(width: 8),
+
+                      // Show attach button only when not editing
+                      if (editing == null && _attachedFilePath == null) ...[
+                        IconButton(
+                          icon: const Icon(Icons.attach_file, color: Colors.grey),
+                          onPressed: _openFilePicker,
+                        ),
+                      ] else if (_attachedFilePath != null) ...[
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _attachedFilePath = null;
+                              _attachedFileType = null;
+                            });
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: _attachedFileType == 1
+                                  ? const Icon(Icons.image, size: 20)
+                                  : (_attachedFileType == 2
                                   ? const Icon(Icons.videocam, size: 20)
                                   : const Icon(
-                                      Icons.insert_drive_file,
-                                      size: 20,
-                                    )),
+                                Icons.insert_drive_file,
+                                size: 20,
+                              )),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppClr.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            editing != null ? Icons.check : Icons.send,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: _handleSendOrEdit,
+                        ),
                       ),
-                    ),
-                  ),
-                ],
-                const SizedBox(width: 8),
-                Container(
-                  decoration: BoxDecoration(
-                    color: AppClr.primaryColor,
-                    shape: BoxShape.circle,
-                  ),
-                  child: IconButton(
-                    icon: const Icon(Icons.send, color: Colors.white, size: 20),
-                    onPressed: _sendMessage,
+                    ],
                   ),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         );
       },
     );
   }
-
   // attachment UI removed - only text messages supported
+  Future<void> _handleSendOrEdit() async {
+    // ✅ Prevent double submission
+    if (_isSending) {
+      print('⏳ Already sending, ignoring duplicate call');
+      return;
+    }
 
-  @override
+    final cubit = context.read<ChatCubit>();
+    final editing = cubit.editingMessage;
+    final replyingTo = cubit.replyingToMessage;
+
+    final messageText = _messageController.text.trim();
+
+    if (messageText.isEmpty && _attachedFilePath == null) return;
+
+    // ✅ Set flag to prevent double submission
+    setState(() {
+      _isSending = true;
+    });
+
+    try {
+      // EDIT MODE
+      if (editing != null) {
+        if (messageText.isEmpty) {
+          showCustomSnackBar(
+            context,
+            'Message cannot be empty',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+
+        final htmlMessage = '<p>$messageText</p>';
+
+        final error = await cubit.editMessage(
+          messageId: editing.id,
+          newMessage: htmlMessage,
+        );
+
+        if (error != null) {
+          showCustomSnackBar(context, error, type: SnackBarType.error);
+        } else {
+          _messageController.clear();
+          showCustomSnackBar(
+            context,
+            'Message updated',
+            type: SnackBarType.success,
+          );
+          _scrollToBottom();
+        }
+        return;
+      }
+
+      // REPLY MODE
+      if (replyingTo != null) {
+        if (messageText.isEmpty) {
+          showCustomSnackBar(
+            context,
+            'Reply cannot be empty',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+
+        final htmlMessage = '<p>$messageText</p>';
+
+        final error = await cubit.sendReply(
+          message: htmlMessage,
+          replyToMessage: replyingTo,
+        );
+
+        if (error != null) {
+          showCustomSnackBar(context, error, type: SnackBarType.error);
+        } else {
+          _messageController.clear();
+          _scrollToBottom();
+        }
+        return;
+      }
+
+      // NORMAL SEND MODE
+      await _sendMessage();
+    } finally {
+      // ✅ Always reset the flag
+      setState(() {
+        _isSending = false;
+      });
+    }
+  }  @override
   bool get wantKeepAlive => true;
 
   String _fingerprint(Message m) {
@@ -3658,34 +3854,31 @@ class _ChatScreenState extends State<ChatScreen>
                 title: const Text('Reply'),
                 onTap: () {
                   Navigator.of(ctx).pop();
-                  // TODO: Implement reply functionality
-                  // You can set a state variable to store the message being replied to
-                  // and show it in the message input area
-                  showCustomSnackBar(
-                    context,
-                    'Reply feature - Coming soon',
-                    type: SnackBarType.info,
-                  );
+                  // Set the message to reply to
+                  context.read<ChatCubit>().setReplyingTo(message);
+                  // Focus on the text field
+                  _focusNode.requestFocus();
                 },
               ),
 
               // Additional options only for sender (my messages)
               if (isSender) ...[
-                ListTile(
-                  leading: const Icon(Icons.edit),
-                  title: const Text('Edit'),
-                  onTap: () {
-                    Navigator.of(ctx).pop();
-                    // TODO: Implement edit functionality
-                    // You can populate the message input field with the existing message text
-                    // and show an "Editing" indicator
-                    showCustomSnackBar(
-                      context,
-                      'Edit feature - Coming soon',
-                      type: SnackBarType.info,
-                    );
-                  },
-                ),
+                // Only allow editing text messages (not files/media)
+                if (message.messageType == 0 &&
+                    message.message.isNotEmpty &&
+                    (message.fileUrl == null || message.fileUrl!.isEmpty)) ...[
+                  ListTile(
+                    leading: const Icon(Icons.edit),
+                    title: const Text('Edit'),
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      // Set the message to edit and populate text field
+                      context.read<ChatCubit>().setEditingMessage(message);
+                      _messageController.text = _parseMessage(message.message);
+                      _focusNode.requestFocus();
+                    },
+                  ),
+                ],
                 ListTile(
                   leading: const Icon(Icons.delete_outline),
                   title: const Text('Delete for me'),
@@ -3709,6 +3902,7 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     );
                     if (ok != true) return;
+
                     final prevId = _findPreviousMessageId(message.id);
                     final cubit = context.read<ChatCubit>();
                     final err = await cubit.deleteForMe(
@@ -3723,11 +3917,7 @@ class _ChatScreenState extends State<ChatScreen>
                         type: SnackBarType.success,
                       );
                     } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
+                      showCustomSnackBar(context, err, type: SnackBarType.error);
                     }
                   },
                 ),
@@ -3756,6 +3946,7 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     );
                     if (ok != true) return;
+
                     final prevId = _findPreviousMessageId(message.id);
                     final cubit = context.read<ChatCubit>();
                     final err = await cubit.deleteForEveryone(
@@ -3770,11 +3961,7 @@ class _ChatScreenState extends State<ChatScreen>
                         type: SnackBarType.success,
                       );
                     } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
+                      showCustomSnackBar(context, err, type: SnackBarType.error);
                     }
                   },
                 ),
@@ -3791,8 +3978,7 @@ class _ChatScreenState extends State<ChatScreen>
         );
       },
     );
-  }
-  // Find previous message id in current loaded messages; returns null if none
+  }  // Find previous message id in current loaded messages; returns null if none
   String? _findPreviousMessageId(String messageId) {
     final state = context.read<ChatCubit>().state;
     if (state is! ChatLoaded) return null;

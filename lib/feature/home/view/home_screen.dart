@@ -14,6 +14,7 @@ import 'package:hsc_chat/feature/home/model/conversation_model.dart';
 import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
 import 'package:hsc_chat/feature/home/repository/message_repository.dart';
 import 'package:hsc_chat/feature/home/view/chat_screen.dart';
+import 'package:hsc_chat/feature/home/view/notifications_screen.dart';
 import 'package:hsc_chat/feature/home/widgets/contacts_screen.dart';
 import 'package:hsc_chat/feature/home/widgets/user_selection_screen.dart';
 import 'package:hsc_chat/routes/navigation_service.dart';
@@ -201,7 +202,12 @@ class _HomeScreenState extends State<HomeScreen>
               IconButton(
                 icon: const Icon(Icons.notifications, color: Colors.white),
                 onPressed: () {
-                  // Add notification functionality here
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const NotificationsScreen(),
+                    ),
+                  );
                 },
               ),
 
