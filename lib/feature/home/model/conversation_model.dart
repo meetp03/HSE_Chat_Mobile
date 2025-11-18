@@ -90,6 +90,13 @@ class Conversation {
   final List<Message>? messages;
   final List<Participant>? participants;
   final DateTime? lastReadAt;
+
+  //   Chat Request Fields
+  final String? chatRequestStatus;  // "pending" | "accepted" | "declined" | null
+  final String? chatRequestFrom;    // User ID of requester
+  final String? chatRequestTo;      // User ID of recipient
+  final String? chatRequestId;      // Server ID for the request
+
   Conversation({
     required this.id,
     required this.groupId,
@@ -106,6 +113,10 @@ class Conversation {
     this.messages,
     this.participants,
     this.lastReadAt,
+    this.chatRequestStatus,
+    this.chatRequestFrom,
+    this.chatRequestTo,
+    this.chatRequestId,
   });
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final bool isGroup = json['group_id'] != "0" && json['group_id'] != null;
@@ -216,6 +227,10 @@ class Conversation {
       messages: messages,
       participants: participants,
       lastReadAt: null,
+      chatRequestStatus: json['chat_request_status']?.toString(),
+      chatRequestFrom: json['chat_request_from']?.toString(),
+      chatRequestTo: json['chat_request_to']?.toString(),
+      chatRequestId: json['chat_request_id']?.toString(),
     );
   }
 
@@ -248,6 +263,11 @@ class Conversation {
     List<Message>? messages,
     List<Participant>? participants,
     DateTime? lastReadAt,
+    String? chatRequestStatus,
+    String? chatRequestFrom,
+    String? chatRequestTo,
+    String? chatRequestId,
+
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -265,6 +285,11 @@ class Conversation {
       messages: messages ?? this.messages,
       participants: participants ?? this.participants,
       lastReadAt: lastReadAt ?? this.lastReadAt,
+
+      chatRequestStatus: chatRequestStatus ?? this.chatRequestStatus,
+      chatRequestFrom: chatRequestFrom ?? this.chatRequestFrom,
+      chatRequestTo: chatRequestTo ?? this.chatRequestTo,
+      chatRequestId: chatRequestId ?? this.chatRequestId,
     );
   }
 

@@ -1,6 +1,8 @@
 // chat_state.dart
-import 'package:hsc_chat/feature/home/model/message_model.dart';
+import 'package:hsc_chat/feature/home/model/message_model.dart'  ;
 import 'package:hsc_chat/feature/home/model/chat_models.dart';
+
+import '../model/conversation_model.dart' hide Message;
 
 abstract class ChatState {}
 
@@ -19,7 +21,9 @@ class ChatLoaded extends ChatState {
   final Map<String, int> uploadProgress;
   final bool isIBlockedThem;
   final bool isTheyBlockedMe;
-  final ChatGroup? groupData;
+  final ChatGroup? commonGroupData;
+  final Conversation? groupData;
+
 
   ChatLoaded({
     required this.messages,
@@ -30,9 +34,10 @@ class ChatLoaded extends ChatState {
     this.isLoadingMore = false,
     this.uploadProgress = const {},
     required this.isGroup,
-    this.groupData,
+    this.commonGroupData,
     this.isIBlockedThem = false,
     this.isTheyBlockedMe = false,
+    this.groupData,
   });
 
   ChatLoaded copyWith({
@@ -42,7 +47,9 @@ class ChatLoaded extends ChatState {
     Map<String, int>? uploadProgress,
     bool? isIBlockedThem,
     bool? isTheyBlockedMe,
-    ChatGroup? groupData,
+    ChatGroup? commonGroupData,
+    Conversation? groupData,
+
   }) {
     return ChatLoaded(
       messages: messages ?? this.messages,
@@ -55,6 +62,7 @@ class ChatLoaded extends ChatState {
       isGroup: isGroup,
       isTheyBlockedMe: isTheyBlockedMe ?? this.isTheyBlockedMe,
       isIBlockedThem: isIBlockedThem ?? this.isIBlockedThem,
+      commonGroupData: commonGroupData ?? this.commonGroupData,
       groupData: groupData ?? this.groupData,
     );
   }

@@ -4,6 +4,7 @@ import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/network/socket_service.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
+import 'package:hsc_chat/feature/home/model/conversation_model.dart' show Conversation;
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/home/model/chat_models.dart';
 import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
@@ -175,11 +176,132 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  Future<void> loadConversations(
+ /* Future<void> loadConversations(
     int userId,
     String otherUserId,
     bool isGroup,
+      Conversation? initialConversationData,
   ) async {
+    try {
+      emit(ChatLoading());
+
+      print('📥 Loading conversations for: $otherUserId (isGroup: $isGroup)');
+      print('👤 Current user ID: $userId');
+
+      final response = await _chatRepository.getConversations(
+        userId: userId,
+        otherUserId: otherUserId,
+        isGroup: isGroup,
+        page: 1,
+        limit: _limit,
+      );
+
+      if (response.success && response.data != null) {
+        // ✅ Pass currentUserId (not group ID) for proper alignment
+        // Server returns conversations in newest->oldest. Convert to
+        // oldest->newest for UI-friendly chronological ordering.
+        final raw = (response.data?.data.conversations ?? [])
+            .map((json) => Message.fromJson(json, userId))
+            .toList()
+            .reversed
+            .toList();
+
+        // Deduplicate loaded messages (server sometimes returns repeats)
+        final conversations = _dedupeMessages(raw);
+
+        final conversationId = isGroup
+            ? (response.data?.data.group['id']?.toString() ?? otherUserId)
+            : otherUserId;
+
+        _otherUserId = conversationId;
+        _isGroup = isGroup;
+        _currentPage = 1;
+        _hasMore = response.data?.meta.hasMore ?? false;
+
+        print('✅ Loaded ${conversations.length} messages');
+        if (conversations.isNotEmpty) {
+          final first = conversations.first;
+          final last = conversations.last;
+          print(
+            '🧭 Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}',
+          );
+          print(
+            '🧭 Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}',
+          );
+        }
+        print('🆔 Stored conversation ID: $_otherUserId');
+
+        await markAsRead();
+        _setupSocketListeners();
+        _socketService.joinConversation(conversationId);
+
+        final group = response.data?.data.group;
+        final user = response.data?.data.user;
+        final conv = response.data?.data.conversations;
+
+        final otherUserName = isGroup
+            ? (group?['name']?.toString() ?? 'Unknown Group')
+            : (user?['name']?.toString() ?? 'Unknown User');
+
+        final otherUserAvatar = isGroup
+            ? (group?['photo_url']?.toString())
+            : (user?['photo_url']?.toString());
+
+        // ✅ EXTRACT BLOCKED FROM USER DATA
+        final isTheyBlockedMe = user?['is_blocked'] == true;
+        final isIBlockedThem = user?['is_blocked_by_auth_user'] == true;
+
+        print('🔒 Maru block  status: $isTheyBlockedMe');
+        print('🔒 Me aane block kryo status: $isIBlockedThem');
+        print('🔍 User data keys: ${user?.keys.toList()}');
+        // ✨ NEW: Extract chat request data from API response
+        String? chatRequestStatus;
+        String? chatRequestFrom;
+        String? chatRequestTo;
+        String? chatRequestId;
+        // ✅ BUILD GROUP DATA FROM API RESPONSE
+        ChatGroup? groupModel;
+        if (isGroup && group != null) {
+          try {
+            groupModel = ChatGroup.fromJson(group);
+            print(
+              '✅ Group data extracted: ${groupModel.name} with ${groupModel.members.length} members',
+            );
+          } catch (e) {
+            print('⚠️ Failed to parse group into ChatGroup: $e');
+            groupModel = null;
+          }
+        }
+        emit(
+          ChatLoaded(
+            messages: conversations,
+            otherUserId: otherUserId,
+            otherUserName: otherUserName,
+            otherUserAvatar: otherUserAvatar,
+            hasMore: _hasMore,
+            isGroup: isGroup,
+            commonGroupData: groupModel,
+            isIBlockedThem: isIBlockedThem,
+            isTheyBlockedMe: isTheyBlockedMe,
+              groupData:
+          ),
+        );
+      } else {
+        emit(ChatError(response.message ?? 'Failed to load messages'));
+      }
+    } catch (e) {
+      print('❌ Error loading messages: $e');
+      emit(ChatError('Failed to load messages: $e'));
+    }
+  }
+*/
+
+  Future<void> loadConversations(
+      int userId,
+      String otherUserId,
+      bool isGroup,
+      Conversation? initialConversationData, // ✨ NEW: Accept conversation data
+      ) async {
     try {
       emit(ChatLoading());
 
@@ -248,9 +370,31 @@ class ChatCubit extends Cubit<ChatState> {
         final isTheyBlockedMe = user?['is_blocked'] == true;
         final isIBlockedThem = user?['is_blocked_by_auth_user'] == true;
 
-        print('🔒 Maru block  status: $isTheyBlockedMe');
+        print('🔒 Maru block status: $isTheyBlockedMe');
         print('🔒 Me aane block kryo status: $isIBlockedThem');
         print('🔍 User data keys: ${user?.keys.toList()}');
+
+        // ✨ NEW: Extract chat request data from API response
+        String? chatRequestStatus;
+        String? chatRequestFrom;
+        String? chatRequestTo;
+        String? chatRequestId;
+
+        final rawConversations = response.data?.data.conversations ?? [];
+        if (rawConversations.isNotEmpty) {
+          final firstConv = rawConversations.first as Map<String, dynamic>?;
+          if (firstConv != null) {
+            chatRequestStatus = firstConv['chat_request_status']?.toString();
+            chatRequestFrom = firstConv['chat_request_from']?.toString();
+            chatRequestTo = firstConv['chat_request_to']?.toString();
+            chatRequestId = firstConv['chat_request_id']?.toString();
+
+            print('📨 Chat Request Status: $chatRequestStatus');
+            print('📨 Chat Request From: $chatRequestFrom');
+            print('📨 Chat Request To: $chatRequestTo');
+            print('📨 Chat Request ID: $chatRequestId');
+          }
+        }
 
         // ✅ BUILD GROUP DATA FROM API RESPONSE
         ChatGroup? groupModel;
@@ -265,6 +409,18 @@ class ChatCubit extends Cubit<ChatState> {
             groupModel = null;
           }
         }
+
+        // ✨ NEW: Update initial conversation data with loaded info
+        Conversation? updatedConversationData;
+        if (initialConversationData != null) {
+          updatedConversationData = initialConversationData.copyWith(
+            chatRequestStatus: chatRequestStatus ?? initialConversationData.chatRequestStatus,
+            chatRequestFrom: chatRequestFrom ?? initialConversationData.chatRequestFrom,
+            chatRequestTo: chatRequestTo ?? initialConversationData.chatRequestTo,
+            chatRequestId: chatRequestId ?? initialConversationData.chatRequestId,
+          );
+        }
+
         emit(
           ChatLoaded(
             messages: conversations,
@@ -273,9 +429,10 @@ class ChatCubit extends Cubit<ChatState> {
             otherUserAvatar: otherUserAvatar,
             hasMore: _hasMore,
             isGroup: isGroup,
-            groupData: groupModel,
+            commonGroupData: groupModel,
             isIBlockedThem: isIBlockedThem,
             isTheyBlockedMe: isTheyBlockedMe,
+            groupData: updatedConversationData, // ✅ Pass updated conversation data
           ),
         );
       } else {
@@ -286,7 +443,6 @@ class ChatCubit extends Cubit<ChatState> {
       emit(ChatError('Failed to load messages: $e'));
     }
   }
-
   Future<void> loadMoreMessages() async {
     if (_isLoadingMore || !_hasMore || _otherUserId == null || _isGroup == null)
       return;

@@ -28,12 +28,9 @@ import 'package:chewie/chewie.dart';
 import 'package:pdfx/pdfx.dart';
 import 'package:dio/dio.dart';
 import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:video_thumbnail/video_thumbnail.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:hsc_chat/cores/utils/gallery_helper.dart';
 import 'package:hsc_chat/feature/home/view/_audio_player_inline.dart';
-
-// Use MessageKind and kind() defined in the model (message_model.dart)
 
 class ChatScreen extends StatefulWidget {
   final String userId;
@@ -66,7 +63,9 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isTyping = false;
   String? _attachedFilePath;
   int? _attachedFileType;
-
+  //   Track chat request action loading state
+  bool _isAcceptLoading = false;
+  bool _isDeclineLoading = false;
   // Download/caching & playback helpers
   final Map<String, CancelToken> _downloadTokens = {};
   final Map<String, double> _downloadProgress = {};
@@ -200,6 +199,7 @@ class _ChatScreenState extends State<ChatScreen>
       currentUserId,
       widget.userId,
       widget.isGroup,
+      widget.groupData,
     );
   }
 
@@ -536,11 +536,302 @@ class _ChatScreenState extends State<ChatScreen>
         appBar: _buildAppBar(),
         body: Column(
           children: [
-            Expanded(child: _buildMessagesList()),
+            Expanded(child: _buildMessagesWithOverlay()),
             _buildMessageInput(),
           ],
         ),
       ),
+    );
+  }
+
+  Future<void> _handleAcceptRequest(Conversation? conversationData) async {
+    final requestId = conversationData?.chatRequestId;
+
+    if (requestId == null || requestId.isEmpty) {
+      showCustomSnackBar(
+        context,
+        'Invalid request ID',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+
+    setState(() => _isAcceptLoading = true);
+
+    try {
+      final success = await context.read<ConversationCubit>().acceptChatRequest(
+        requestId,
+      );
+
+      if (!mounted) return;
+
+      if (success) {
+        // Reload conversations to get fresh data
+        await context.read<ChatCubit>().loadConversations(
+          SharedPreferencesHelper.getCurrentUserId(),
+          widget.userId,
+          widget.isGroup,
+          widget.groupData, // ✅ Pass conversation data
+        );
+
+        showCustomSnackBar(
+          context,
+          'Chat request accepted',
+          type: SnackBarType.success,
+        );
+      } else {
+        showCustomSnackBar(
+          context,
+          'Failed to accept chat request',
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isAcceptLoading = false);
+      }
+    }
+  }
+
+  Future<void> _handleDeclineRequest(Conversation? conversationData) async {
+    final requestId = conversationData?.chatRequestId;
+
+    if (requestId == null || requestId.isEmpty) {
+      showCustomSnackBar(
+        context,
+        'Invalid request ID',
+        type: SnackBarType.error,
+      );
+      return;
+    }
+
+    // Show confirmation dialog
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Decline Chat Request'),
+        content: Text(
+          'Are you sure you want to decline the chat request from ${widget.userName}?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Decline', style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+
+    setState(() => _isDeclineLoading = true);
+
+    try {
+      final success = await context
+          .read<ConversationCubit>()
+          .declineChatRequest(requestId);
+
+      if (!mounted) return;
+
+      if (success) {
+        showCustomSnackBar(
+          context,
+          'Chat request declined',
+          type: SnackBarType.info,
+        );
+
+        // Navigate back after declining
+        Navigator.pop(context);
+      } else {
+        showCustomSnackBar(
+          context,
+          'Failed to decline chat request',
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isDeclineLoading = false);
+      }
+    }
+  }
+
+  //  Wrap messages list with chat request overlay
+  Widget _buildMessagesWithOverlay() {
+    return BlocBuilder<ChatCubit, ChatState>(
+      builder: (context, state) {
+        //  Get chat request data from loaded state's groupData (Conversation object)
+        final conversationData = state is ChatLoaded
+            ? state.groupData
+            : widget.groupData;
+
+        final chatRequestStatus = conversationData?.chatRequestStatus;
+        final chatRequestTo = conversationData?.chatRequestTo;
+
+        final currentUserId = SharedPreferencesHelper.getCurrentUserId();
+
+        // Parse chatRequestTo to int for comparison
+        final chatRequestToInt = chatRequestTo != null
+            ? int.tryParse(chatRequestTo)
+            : null;
+
+        final shouldShowOverlay =
+            chatRequestStatus == 'pending' && chatRequestToInt == currentUserId;
+
+        print('👁️ Should show overlay: $shouldShowOverlay');
+        print('📋 Chat Request Status: $chatRequestStatus');
+        print('📋 Chat Request To: $chatRequestTo (parsed: $chatRequestToInt)');
+        print('📋 Current User ID: $currentUserId');
+        print('📋 Conversation Data: $conversationData');
+
+        return Stack(
+          children: [
+            // Messages list
+            _buildMessagesList(),
+
+            //  Chat request overlay
+            if (shouldShowOverlay)
+              Positioned.fill(
+                child: Container(
+                  color: Colors.black.withOpacity(0.7),
+                  child: Center(
+                    child: Card(
+                      margin: const EdgeInsets.all(24),
+                      elevation: 8,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: Padding(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              Icons.mark_email_unread,
+                              size: 48,
+                              color: AppClr.primaryColor,
+                            ),
+                            const SizedBox(height: 16),
+                            Text(
+                              'Chat Request',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: AppClr.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Text(
+                              '${widget.userName} wants to start a conversation with you.',
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[700],
+                              ),
+                            ),
+                            const SizedBox(height: 24),
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                              children: [
+                                Expanded(
+                                  child: OutlinedButton(
+                                    onPressed: _isDeclineLoading
+                                        ? null
+                                        : () => _handleDeclineRequest(
+                                            conversationData,
+                                          ),
+                                    style: OutlinedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      side: BorderSide(color: Colors.red),
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: _isDeclineLoading
+                                        ? SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.red,
+                                                  ),
+                                            ),
+                                          )
+                                        : Text(
+                                            'Decline',
+                                            style: TextStyle(
+                                              color: Colors.red,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                                const SizedBox(width: 16),
+                                Expanded(
+                                  child: ElevatedButton(
+                                    onPressed: _isAcceptLoading
+                                        ? null
+                                        : () => _handleAcceptRequest(
+                                            conversationData,
+                                          ),
+                                    style: ElevatedButton.styleFrom(
+                                      padding: const EdgeInsets.symmetric(
+                                        vertical: 12,
+                                      ),
+                                      backgroundColor: AppClr.primaryColor,
+                                      shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                      ),
+                                    ),
+                                    child: _isAcceptLoading
+                                        ? const SizedBox(
+                                            width: 20,
+                                            height: 20,
+                                            child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              valueColor:
+                                                  AlwaysStoppedAnimation<Color>(
+                                                    Colors.white,
+                                                  ),
+                                            ),
+                                          )
+                                        : const Text(
+                                            'Accept',
+                                            style: TextStyle(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                          ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+          ],
+        );
+      },
     );
   }
 
@@ -651,14 +942,10 @@ class _ChatScreenState extends State<ChatScreen>
             }
           },
           itemBuilder: (context) => [
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'info',
               child: Row(
-                children: [
-                  Icon(Icons.person_outline, color: AppClr.black),
-                  SizedBox(width: 8),
-                  Text('User Info'),
-                ],
+                children: [Text(widget.isGroup ? 'Group Info' : 'User Info')],
               ),
             ),
           ],
@@ -679,7 +966,7 @@ class _ChatScreenState extends State<ChatScreen>
         ? state.isTheyBlockedMe
         : false;
     // state.groupData is already a ChatGroup? (typed in ChatLoaded)
-    final groupModel = (state is ChatLoaded) ? state.groupData : null;
+    final groupModel = (state is ChatLoaded) ? state.commonGroupData : null;
 
     print('ℹ️ Opening user info for $groupModel');
     Navigator.of(context).push(
@@ -806,8 +1093,8 @@ class _ChatScreenState extends State<ChatScreen>
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
     if (message.replyMessage != null) {
-    _debugReplyMessage(message);
-  }
+      _debugReplyMessage(message);
+    }
     // If it's a SYSTEM message render it as a standalone centered blue bubble
     if (kind == MessageKind.SYSTEM) {
       final maxWidth = MediaQuery.of(context).size.width * 0.85;
@@ -2920,8 +3207,8 @@ class _ChatScreenState extends State<ChatScreen>
     final m = reg.firstMatch(html);
     return m?.group(1);
   }
-// DEBUGGING: Add this method to help identify the issue
-// ============================================================================
+  // DEBUGGING: Add this method to help identify the issue
+  // ============================================================================
 
   void _debugReplyMessage(Message message) {
     if (message.replyMessage != null) {
@@ -2930,11 +3217,14 @@ class _ChatScreenState extends State<ChatScreen>
       print('  Current Message Text: ${_parseMessage(message.message)}');
       print('  Reply To ID: ${message.replyTo}');
       print('  Reply Message ID: ${message.replyMessage!.id}');
-      print('  Reply Message Text: ${_parseMessage(message.replyMessage!.message)}');
+      print(
+        '  Reply Message Text: ${_parseMessage(message.replyMessage!.message)}',
+      );
       print('  Reply Sender Name: ${message.replyMessage!.sender.name}');
       print('  Reply isSentByMe: ${message.replyMessage!.isSentByMe}');
     }
   }
+
   Widget _buildReplyMessage(Message replyMessage) {
     // Get the display name based on context
     String displayName;
@@ -2958,9 +3248,7 @@ class _ChatScreenState extends State<ChatScreen>
       decoration: BoxDecoration(
         color: Colors.black.withValues(alpha: 0.1),
         borderRadius: BorderRadius.circular(8),
-        border: Border(
-          left: BorderSide(color: AppClr.primaryColor, width: 3),
-        ),
+        border: Border(left: BorderSide(color: AppClr.primaryColor, width: 3)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3025,6 +3313,257 @@ class _ChatScreenState extends State<ChatScreen>
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
+  Widget _buildMessageInput() {
+    return BlocBuilder<ChatCubit, ChatState>(
+      builder: (context, state) {
+        // Check if blocked OR if chat request is pending
+        final isBlocked =
+            state is ChatLoaded &&
+            (state.isIBlockedThem || state.isTheyBlockedMe);
+
+        final isPendingRequest =
+            state is ChatLoaded &&
+            state.groupData?.chatRequestStatus == 'pending';
+        final isDeclineRequest =
+            state is ChatLoaded &&
+            state.groupData?.chatRequestStatus == 'declined';
+
+        //  Show different messages based on state
+        if (isBlocked) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Center(
+              child: Text(
+                'Messaging disabled – this user is blocked',
+                style: TextStyle(color: Colors.grey[600]),
+              ),
+            ),
+          );
+        }
+        if (isPendingRequest) {
+          final isRecipient =
+              state.groupData?.chatRequestTo ==
+              SharedPreferencesHelper.getCurrentUserId().toString();
+
+          return Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Center(
+              child: Text(
+                isRecipient
+                    ? 'Accept the chat request to start messaging'
+                    : 'Waiting for ${widget.userName} to accept your request',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          );
+        }
+        if (isDeclineRequest) {
+          return Container(
+            padding: const EdgeInsets.all(12),
+            color: Colors.white,
+            child: Center(
+              child: Text(
+                'Chat request has been declined',
+                style: TextStyle(
+                  color: Colors.grey[600],
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+            ),
+          );
+        }
+
+        // Normal message input (existing code)
+        final cubit = context.read<ChatCubit>();
+        final replyingTo = cubit.replyingToMessage;
+        final editing = cubit.editingMessage;
+
+        return Container(
+          decoration: BoxDecoration(
+            color: Colors.white,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.05),
+                blurRadius: 4,
+                offset: const Offset(0, -2),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Reply/Edit indicator
+              if (replyingTo != null || editing != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey[100],
+                    border: Border(
+                      bottom: BorderSide(color: Colors.grey[300]!),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        editing != null ? Icons.edit : Icons.reply,
+                        size: 20,
+                        color: AppClr.primaryColor,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              editing != null
+                                  ? 'Edit message'
+                                  : 'Replying to ${replyingTo!.sender.name}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: AppClr.primaryColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              _parseMessage(
+                                editing?.message ?? replyingTo!.message,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: Colors.grey[600],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, size: 20),
+                        onPressed: () {
+                          cubit.clearReplyEditMode();
+                          _messageController.clear();
+                        },
+                        padding: EdgeInsets.zero,
+                        constraints: const BoxConstraints(),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Message input area
+              SafeArea(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 8,
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: Container(
+                          constraints: const BoxConstraints(maxHeight: 100),
+                          decoration: BoxDecoration(
+                            color: Colors.grey[100],
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          child: TextField(
+                            controller: _messageController,
+                            focusNode: _focusNode,
+                            onChanged: (value) => _onTyping(),
+                            decoration: InputDecoration(
+                              hintText: editing != null
+                                  ? 'Edit message...'
+                                  : 'Type a message...',
+                              hintStyle: TextStyle(color: Colors.grey[500]),
+                              border: InputBorder.none,
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 12,
+                              ),
+                            ),
+                            maxLines: null,
+                            textInputAction: TextInputAction.send,
+                            onSubmitted: (value) => _handleSendOrEdit(),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+
+                      // Show attach button only when not editing
+                      if (editing == null && _attachedFilePath == null) ...[
+                        IconButton(
+                          icon: const Icon(
+                            Icons.attach_file,
+                            color: Colors.grey,
+                          ),
+                          onPressed: _openFilePicker,
+                        ),
+                      ] else if (_attachedFilePath != null) ...[
+                        GestureDetector(
+                          onTap: () {
+                            setState(() {
+                              _attachedFilePath = null;
+                              _attachedFileType = null;
+                            });
+                          },
+                          child: Container(
+                            width: 44,
+                            height: 44,
+                            decoration: BoxDecoration(
+                              color: Colors.grey[200],
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Center(
+                              child: _attachedFileType == 1
+                                  ? const Icon(Icons.image, size: 20)
+                                  : (_attachedFileType == 2
+                                        ? const Icon(Icons.videocam, size: 20)
+                                        : const Icon(
+                                            Icons.insert_drive_file,
+                                            size: 20,
+                                          )),
+                            ),
+                          ),
+                        ),
+                      ],
+
+                      const SizedBox(width: 8),
+                      Container(
+                        decoration: BoxDecoration(
+                          color: AppClr.primaryColor,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            editing != null ? Icons.check : Icons.send,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                          onPressed: _handleSendOrEdit,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  /*
   Widget _buildMessageInput() {
     return BlocBuilder<ChatCubit, ChatState>(
       builder: (context, state) {
@@ -3213,6 +3752,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
   // attachment UI removed - only text messages supported
   Future<void> _handleSendOrEdit() async {
     // ✅ Prevent double submission
@@ -3302,7 +3842,9 @@ class _ChatScreenState extends State<ChatScreen>
         _isSending = false;
       });
     }
-  }  @override
+  }
+
+  @override
   bool get wantKeepAlive => true;
 
   String _fingerprint(Message m) {
@@ -3675,7 +4217,7 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-/*
+  /*
   // Show actions for a message (Delete for me / Delete for everyone)
   void _showMessageActions(Message message) {
     final isSender = message.isSentByMe;
@@ -3917,7 +4459,11 @@ class _ChatScreenState extends State<ChatScreen>
                         type: SnackBarType.success,
                       );
                     } else {
-                      showCustomSnackBar(context, err, type: SnackBarType.error);
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
                     }
                   },
                 ),
@@ -3961,7 +4507,11 @@ class _ChatScreenState extends State<ChatScreen>
                         type: SnackBarType.success,
                       );
                     } else {
-                      showCustomSnackBar(context, err, type: SnackBarType.error);
+                      showCustomSnackBar(
+                        context,
+                        err,
+                        type: SnackBarType.error,
+                      );
                     }
                   },
                 ),
@@ -3978,7 +4528,8 @@ class _ChatScreenState extends State<ChatScreen>
         );
       },
     );
-  }  // Find previous message id in current loaded messages; returns null if none
+  } // Find previous message id in current loaded messages; returns null if none
+
   String? _findPreviousMessageId(String messageId) {
     final state = context.read<ChatCubit>().state;
     if (state is! ChatLoaded) return null;

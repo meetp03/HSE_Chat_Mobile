@@ -137,6 +137,79 @@ class ConversationCubit extends Cubit<ConversationState> {
     }
   }
 
+  //  Accept chat request
+  Future<bool> acceptChatRequest(String requestId) async {
+    try {
+      print('📨 Accepting chat request: $requestId');
+
+      final resp = await _repo.acceptChatRequest(requestId: requestId);
+
+      if (!resp.success) {
+        print('❌ Accept request API failed: ${resp.message}');
+        return false;
+      }
+
+      // Update conversation locally
+      _allConversations = _allConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'accepted');
+        }
+        return c;
+      }).toList();
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'accepted');
+        }
+        return c;
+      }).toList();
+
+      _emitUnifiedLoadedState();
+      print('✅ Chat request accepted locally');
+      return true;
+    } catch (e) {
+      print('❌ Error accepting chat request: $e');
+      return false;
+    }
+  }
+
+  //   Decline chat request
+  Future<bool> declineChatRequest(String requestId) async {
+    try {
+      print('📨 Declining chat request: $requestId');
+
+      final resp = await _repo.declineChatRequest(requestId: requestId);
+
+      if (!resp.success) {
+        print('❌ Decline request API failed: ${resp.message}');
+        return false;
+      }
+
+      // Update conversation locally
+      _allConversations = _allConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'declined');
+        }
+        return c;
+      }).toList();
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'declined');
+        }
+        return c;
+      }).toList();
+
+      _emitUnifiedLoadedState();
+      print('✅ Chat request declined locally');
+      return true;
+    } catch (e) {
+      print('❌ Error declining chat request: $e');
+      return false;
+    }
+  }
+
+
   Future<void> loadMore() async {
     if (_hasMore && !_isLoadingMore) {
       await loadConversations(refresh: false);
@@ -374,7 +447,17 @@ class ConversationCubit extends Cubit<ConversationState> {
     // GROUP 3: CONVERSATION ACTIONS
     // ══════════════════════════════════════════════════════════════
       case 'chat_request':
-      case 'existing_chat':
+        _handleChatRequest(data);
+        break;
+
+      case 'chat_request_accepted':
+        _handleChatRequestAccepted(data);
+        break;
+
+      case 'chat_request_declined':
+        _handleChatRequestDeclined(data);
+        break;
+
       case 'new_conversation':
         _handleConversationEvent(data);
         break;
@@ -385,6 +468,130 @@ class ConversationCubit extends Cubit<ConversationState> {
       default:
         print('ℹ️ Unhandled action: $action');
         break;
+    }
+  }
+  //   Handle new chat request
+  void _handleChatRequest(dynamic payload) {
+    try {
+      print('📨 Processing chat_request event');
+
+      final conv = _extractConversationFromPayload(payload);
+      if (conv == null) {
+        print('❌ Failed to extract conversation from chat_request');
+        return;
+      }
+
+      // Only increment badge if we're the recipient
+      if (conv.chatRequestTo == _currentUserId.toString()) {
+        // Add or update conversation
+        final existingIndex = _allConversations.indexWhere(
+              (c) => (c.isGroup ? c.groupId == conv.groupId : c.id == conv.id),
+        );
+
+        if (existingIndex >= 0) {
+          _allConversations[existingIndex] = conv;
+        } else {
+          _allConversations.insert(0, conv);
+        }
+
+        _emitUnifiedLoadedState();
+        print('✅ Chat request added to conversations');
+      }
+    } catch (e) {
+      print('❌ Error handling chat_request: $e');
+    }
+  }
+
+  //  Handle chat request accepted
+  void _handleChatRequestAccepted(dynamic payload) {
+    try {
+      print('✅ Processing chat_request_accepted event');
+
+      final requestId = payload['chat_request_id']?.toString() ??
+          payload['id']?.toString();
+
+      if (requestId == null) {
+        print('❌ No request ID in accepted payload');
+        return;
+      }
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          changed = true;
+          return c.copyWith(chatRequestStatus: 'accepted');
+        }
+        return c;
+      }).toList();
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'accepted');
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Chat request marked as accepted');
+      }
+    } catch (e) {
+      print('❌ Error handling chat_request_accepted: $e');
+    }
+  }
+
+  //   Handle chat request declined
+  void _handleChatRequestDeclined(dynamic payload) {
+    try {
+      print('📛 Processing chat_request_declined event');
+
+      final requestId = payload['chat_request_id']?.toString() ??
+          payload['id']?.toString();
+
+      if (requestId == null) {
+        print('❌ No request ID in declined payload');
+        return;
+      }
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          changed = true;
+          return c.copyWith(chatRequestStatus: 'declined');
+        }
+        return c;
+      }).toList();
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.chatRequestId == requestId) {
+          return c.copyWith(chatRequestStatus: 'declined');
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Chat request marked as declined');
+      }
+    } catch (e) {
+      print('❌ Error handling chat_request_declined: $e');
+    }
+  }
+
+  // HELPER: Extract conversation from various payload shapes
+  Conversation? _extractConversationFromPayload(dynamic payload) {
+    try {
+      if (payload is! Map<String, dynamic>) return null;
+
+      final conv = payload['conversation'] ?? payload;
+      if (conv is! Map<String, dynamic>) return null;
+
+      return Conversation.fromJson(conv);
+    } catch (e) {
+      print('❌ Error extracting conversation: $e');
+      return null;
     }
   }
 

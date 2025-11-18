@@ -19,12 +19,95 @@ abstract class IConversationRepository {
   Future<ApiResponse<dynamic>> deleteConversation({
     required String conversationId,
   });
+
+  //   Chat request methods
+  Future<ApiResponse<dynamic>> acceptChatRequest({
+    required String requestId,
+  });
+
+  Future<ApiResponse<dynamic>> declineChatRequest({
+    required String requestId,
+  });
 }
+
+
 
 class ConversationRepository implements IConversationRepository {
   final DioClient _dio;
 
   const ConversationRepository(this._dio);
+
+  //   Accept chat request
+  @override
+  Future<ApiResponse<dynamic>> acceptChatRequest({
+    required String requestId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/accept-chat-request';
+      final response = await _dio.post(
+        path,
+        data: {'id': requestId},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>?;
+        if (data != null && data['success'] == true) {
+          return ApiResponse.success(
+            data,
+            message: data['message']?.toString() ?? 'Chat request accepted',
+          );
+        }
+        return ApiResponse.error(
+          data?['message']?.toString() ?? 'Failed to accept chat request',
+        );
+      }
+
+      return ApiResponse.error(
+        'Accept failed with status: ${response.statusCode}',
+      );
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse.error(networkException.message);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
+
+  //  Decline chat request
+  @override
+  Future<ApiResponse<dynamic>> declineChatRequest({
+    required String requestId,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/decline-chat-request';
+      final response = await _dio.post(
+        path,
+        data: {'id': requestId},
+      );
+
+      if (response.statusCode == 200 || response.statusCode == 201) {
+        final data = response.data as Map<String, dynamic>?;
+        if (data != null && data['success'] == true) {
+          return ApiResponse.success(
+            data,
+            message: data['message']?.toString() ?? 'Chat request declined',
+          );
+        }
+        return ApiResponse.error(
+          data?['message']?.toString() ?? 'Failed to decline chat request',
+        );
+      }
+
+      return ApiResponse.error(
+        'Decline failed with status: ${response.statusCode}',
+      );
+    } on DioException catch (e) {
+      final networkException = NetworkExceptions.getDioException(e);
+      return ApiResponse.error(networkException.message);
+    } catch (e) {
+      return ApiResponse.error('Unexpected error: $e');
+    }
+  }
 
   @override
   Future<ApiResponse<ConversationResponse>> getConversations({

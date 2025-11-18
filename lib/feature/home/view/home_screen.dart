@@ -185,16 +185,7 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-                Container(
-                  width: 8,
-                  height: 8,
-                  decoration: BoxDecoration(
-                    color: SocketService().isConnected
-                        ? Colors.green
-                        : Colors.red,
-                    shape: BoxShape.circle,
-                  ),
-                ),
+
               ],
             ),
             actions: [
@@ -602,6 +593,211 @@ class _HomeScreenState extends State<HomeScreen>
       contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       leading: CircleAvatar(
         radius: 25,
+        backgroundColor: AppClr.primaryColor.withAlpha(25),
+        backgroundImage: conv.avatarUrl != null
+            ? CachedNetworkImageProvider(conv.avatarUrl!)
+            : null,
+        child: conv.avatarUrl == null
+            ? Text(
+                Utils.getInitials(conv.title),
+                style: TextStyle(
+                  color: AppClr.primaryColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              )
+            : null,
+      ),
+      title: Row(
+        children: [
+          Expanded(
+            child: Text(
+              conv.title,
+              style: TextStyle(
+                fontWeight: conv.isUnread ? FontWeight.w600 : FontWeight.w500,
+                fontSize: 16,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          // Show "Request" badge if pending
+          if (conv.chatRequestStatus == 'pending' &&
+              (conv.chatRequestTo ==
+                  SharedPreferencesHelper.getCurrentUserId().toString()))
+            Container(
+              margin: const EdgeInsets.only(left: 6),
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade100,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.orange.shade300),
+              ),
+              child: Text(
+                'Request',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.orange.shade800,
+                ),
+              ),
+            ),
+          if (conv.unreadCount > 0 && conv.chatRequestStatus != 'pending')
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: AppClr.primaryColor,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Text(
+                conv.unreadCount.toString(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ),
+        ],
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Text(
+            conv.lastMessage.isNotEmpty ? conv.lastMessage : 'No messages',
+            style: TextStyle(
+              color: conv.isUnread ? Colors.black87 : Colors.grey[600],
+              fontWeight: conv.isUnread ? FontWeight.w500 : FontWeight.normal,
+              fontSize: 14,
+            ),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Row(
+            children: [
+              Text(
+                conv.formattedTime,
+                style: const TextStyle(color: Colors.grey, fontSize: 12),
+              ),
+            ],
+          ),
+        ],
+      ),
+      trailing: PopupMenuButton<String>(
+        onSelected: (value) async {
+          if (value == 'delete') {
+            final confirmed = await showDialog<bool>(
+              context: context,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Delete Conversation'),
+                content: const Text(
+                  'Are you sure you want to delete this conversation?',
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, false),
+                    child: const Text('Cancel'),
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.pop(ctx, true),
+                    child: const Text(
+                      'Delete',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                  ),
+                ],
+              ),
+            );
+
+            if (confirmed == true) {
+              final convId = conv.isGroup ? (conv.groupId ?? '') : conv.id;
+              final ok = await context
+                  .read<ConversationCubit>()
+                  .deleteConversation(convId);
+              if (ok) {
+                showCustomSnackBar(
+                  context,
+                  'Conversation deleted',
+                  type: SnackBarType.success,
+                );
+              } else {
+                showCustomSnackBar(
+                  context,
+                  'Failed to delete conversation',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          }
+        },
+        itemBuilder: (_) => [
+          const PopupMenuItem(
+            value: 'delete',
+            child: Text(
+              'Delete Conversation',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+      onTap: () {
+        print('🎯 Opening chat: ${conv.title}');
+        print('📋 Conversation ID: ${conv.id}');
+        print('👥 Is Group: ${conv.isGroup}');
+        print('🆔 Group ID: ${conv.groupId}');
+        print('👤 User ID: ${conv.id}');
+
+        final chatId = conv.groupId;
+
+        if (chatId!.isEmpty) {
+          print('❌ Error: Invalid chat ID');
+          showCustomSnackBar(
+            context,
+            'Cannot open chat: Invalid ID',
+            type: SnackBarType.error,
+          );
+          return;
+        }
+
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => BlocProvider(
+              create: (context) => ChatCubit(
+                chatRepository: ChatRepository(DioClient()),
+                socketService: SocketService(),
+              ),
+              child: ChatScreen(
+                userId: conv.id,
+                userName: conv.title,
+                userEmail: conv.email,
+                userAvatar: conv.avatarUrl,
+                isGroup: conv.isGroup,
+                groupData: conv,
+              ),
+            ),
+          ),
+        ).then((result) {
+          if (result != null) {
+            try {
+              context.read<ConversationCubit>().processRawMessage(result);
+            } catch (e) {
+              print('⚠️ Failed to process returned message: $e');
+            }
+          }
+        });
+      },
+    );
+  }
+
+  /*
+  Widget _buildChatItem(Conversation conv) {
+    return ListTile(
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      leading: CircleAvatar(
+        radius: 25,
         // Subtle tint using primary color with low opacity
         backgroundColor: AppClr.primaryColor.withAlpha(25),
         backgroundImage: conv.avatarUrl != null
@@ -759,6 +955,7 @@ class _HomeScreenState extends State<HomeScreen>
      },
     );
   }
+*/
 }
 
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {

@@ -122,6 +122,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               const SizedBox(height: 16),
               Text(
                 widget.userName,
+                textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 20,
                   fontWeight: FontWeight.bold,
@@ -926,7 +927,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               await conversationCubit.refreshUnread();
             } catch (e) {
               // ignore errors here but log if needed
-              print('⚠️ Failed to refresh conversations after removeMember: $e');
+              print(
+                '⚠️ Failed to refresh conversations after removeMember: $e',
+              );
             }
 
             // Navigate back to home (first route)
