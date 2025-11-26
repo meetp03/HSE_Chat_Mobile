@@ -10,7 +10,7 @@ class GroupInitial extends GroupState {}
 // User selection states with pagination & search
 class GroupUsersLoading extends GroupState {}
 class GroupUsersLoaded extends GroupState {
-  final List<UserModel> users;
+  final List<ContactModel> users;
   final bool hasMore;
   final bool isLoadingMore;
   final String currentQuery;
@@ -23,7 +23,7 @@ class GroupUsersLoaded extends GroupState {
   });
 
   GroupUsersLoaded copyWith({
-    List<UserModel>? users,
+    List<ContactModel>? users,
     bool? hasMore,
     bool? isLoadingMore,
     String? currentQuery,

@@ -518,7 +518,9 @@ class _ChatScreenState extends State<ChatScreen>
                 'message_type': last.messageType,
                 'file_url': last.fileUrl,
                 'file_name': last.fileName,
-                'group_id': widget.isGroup ? widget.userId : null,
+                'group_id': widget.isGroup
+                    ? widget.groupData?.groupId
+                    : null,
               },
             };
             context.read<ConversationCubit>().processRawMessage(payload);
@@ -869,7 +871,7 @@ class _ChatScreenState extends State<ChatScreen>
                   'message_type': last.messageType,
                   'file_url': last.fileUrl,
                   'file_name': last.fileName,
-                  'group_id': widget.isGroup ? widget.userId : null,
+                  'group_id': widget.isGroup ? widget.groupData?.groupId : null,
                 },
               };
               context.read<ConversationCubit>().processRawMessage(payload);
@@ -3335,7 +3337,7 @@ class _ChatScreenState extends State<ChatScreen>
             color: Colors.white,
             child: Center(
               child: Text(
-                'Messaging disabled – this user is blocked',
+                state.isIBlockedThem ? 'Messaging disabled – this user is blocked' : 'Messaging disabled – you are blocked by this user',
                 style: TextStyle(color: Colors.grey[600]),
               ),
             ),

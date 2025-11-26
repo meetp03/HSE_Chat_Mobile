@@ -3,12 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/feature/home/bloc/notification_cubit.dart';
 import 'package:hsc_chat/feature/home/repository/notification_repository.dart';
-import 'package:hsc_chat/cores/utils/snackbar.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
+ import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:intl/intl.dart';
 
 class NotificationsScreen extends StatelessWidget {
-  const NotificationsScreen({Key? key}) : super(key: key);
+  const NotificationsScreen({super.key});
 
   @override
   Widget build(BuildContext context) {

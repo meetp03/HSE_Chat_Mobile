@@ -8,6 +8,8 @@ import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 
+import '../../../cores/utils/shared_preferences.dart';
+
 class CreateGroupScreen extends StatefulWidget {
   final List<int> selectedUserIds;
 
@@ -59,10 +61,13 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         );
         return;
       }
+      // Get current user ID and include it in members
+      final currentUserId = SharedPreferencesHelper.getCurrentUserId();
+      final allMembers = [...widget.selectedUserIds, currentUserId];
 
       context.read<GroupCubit>().createGroup(
         name: _nameController.text.trim(),
-        members: widget.selectedUserIds,
+        members: allMembers,
         description: _descriptionController.text.trim(),
         photoPath: _selectedImagePath,
       );
@@ -107,145 +112,158 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
           padding: const EdgeInsets.all(16.0),
           child: Form(
             key: _formKey,
-            child: Column(
-              children: [
-                // Group Image
-                GestureDetector(
-                  onTap: _pickImage,
-                  child: Container(
-                    padding: const EdgeInsets.all(3),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(color: AppClr.primaryColor, width: 2),
-                    ),
-                    child: CircleAvatar(
-                      radius: 50,
-                      backgroundColor: Colors.grey.shade200,
-                      backgroundImage: _selectedImagePath != null
-                          ? FileImage(File(_selectedImagePath!))
-                          : null,
-                      child: _selectedImagePath == null
-                          ? const Icon(
-                              Icons.camera_alt,
-                              size: 40,
-                              color: Colors.grey,
-                            )
-                          : null,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 20),
-
-                // Group Name
-                TextFormField(
-                  controller: _nameController,
-                  decoration: InputDecoration(
-                    labelText: 'Channel Name',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(color: Colors.grey, width: 1.5),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: BorderSide(
-                        color: AppClr.primaryColor,
-                        width: 2.0,
-                      ),
-                    ),
-                  ),
-                  validator: (value) {
-                    if (value == null || value.trim().isEmpty) {
-                      return 'Please enter channel name';
-                    }
-                    return null;
-                  },
-                ),
-                const SizedBox(height: 16),
-
-                // Description
-                TextFormField(
-                  controller: _descriptionController,
-
-                  decoration: InputDecoration(
-                    labelText: 'Description (Optional)',
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    enabledBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: Colors.grey,
-                        width: 1.5,
-                      ),
-                    ),
-                    focusedBorder: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
-                      borderSide: const BorderSide(
-                        color: AppClr.primaryColor,
-                        width: 2.0,
-                      ),
-                    ),
-                  ),
-                  maxLines: 3,
-                ),
-                const SizedBox(height: 16),
-
-                // Selected Users Count
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 10,
-                  ),
-                  decoration: BoxDecoration(
-                    color: AppClr.primaryColor.withValues(
-                      alpha: 0.15,
-                    ), // light green transparent background
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: AppClr.primaryColor, width: 1),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.max,
-                    children: [
-                      Icon(Icons.people, color: AppClr.primaryColor, size: 20),
-                      const SizedBox(width: 8),
-                      Text(
-                        'Selected Users: ${widget.selectedUserIds.length}',
-                        style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.green,
+            child: SingleChildScrollView(
+              // Added SingleChildScrollView
+              child: Column(
+                children: [
+                  // Group Image
+                  GestureDetector(
+                    onTap: _pickImage,
+                    child: Container(
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: AppClr.primaryColor,
+                          width: 2,
                         ),
                       ),
-                    ],
+                      child: CircleAvatar(
+                        radius: 50,
+                        backgroundColor: Colors.grey.shade200,
+                        backgroundImage: _selectedImagePath != null
+                            ? FileImage(File(_selectedImagePath!))
+                            : null,
+                        child: _selectedImagePath == null
+                            ? const Icon(
+                                Icons.camera_alt,
+                                size: 40,
+                                color: Colors.grey,
+                              )
+                            : null,
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 20),
-                Spacer(),
-                // Create Button
-                BlocBuilder<GroupCubit, GroupState>(
-                  builder: (context, state) {
-                    if (state is GroupCreating) {
-                      return const CircularProgressIndicator();
-                    }
+                  const SizedBox(height: 20),
 
-                    return ElevatedButton(
-                      onPressed: _createGroup,
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppClr.primaryColor,
-                        foregroundColor: Colors.white,
-                        minimumSize: const Size(double.infinity, 50),
+                  // Group Name
+                  TextFormField(
+                    controller: _nameController,
+                    decoration: InputDecoration(
+                      labelText: 'Channel Name',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Text(
-                        'Create Channel',
-                        style: TextStyle(fontSize: 16),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey, width: 1.5),
                       ),
-                    );
-                  },
-                ),
-              ],
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(
+                          color: AppClr.primaryColor,
+                          width: 2.0,
+                        ),
+                      ),
+                    ),
+                    validator: (value) {
+                      if (value == null || value.trim().isEmpty) {
+                        return 'Please enter channel name';
+                      }
+                      return null;
+                    },
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Description
+                  TextFormField(
+                    controller: _descriptionController,
+                    decoration: InputDecoration(
+                      labelText: 'Description (Optional)',
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: Colors.grey,
+                          width: 1.5,
+                        ),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(
+                          color: AppClr.primaryColor,
+                          width: 2.0,
+                        ),
+                      ),
+                    ),
+                    maxLines: 3,
+                  ),
+                  const SizedBox(height: 16),
+
+                  // Selected Users Count
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    decoration: BoxDecoration(
+                      color: AppClr.primaryColor.withOpacity(
+                        0.15,
+                      ), // Fixed: use withOpacity instead of withValues
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppClr.primaryColor, width: 1),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.max,
+                      children: [
+                        Icon(
+                          Icons.people,
+                          color: AppClr.primaryColor,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Selected Users: ${widget.selectedUserIds.length}',
+                          style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: AppClr
+                                .primaryColor, // Fixed: use AppClr.primaryColor instead of Colors.green
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 100),
+
+                  // Create Button
+                  BlocBuilder<GroupCubit, GroupState>(
+                    builder: (context, state) {
+                      if (state is GroupCreating) {
+                        return const CircularProgressIndicator();
+                      }
+
+                      return ElevatedButton(
+                        onPressed: _createGroup,
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppClr.primaryColor,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(double.infinity, 50),
+                        ),
+                        child: const Text(
+                          'Create Channel',
+                          style: TextStyle(fontSize: 16),
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(
+                    height: 20,
+                  ), // Added extra space at bottom for better scrolling
+                ],
+              ),
             ),
           ),
         ),

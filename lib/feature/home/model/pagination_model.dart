@@ -1,21 +1,21 @@
 // models/pagination_model.dart
 class Pagination {
-  final int currentPage;
-  final int totalPages;
-  final int perPage;
-  final int totalRecords;
-  final bool hasNext;
-  final bool hasPrevious;
+  final int? currentPage;
+  final int? totalPages;
+  final int? perPage;
+  final int? totalRecords;
+  final bool? hasNext;
+  final bool? hasPrevious;
   final int? nextPage;
   final int? previousPage;
 
   Pagination({
-    required this.currentPage,
-    required this.totalPages,
-    required this.perPage,
-    required this.totalRecords,
-    required this.hasNext,
-    required this.hasPrevious,
+      this.currentPage,
+      this.totalPages,
+      this.perPage,
+      this.totalRecords,
+      this.hasNext,
+      this.hasPrevious,
     this.nextPage,
     this.previousPage,
   });

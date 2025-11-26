@@ -5,18 +5,11 @@ import 'package:hsc_chat/feature/home/model/notification_model.dart';
 import '../../../cores/constants/api_urls.dart';
 
 class NotificationRepository {
-   final String? authToken;
-  final DioClient _dio;
-
-  NotificationRepository({  this.authToken})
-      : _dio = DioClient();
+  final DioClient _dio = DioClient();
 
   Future<ApiResponse<NotificationsResponse>> getNotifications({int page = 1, int perPage = 5}) async {
     try {
-      final resp = await _dio.get(
-          ApiUrls.getNotification,
-          queryParameters: {'page': page, 'per_page': perPage}
-      );
+      final resp = await _dio.get(ApiUrls.getNotification, queryParameters: {'page': page, 'per_page': perPage});
 
       if (resp.statusCode == 200) {
         final data = resp.data as Map<String, dynamic>;
@@ -30,14 +23,11 @@ class NotificationRepository {
     }
   }
 
-  /// Fetch authoritative unseen notifications count from API
+  /// Fetch just the unseen count (lightweight call)
   Future<int?> fetchUnseenCount() async {
     try {
-      // Get first page with minimal data to check unseen_count
-      final resp = await _dio.get(
-          ApiUrls.getNotification,
-          queryParameters: {'page': 1, 'per_page': 1}
-      );
+      // Use the same endpoint but with minimal data
+      final resp = await _dio.get(ApiUrls.getNotification, queryParameters: {'page': 1, 'per_page': 1});
 
       if (resp.statusCode == 200) {
         final body = resp.data as Map<String, dynamic>;
@@ -78,18 +68,5 @@ class NotificationRepository {
     if (value is int) return value;
     if (value is String) return int.tryParse(value);
     return null;
-  }
-
-  // For backward compatibility
-  Future<ApiResponse<int>> getUnseenCount() async {
-    try {
-      final count = await fetchUnseenCount();
-      if (count != null) {
-        return ApiResponse.success(count, message: 'Unseen count fetched');
-      }
-      return ApiResponse.error('Failed to fetch unseen count');
-    } catch (e) {
-      return ApiResponse.error('Network error: $e');
-    }
   }
 }

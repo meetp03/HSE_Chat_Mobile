@@ -2,6 +2,8 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/network/api_response.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hsc_chat/feature/home/model/contact_model.dart';
+import 'package:hsc_chat/feature/home/model/pagination_model.dart';
 import 'package:hsc_chat/feature/home/model/user_model.dart';
 import 'package:hsc_chat/feature/home/repository/message_repository.dart';
 import 'package:hsc_chat/feature/home/model/group_model.dart';
@@ -16,7 +18,7 @@ class GroupCubit extends Cubit<GroupState> {
   bool _usersHasMore = true;
   bool _usersIsLoadingMore = false;
   String _usersCurrentQuery = '';
-  List<UserModel> _users = [];
+  List<ContactModel> _users = [];
 
   GroupCubit(this._repository) : super(GroupInitial());
 
@@ -61,12 +63,13 @@ class GroupCubit extends Cubit<GroupState> {
     try {
       _usersIsLoadingMore = !refresh;
 
-      final ApiResponse<UserResponse> response = await _repository.getUsersList(
-        userId: SharedPreferencesHelper.getCurrentUserId(),
-        page: _usersCurrentPage,
-        perPage: 20, // Load more users per page for selection
-        query: _usersCurrentQuery, // Pass search query
-      );
+      final ApiResponse<ContactResponse> response = await _repository
+          .getUsersList(
+            userId: SharedPreferencesHelper.getCurrentUserId(),
+            page: _usersCurrentPage,
+            perPage: 20, // Load more users per page for selection
+            query: _usersCurrentQuery, // Pass search query
+          );
 
       if (!response.success || response.data == null) {
         emit(GroupUsersError(response.message ?? 'Failed to load users'));
@@ -74,8 +77,8 @@ class GroupCubit extends Cubit<GroupState> {
         return;
       }
 
-      final List<UserModel> newUsers = response.data!.users;
-      final pagination = response.data!.pagination;
+      final List<ContactModel> newUsers = response.data!.contacts;
+      final pagination = response.data?.pagination ?? Pagination();
 
       if (refresh) {
         _users = newUsers;
@@ -89,17 +92,21 @@ class GroupCubit extends Cubit<GroupState> {
         }
       }
 
-      _usersHasMore = pagination.currentPage < pagination.totalPages;
-      if (_usersHasMore) {
-        _usersCurrentPage = pagination.currentPage + 1;
-      }
+      final currentPage = pagination.currentPage ?? 1;
+      final totalPages = pagination.totalPages ?? 1;
 
-      emit(GroupUsersLoaded(
-        users: List.from(_users),
-        hasMore: _usersHasMore,
-        isLoadingMore: false,
-        currentQuery: _usersCurrentQuery,
-      ));
+      _usersHasMore = currentPage < totalPages;
+      if (_usersHasMore) {
+        _usersCurrentPage = currentPage + 1;
+      }
+      emit(
+        GroupUsersLoaded(
+          users: List.from(_users),
+          hasMore: _usersHasMore,
+          isLoadingMore: false,
+          currentQuery: _usersCurrentQuery,
+        ),
+      );
 
       _usersIsLoadingMore = false;
     } catch (e) {
@@ -151,6 +158,4 @@ class GroupCubit extends Cubit<GroupState> {
     _users = [];
     emit(GroupInitial());
   }
-
-
 }

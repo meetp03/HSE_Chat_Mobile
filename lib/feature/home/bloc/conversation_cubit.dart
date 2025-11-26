@@ -209,7 +209,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     }
   }
 
-
   Future<void> loadMore() async {
     if (_hasMore && !_isLoadingMore) {
       await loadConversations(refresh: false);
@@ -233,9 +232,9 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       final ApiResponse<ConversationResponse> resp = await _repo
           .getUnreadConversations(
-        page: _unreadCurrentPage,
-        query: _unreadCurrentQuery,
-      );
+            page: _unreadCurrentPage,
+            query: _unreadCurrentQuery,
+          );
 
       if (!resp.success || resp.data == null) {
         emit(ConversationError(resp.message ?? 'Failed to load unread'));
@@ -296,9 +295,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     return _allConversations
         .where(
           (c) =>
-      c.title.toLowerCase().contains(lower) ||
-          c.lastMessage.toLowerCase().contains(lower),
-    )
+              c.title.toLowerCase().contains(lower) ||
+              c.lastMessage.toLowerCase().contains(lower),
+        )
         .toList();
   }
 
@@ -308,9 +307,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     return _unreadConversations
         .where(
           (c) =>
-      c.title.toLowerCase().contains(lower) ||
-          c.lastMessage.toLowerCase().contains(lower),
-    )
+              c.title.toLowerCase().contains(lower) ||
+              c.lastMessage.toLowerCase().contains(lower),
+        )
         .toList();
   }
 
@@ -337,15 +336,23 @@ class ConversationCubit extends Cubit<ConversationState> {
   /// Delete a conversation (by groupId or user conv id). Returns true on success.
   Future<bool> deleteConversation(String conversationId) async {
     try {
-      final resp = await _repo.deleteConversation(conversationId: conversationId);
+      final resp = await _repo.deleteConversation(
+        conversationId: conversationId,
+      );
       if (!resp.success) {
         print('❌ deleteConversation API failed: ${resp.message}');
         return false;
       }
 
       // Remove from in-memory lists
-      _allConversations.removeWhere((c) => (c.isGroup ? c.groupId == conversationId : c.id == conversationId));
-      _unreadConversations.removeWhere((c) => (c.isGroup ? c.groupId == conversationId : c.id == conversationId));
+      _allConversations.removeWhere(
+        (c) =>
+            (c.isGroup ? c.groupId == conversationId : c.id == conversationId),
+      );
+      _unreadConversations.removeWhere(
+        (c) =>
+            (c.isGroup ? c.groupId == conversationId : c.id == conversationId),
+      );
 
       // Update filtered lists if needed
       _emitUnifiedLoadedState();
@@ -416,9 +423,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (action == null || data == null) return;
 
     switch (action) {
-    // ══════════════════════════════════════════════════════════════
-    // GROUP 1: MESSAGE ACTIONS
-    // ══════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════
+      // GROUP 1: MESSAGE ACTIONS
+      // ══════════════════════════════════════════════════════════════
       case 'new_message':
         _handleNewMessage(data);
         break;
@@ -427,9 +434,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleMessagesRead(data);
         break;
 
-    // ══════════════════════════════════════════════════════════════
-    // GROUP 2: GROUP MANAGEMENT ACTIONS
-    // ══════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════
+      // GROUP 2: GROUP MANAGEMENT ACTIONS
+      // ══════════════════════════════════════════════════════════════
       case 'group_created':
         _handleGroupCreated(data);
         break;
@@ -443,9 +450,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleGroupDeleted(data['group_id']?.toString());
         break;
 
-    // ══════════════════════════════════════════════════════════════
-    // GROUP 3: CONVERSATION ACTIONS
-    // ══════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════
+      // GROUP 3: CONVERSATION ACTIONS
+      // ══════════════════════════════════════════════════════════════
       case 'chat_request':
         _handleChatRequest(data);
         break;
@@ -462,14 +469,15 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleConversationEvent(data);
         break;
 
-    // ══════════════════════════════════════════════════════════════
-    // UNKNOWN ACTIONS
-    // ══════════════════════════════════════════════════════════════
+      // ══════════════════════════════════════════════════════════════
+      // UNKNOWN ACTIONS
+      // ══════════════════════════════════════════════════════════════
       default:
         print('ℹ️ Unhandled action: $action');
         break;
     }
   }
+
   //   Handle new chat request
   void _handleChatRequest(dynamic payload) {
     try {
@@ -485,7 +493,7 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (conv.chatRequestTo == _currentUserId.toString()) {
         // Add or update conversation
         final existingIndex = _allConversations.indexWhere(
-              (c) => (c.isGroup ? c.groupId == conv.groupId : c.id == conv.id),
+          (c) => (c.isGroup ? c.groupId == conv.groupId : c.id == conv.id),
         );
 
         if (existingIndex >= 0) {
@@ -507,8 +515,8 @@ class ConversationCubit extends Cubit<ConversationState> {
     try {
       print('✅ Processing chat_request_accepted event');
 
-      final requestId = payload['chat_request_id']?.toString() ??
-          payload['id']?.toString();
+      final requestId =
+          payload['chat_request_id']?.toString() ?? payload['id']?.toString();
 
       if (requestId == null) {
         print('❌ No request ID in accepted payload');
@@ -546,8 +554,8 @@ class ConversationCubit extends Cubit<ConversationState> {
     try {
       print('📛 Processing chat_request_declined event');
 
-      final requestId = payload['chat_request_id']?.toString() ??
-          payload['id']?.toString();
+      final requestId =
+          payload['chat_request_id']?.toString() ?? payload['id']?.toString();
 
       if (requestId == null) {
         print('❌ No request ID in declined payload');
@@ -610,7 +618,8 @@ class ConversationCubit extends Cubit<ConversationState> {
     }
 
     // Create unique message ID
-    final messageId = msg['_id']?.toString() ??
+    final messageId =
+        msg['_id']?.toString() ??
         '${msg['from_id']}_${msg['to_id']}_${msg['created_at']}';
 
     // ✅ Deduplication check
@@ -638,37 +647,40 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (payload == null) return;
 
       // Extract all possible field names
-      final readCount = int.tryParse(
-          '${payload['read_count'] ?? payload['readCount'] ?? 0}'
-      ) ?? 0;
+      final readCount =
+          int.tryParse(
+            '${payload['read_count'] ?? payload['readCount'] ?? 0}',
+          ) ??
+          0;
 
-      final groupId = (
-          payload['group_id'] ??
-              payload['groupId'] ??
-              payload['channel'] ??
-              payload['conversation_id'] ??
-              payload['conversationId'] ??
-              payload['to_id'] ??
-              payload['toId']
-      )?.toString();
+      final groupId =
+          (payload['group_id'] ??
+                  payload['groupId'] ??
+                  payload['channel'] ??
+                  payload['conversation_id'] ??
+                  payload['conversationId'] ??
+                  payload['to_id'] ??
+                  payload['toId'])
+              ?.toString();
 
-      final otherUserId = (
-          payload['other_user_id'] ??
-              payload['otherUserId'] ??
-              payload['otherUser'] ??
-              payload['other_user'] ??
-              payload['other']
-      )?.toString();
+      final otherUserId =
+          (payload['other_user_id'] ??
+                  payload['otherUserId'] ??
+                  payload['otherUser'] ??
+                  payload['other_user'] ??
+                  payload['other'])
+              ?.toString();
 
-      final byUser = (
-          payload['by'] ??
-              payload['by_id'] ??
-              payload['user_id'] ??
-              payload['actor'] ??
-              payload['userId']
-      )?.toString();
+      final byUser =
+          (payload['by'] ??
+                  payload['by_id'] ??
+                  payload['user_id'] ??
+                  payload['actor'] ??
+                  payload['userId'])
+              ?.toString();
 
-      final performedByMe = byUser != null && byUser == _currentUserId.toString();
+      final performedByMe =
+          byUser != null && byUser == _currentUserId.toString();
       String? convKey = groupId ?? otherUserId;
 
       // Try to extract from nested conversation
@@ -676,22 +688,24 @@ class ConversationCubit extends Cubit<ConversationState> {
         try {
           final conv = payload['conversation'] ?? payload;
           if (conv is Map<String, dynamic>) {
-            convKey = (
-                conv['group_id'] ??
-                    conv['groupId'] ??
-                    conv['to_id'] ??
-                    conv['toId'] ??
-                    conv['from_id'] ??
-                    conv['fromId'] ??
-                    conv['sender_id'] ??
-                    conv['sender']
-            )?.toString();
+            convKey =
+                (conv['group_id'] ??
+                        conv['groupId'] ??
+                        conv['to_id'] ??
+                        conv['toId'] ??
+                        conv['from_id'] ??
+                        conv['fromId'] ??
+                        conv['sender_id'] ??
+                        conv['sender'])
+                    ?.toString();
           }
         } catch (_) {}
       }
 
       // Nothing actionable
-      if ((readCount <= 0) && !performedByMe && (convKey == null || convKey.isEmpty)) {
+      if ((readCount <= 0) &&
+          !performedByMe &&
+          (convKey == null || convKey.isEmpty)) {
         print('⚠️ messages_read: No actionable data');
         return;
       }
@@ -701,8 +715,12 @@ class ConversationCubit extends Cubit<ConversationState> {
       // Helper to match conversation
       bool matchesConv(Conversation conv) {
         final convGroupId = conv.groupId ?? conv.id;
-        if (convKey != null && convKey.isNotEmpty && convGroupId == convKey) return true;
-        if (otherUserId != null && otherUserId.isNotEmpty && conv.id == otherUserId) return true;
+        if (convKey != null && convKey.isNotEmpty && convGroupId == convKey)
+          return true;
+        if (otherUserId != null &&
+            otherUserId.isNotEmpty &&
+            conv.id == otherUserId)
+          return true;
         if (byUser != null && conv.id == byUser) return true;
         return false;
       }
@@ -738,7 +756,10 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (readCount > 0) {
         _allConversations = _allConversations.map((conv) {
           if (matchesConv(conv)) {
-            final nextUnread = (conv.unreadCount - readCount).clamp(0, conv.unreadCount);
+            final nextUnread = (conv.unreadCount - readCount).clamp(
+              0,
+              conv.unreadCount,
+            );
             if (nextUnread != conv.unreadCount) {
               changed = true;
               return conv.copyWith(
@@ -752,24 +773,29 @@ class ConversationCubit extends Cubit<ConversationState> {
 
         _unreadConversations = _unreadConversations
             .map((conv) {
-          if (matchesConv(conv)) {
-            final newUnread = (conv.unreadCount - readCount).clamp(0, conv.unreadCount);
-            if (newUnread != conv.unreadCount) {
-              changed = true;
-              return conv.copyWith(
-                unreadCount: newUnread,
-                lastReadAt: DateTime.now(),
-              );
-            }
-          }
-          return conv;
-        })
+              if (matchesConv(conv)) {
+                final newUnread = (conv.unreadCount - readCount).clamp(
+                  0,
+                  conv.unreadCount,
+                );
+                if (newUnread != conv.unreadCount) {
+                  changed = true;
+                  return conv.copyWith(
+                    unreadCount: newUnread,
+                    lastReadAt: DateTime.now(),
+                  );
+                }
+              }
+              return conv;
+            })
             .where((c) => c.unreadCount > 0)
             .toList();
 
         if (changed) {
           _emitUnifiedLoadedState();
-          print('📣 messages_read applied: convKey=$convKey, readCount=$readCount');
+          print(
+            '📣 messages_read applied: convKey=$convKey, readCount=$readCount',
+          );
         } else {
           print('ℹ️ messages_read handled but no match found');
         }
@@ -791,12 +817,11 @@ class ConversationCubit extends Cubit<ConversationState> {
     try {
       // Priority 1: Use system message if available
       final systemMessage =
-          data['systemMessage'] ??
-              data['conversation'] ??
-              data['notification'];
+          data['systemMessage'] ?? data['conversation'] ?? data['notification'];
 
       if (systemMessage != null && systemMessage is Map<String, dynamic>) {
-        if (systemMessage.containsKey('message') || systemMessage.containsKey('_id')) {
+        if (systemMessage.containsKey('message') ||
+            systemMessage.containsKey('_id')) {
           _handleConversationEvent({'conversation': systemMessage});
           return;
         }
@@ -804,15 +829,13 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       // Priority 2: Build from group data
       final createdGroup =
-          data['created_group'] ??
-              data['group'] ??
-              data['groupData'];
+          data['created_group'] ?? data['group'] ?? data['groupData'];
 
       if (createdGroup != null && createdGroup is Map<String, dynamic>) {
         final groupId = createdGroup['id']?.toString();
         final creatorId =
             data['creator_id']?.toString() ??
-                createdGroup['created_by']?.toString();
+            createdGroup['created_by']?.toString();
 
         final convMap = {
           '_id': data['notification']?['id'] ?? '${groupId}_created',
@@ -821,40 +844,28 @@ class ConversationCubit extends Cubit<ConversationState> {
           'to_type': 'App\\Models\\Group',
           'group_id': groupId,
           'message':
-          data['notification']?['body'] ??
+              data['notification']?['body'] ??
               data['notification']?['title'] ??
               'Group created',
           'message_type': 9,
           'created_at': DateTime.now().toIso8601String(),
-          'sender': {
-            'id': creatorId,
-            'name': createdGroup['name'] ?? 'Group',
-          },
+          'sender': {'id': creatorId, 'name': createdGroup['name'] ?? 'Group'},
           'group': createdGroup,
         };
 
         _handleConversationEvent({'conversation': convMap});
         return;
       }
-
-      // Fallback: Refresh from server
-      print('⚠️ group_created: No usable data, refreshing');
-      loadConversations(refresh: true);
-
     } catch (e) {
       print('❌ Error in group_created: $e');
-      loadConversations(refresh: true);
     }
   }
 
   void _handleGroupUpdated(Map<String, dynamic>? group) {
     if (group == null) return;
 
-    final gid = (
-        group['id'] ??
-            group['group_id'] ??
-            group['groupId']
-    )?.toString();
+    final gid = (group['id'] ?? group['group_id'] ?? group['groupId'])
+        ?.toString();
 
     if (gid == null || gid.isEmpty) return;
 
@@ -867,7 +878,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         changed = true;
         return c.copyWith(
           title: (group['name'] ?? group['title'])?.toString() ?? c.title,
-          avatarUrl: (group['photo_url'] ?? group['photoUrl'])?.toString() ?? c.avatarUrl,
+          avatarUrl:
+              (group['photo_url'] ?? group['photoUrl'])?.toString() ??
+              c.avatarUrl,
         );
       }
       return c;
@@ -877,7 +890,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (c.isGroup && c.groupId == gid) {
         return c.copyWith(
           title: (group['name'] ?? group['title'])?.toString() ?? c.title,
-          avatarUrl: (group['photo_url'] ?? group['photoUrl'])?.toString() ?? c.avatarUrl,
+          avatarUrl:
+              (group['photo_url'] ?? group['photoUrl'])?.toString() ??
+              c.avatarUrl,
         );
       }
       return c;
@@ -937,42 +952,36 @@ class ConversationCubit extends Cubit<ConversationState> {
       final msg = <String, dynamic>{
         '_id': conv['_id'] ?? conv['id'],
         'from_id':
-        conv['from_id'] ??
+            conv['from_id'] ??
             conv['fromId'] ??
             conv['creator_id'] ??
             conv['created_by'],
         'to_id':
-        conv['to_id'] ??
+            conv['to_id'] ??
             conv['toId'] ??
             conv['group_id'] ??
             conv['groupId'],
         'to_type':
-        conv['to_type'] ??
+            conv['to_type'] ??
             conv['toType'] ??
-            (conv['group'] != null ? 'App\\Models\\Group' : 'App\\Models\\Conversation'),
+            (conv['group'] != null
+                ? 'App\\Models\\Group'
+                : 'App\\Models\\Conversation'),
         'group_id':
-        conv['group_id'] ??
+            conv['group_id'] ??
             conv['groupId'] ??
             (conv['group'] != null ? conv['group']['id'] : null),
-        'message':
-        conv['message'] ??
-            conv['body'] ??
-            conv['title'] ??
-            '',
+        'message': conv['message'] ?? conv['body'] ?? conv['title'] ?? '',
         'message_type': conv['message_type'] ?? conv['type'] ?? 0,
         'created_at':
-        conv['created_at'] ??
+            conv['created_at'] ??
             conv['createdAt'] ??
             DateTime.now().toIso8601String(),
-        'sender':
-        conv['sender'] ??
-            conv['user'] ??
-            conv['from_user'],
+        'sender': conv['sender'] ?? conv['user'] ?? conv['from_user'],
         'group': conv['group'] ?? conv['created_group'],
       };
 
       _handleNewMessage({'conversation': msg});
-
     } catch (e) {
       print('❌ Error in conversation_event: $e');
       loadConversations(refresh: true);
@@ -991,17 +1000,17 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       final sender =
           c['sender'] ??
-              c['user'] ??
-              payload['from_user'] ??
-              payload['fromUser'] ??
-              c['from_user'];
+          c['user'] ??
+          payload['from_user'] ??
+          payload['fromUser'] ??
+          c['from_user'];
 
       final toUser =
           c['to_user'] ??
-              payload['to_user'] ??
-              c['receiver'] ??
-              payload['receiver'] ??
-              c['user'];
+          payload['to_user'] ??
+          c['receiver'] ??
+          payload['receiver'] ??
+          c['user'];
 
       return {
         '_id': c['_id'] ?? c['id'],
@@ -1010,13 +1019,12 @@ class ConversationCubit extends Cubit<ConversationState> {
         'to_type': c['to_type'],
         'group_id': c['group_id'] ?? c['groupId'],
         'message': c['message'] ?? payload['message'] ?? '',
-        'group_name':
-        c['group'] != null
+        'group_name': c['group'] != null
             ? (c['group']['name'] ?? c['group']['title'])
             : (c['group_name'] ?? payload['group_name']),
         'message_type': c['message_type'] ?? 0,
         'created_at':
-        c['created_at'] ??
+            c['created_at'] ??
             c['createdAt'] ??
             DateTime.now().toIso8601String(),
         'sender': sender,
@@ -1039,7 +1047,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     final ts = _parseTimestamp(msg);
     final own = _isOwnMessage(msg);
 
-    print('🟢 Updating conversation - ID: $convId, isGroup: $isGroup, isOwn: $own');
+    print(
+      '🟢 Updating conversation - ID: $convId, isGroup: $isGroup, isOwn: $own',
+    );
 
     final msgId = (msg['_id'] ?? msg['id'])?.toString();
     final fromId = msg['from_id']?.toString();
@@ -1055,17 +1065,17 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       final matchesGroup =
           c.isGroup &&
-              ((groupId != null && c.groupId == groupId) ||
-                  (toId != null && c.groupId == toId) ||
-                  (c.groupId == convId));
+          ((groupId != null && c.groupId == groupId) ||
+              (toId != null && c.groupId == toId) ||
+              (c.groupId == convId));
 
       final matchesDirect =
           !c.isGroup &&
-              ((c.id == convId) ||
-                  (msgId != null && c.id == msgId) ||
-                  (fromId != null && c.id == fromId) ||
-                  (toId != null && c.id == toId) ||
-                  (c.groupId != null && c.groupId == groupId));
+          ((c.id == convId) ||
+              (msgId != null && c.id == msgId) ||
+              (fromId != null && c.id == fromId) ||
+              (toId != null && c.id == toId) ||
+              (c.groupId != null && c.groupId == groupId));
 
       if ((isGroup && matchesGroup) || (!isGroup && matchesDirect)) {
         idx = i;
@@ -1076,7 +1086,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (idx >= 0) {
       final old = all[idx];
       if (ts.isBefore(old.timestamp) || ts.isAtSameMomentAs(old.timestamp)) {
-        print('⏭️ Incoming message ts <= existing ts, skipping update for conv $convId');
+        print(
+          '⏭️ Incoming message ts <= existing ts, skipping update for conv $convId',
+        );
         return;
       }
       final newUnread = own ? old.unreadCount : old.unreadCount + 1;
@@ -1093,8 +1105,8 @@ class ConversationCubit extends Cubit<ConversationState> {
       // Update unread list
       if (!own) {
         final uIdx = unread.indexWhere(
-              (c) =>
-          (!isGroup && !c.isGroup && c.id == updated.id) ||
+          (c) =>
+              (!isGroup && !c.isGroup && c.id == updated.id) ||
               (isGroup && c.isGroup && c.groupId == updated.groupId),
         );
         if (uIdx >= 0) {
@@ -1103,8 +1115,8 @@ class ConversationCubit extends Cubit<ConversationState> {
         unread.insert(0, updated);
       } else {
         unread.removeWhere(
-              (c) =>
-          (!isGroup && !c.isGroup && c.id == updated.id) ||
+          (c) =>
+              (!isGroup && !c.isGroup && c.id == updated.id) ||
               (isGroup && c.isGroup && c.groupId == updated.groupId),
         );
       }
@@ -1120,10 +1132,10 @@ class ConversationCubit extends Cubit<ConversationState> {
   }
 
   void _createConversationFromMessage(
-      Map<String, dynamic> msg,
-      String convId,
-      bool isGroup,
-      ) {
+    Map<String, dynamic> msg,
+    String convId,
+    bool isGroup,
+  ) {
     final sender = msg['sender'] as Map<String, dynamic>?;
     final toUser = msg['to_user'] as Map<String, dynamic>?;
 
@@ -1134,22 +1146,22 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (_isOwnMessage(msg)) {
         title =
             toUser?['name']?.toString() ??
-                sender?['name']?.toString() ??
-                'Unknown User';
+            sender?['name']?.toString() ??
+            'Unknown User';
       } else {
         title =
             sender?['name']?.toString() ??
-                toUser?['name']?.toString() ??
-                'Unknown User';
+            toUser?['name']?.toString() ??
+            'Unknown User';
       }
     }
 
     final avatar = isGroup
         ? null
         : ((!_isOwnMessage(msg)
-        ? (sender?['photo_url'] ?? sender?['photoUrl'])
-        : (toUser?['photo_url'] ?? toUser?['photoUrl']))
-        ?.toString());
+                  ? (sender?['photo_url'] ?? sender?['photoUrl'])
+                  : (toUser?['photo_url'] ?? toUser?['photoUrl']))
+              ?.toString());
 
     final newConv = Conversation(
       id: convId,
@@ -1175,12 +1187,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (!isGroup && _isOwnMessage(msg)) {
       _updateConversationTitleFromUserId(convId);
     }
-
-    Future.microtask(() async {
-      try {
-        await loadConversations(refresh: true);
-      } catch (_) {}
-    });
   }
 
   MessageRepository? _messageRepo;
@@ -1203,7 +1209,7 @@ class ConversationCubit extends Cubit<ConversationState> {
       );
       if (!resp.success || resp.data == null) return;
 
-      final users = resp.data!.users;
+      final users = resp.data!.contacts;
       final matches = users.where((u) => u.id == userId).toList();
       if (matches.isEmpty) return;
       final found = matches.first;
@@ -1368,10 +1374,9 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     final isGroup =
         (groupId != null && groupId.isNotEmpty && groupId != '0') ||
-            toType?.contains('Group') == true ||
-            (toId != null && toId.contains('-'));
+        toType?.contains('Group') == true ||
+        (toId != null && toId.contains('-'));
 
     return isGroup;
   }
 }
-

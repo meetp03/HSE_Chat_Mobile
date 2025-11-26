@@ -19,7 +19,7 @@ abstract class IMessageRepository {
     String query = '',
   });
 
-  Future<ApiResponse<UserResponse>> getUsersList({
+  Future<ApiResponse<ContactResponse>> getUsersList({
     required int userId,
     int page = 1,
     int perPage = 10,
@@ -154,7 +154,7 @@ class MessageRepository implements IMessageRepository {
   }
 
   @override
-  Future<ApiResponse<UserResponse>> getUsersList({
+  Future<ApiResponse<ContactResponse>> getUsersList({
     required int userId,
     int page = 1,
     int perPage = 10,
@@ -179,27 +179,27 @@ class MessageRepository implements IMessageRepository {
 
       if (response.statusCode == 200) {
         if (response.data['success'] == true) {
-          final data = UserResponse.fromJson(response.data);
-          return ApiResponse<UserResponse>.success(
+          final data = ContactResponse.fromJson(response.data);
+          return ApiResponse<ContactResponse>.success(
             data,
             message: data.message,
             statusCode: response.statusCode,
           );
         } else {
-          return ApiResponse<UserResponse>.error(
+          return ApiResponse<ContactResponse>.error(
             response.data['message'] ?? 'Failed to load users',
           );
         }
       } else {
-        return ApiResponse<UserResponse>.error(
+        return ApiResponse<ContactResponse>.error(
           response.data['message'] ?? 'Failed to load users',
         );
       }
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
-      return ApiResponse<UserResponse>.error(networkException.message);
+      return ApiResponse<ContactResponse>.error(networkException.message);
     } catch (e) {
-      return ApiResponse<UserResponse>.error('Unexpected error: $e');
+      return ApiResponse<ContactResponse>.error('Unexpected error: $e');
     }
   }
 

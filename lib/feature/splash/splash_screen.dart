@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
- import 'package:hsc_chat/cores/utils/shared_preferences.dart';
- import 'package:hsc_chat/routes/navigation_service.dart';
+import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hsc_chat/routes/navigation_service.dart';
 import 'package:hsc_chat/routes/routes.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -18,7 +18,7 @@ class _SplashScreenState extends State<SplashScreen> {
   void _checkAuthStatus() async {
     // Wait for a bit for the splash screen to show
     await Future.delayed(Duration(milliseconds: 1500));
-     if (mounted) {
+    if (mounted) {
       // Check if user is authenticated and navigate accordingly
       if (SharedPreferencesHelper.isUserAuthenticated()) {
         // User is already logged in, navigate to home
@@ -38,7 +38,7 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Padding(
-              padding: const EdgeInsets.all(8.0),
+              padding: const EdgeInsets.symmetric(horizontal: 24.0),
               child: Image.asset('images/house_energy_kogo.png'),
             ),
           ],

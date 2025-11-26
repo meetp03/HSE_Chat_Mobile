@@ -393,7 +393,22 @@ class _MessageScreenState extends State<MessageScreen>
               ? const Icon(Icons.circle, color: Colors.green, size: 12)
               : null,
           onTap: () {
-            _startConversation(contact.id, contact.name, false);
+            // Navigate to chat screen
+            Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => BlocProvider(
+                  create: (_) => Providers.createChatCubit(),
+                  child: ChatScreen(
+                    userId: contact.id.toString(),
+                    userName: contact.name,
+                    userAvatar: contact.photoUrl,
+                    isGroup: false,
+                    userEmail: contact.email,
+                  ),
+                ),
+              ),
+            );
           },
         );
       },
@@ -452,7 +467,7 @@ class _MessageScreenState extends State<MessageScreen>
           trailing: IconButton(
             icon: Icon(Icons.message, color: AppClr.primaryColor),
             onPressed: () {
-              _startConversation(user.id, user.name, false);
+              _startConversation(user.id, user.name, "", user.email, false);
             },
           ),
         );
@@ -522,21 +537,15 @@ class _MessageScreenState extends State<MessageScreen>
   }
 
   Future<void> _startConversation(
-    int userId,
+    int? userId,
     String userName,
+    String? photoUrl,
+    String email,
     bool isGroup,
   ) async {
     print('Starting conversation with $userName (ID: $userId)');
 
     final messageCubit = context.read<MessageCubit>();
-
-    // Show loading message using custom snackbar
-    showCustomSnackBar(
-      context,
-      'Sending chat request...',
-      type: SnackBarType.success,
-      duration: const Duration(seconds: 10),
-    );
 
     try {
       final resp = await messageCubit.sendChatRequestTo(userId.toString());
@@ -550,22 +559,6 @@ class _MessageScreenState extends State<MessageScreen>
           context,
           resp.message ?? 'Chat request sent',
           type: SnackBarType.success,
-        );
-
-        // Navigate to chat screen
-        Navigator.push(
-          context,
-          MaterialPageRoute(
-            builder: (context) => BlocProvider(
-              create: (_) => Providers.createChatCubit(),
-              child: ChatScreen(
-                userId: userId.toString(),
-                userName: userName,
-                userAvatar: null,
-                isGroup: isGroup, userEmail: '',
-              ),
-            ),
-          ),
         );
       } else {
         showCustomSnackBar(
@@ -590,66 +583,79 @@ class _MessageScreenState extends State<MessageScreen>
       context: context,
       builder: (context) {
         bool isLoading = false;
-        return StatefulBuilder(builder: (context, setState) {
-          return AlertDialog(
-            title: const Text('Unblock User'),
-            content: Text('Are you sure you want to unblock $username?'),
-            actions: [
-              TextButton(
-                onPressed: isLoading ? null : () => Navigator.pop(context),
-                child: const Text('CANCEL'),
-              ),
-              TextButton(
-                onPressed: isLoading
-                    ? null
-                    : () async {
-                        setState(() => isLoading = true);
-                        try {
-                          final currentUserId = context.read<MessageCubit>().userId;
-                          final repo = UserRepository();
-                          final success = await repo.blockUnblock(
-                            currentUserId: currentUserId,
-                            userId: userId,
-                            isBlocked: false,
-                          );
-
-                          // close dialog
-                          if (mounted) Navigator.pop(context);
-
-                          if (success) {
-                            showCustomSnackBar(
-                              context,
-                              '$username has been unblocked',
-                              type: SnackBarType.success,
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: const Text('Unblock User'),
+              content: Text('Are you sure you want to unblock $username?'),
+              actions: [
+                TextButton(
+                  onPressed: isLoading ? null : () => Navigator.pop(context),
+                  child: const Text('CANCEL'),
+                ),
+                TextButton(
+                  onPressed: isLoading
+                      ? null
+                      : () async {
+                          setState(() => isLoading = true);
+                          try {
+                            final currentUserId = context
+                                .read<MessageCubit>()
+                                .userId;
+                            final repo = UserRepository();
+                            final success = await repo.blockUnblock(
+                              currentUserId: currentUserId,
+                              userId: userId,
+                              isBlocked: false,
                             );
 
-                            // refresh blocked list
-                            try {
-                              context.read<MessageCubit>().loadBlockedUsers(refresh: true);
-                            } catch (_) {}
-                          } else {
+                            // close dialog
+                            if (mounted) Navigator.pop(context);
+
+                            if (success) {
+                              showCustomSnackBar(
+                                context,
+                                '$username has been unblocked',
+                                type: SnackBarType.success,
+                              );
+
+                              // refresh blocked list
+                              try {
+                                context.read<MessageCubit>().loadBlockedUsers(
+                                  refresh: true,
+                                );
+                              } catch (_) {}
+                            } else {
+                              showCustomSnackBar(
+                                context,
+                                'Failed to unblock $username. Please try again.',
+                                type: SnackBarType.error,
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) Navigator.pop(context);
                             showCustomSnackBar(
                               context,
-                              'Failed to unblock $username. Please try again.',
+                              'Error while unblocking: ${e.toString()}',
                               type: SnackBarType.error,
                             );
                           }
-                        } catch (e) {
-                          if (mounted) Navigator.pop(context);
-                          showCustomSnackBar(
-                            context,
-                            'Error while unblocking: ${e.toString()}',
-                            type: SnackBarType.error,
-                          );
-                        }
-                      },
-                child: isLoading
-                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                    : const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
-              ),
-            ],
-          );
-        });
+                        },
+                  child: isLoading
+                      ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text(
+                          'UNBLOCK',
+                          style: TextStyle(color: Colors.blue),
+                        ),
+                ),
+              ],
+            );
+          },
+        );
       },
     );
   }

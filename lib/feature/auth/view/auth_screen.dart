@@ -5,7 +5,7 @@ import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
-  import 'package:hsc_chat/routes/navigation_service.dart';
+import 'package:hsc_chat/routes/navigation_service.dart';
 import 'package:hsc_chat/routes/routes.dart';
 
 class AuthScreen extends StatefulWidget {
@@ -14,15 +14,11 @@ class AuthScreen extends StatefulWidget {
 }
 
 class _AuthScreenState extends State<AuthScreen> {
-  final _emailController = TextEditingController(
-    text: "meet@gmail.com",
-  );
-  final _passwordController = TextEditingController(text: "password");
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _obscurePassword = true;
   bool _rememberMe = false;
-
-
 
   @override
   void dispose() {

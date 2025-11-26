@@ -22,6 +22,8 @@ import 'package:hsc_chat/routes/routes.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 
+import '../widgets/notificatiobn_bell.dart';
+
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
 
@@ -167,8 +169,8 @@ class _HomeScreenState extends State<HomeScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
-      body: NestedScrollView(
-        headerSliverBuilder: (context, innerBoxScrolled) => [
+      body: CustomScrollView(
+        slivers: [
           SliverAppBar(
             backgroundColor: AppClr.primaryColor,
             pinned: true,
@@ -185,14 +187,12 @@ class _HomeScreenState extends State<HomeScreen>
                   ),
                 ),
                 const SizedBox(width: 8),
-
               ],
             ),
             actions: [
               // Notification Icon Button
-              IconButton(
-                icon: const Icon(Icons.notifications, color: Colors.white),
-                onPressed: () {
+              NotificationBell(
+                onTap: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
@@ -201,19 +201,6 @@ class _HomeScreenState extends State<HomeScreen>
                   );
                 },
               ),
-
-              /*   // Message Icon Button
-              IconButton(
-                icon: const Icon(Icons.message, color: Colors.white),
-                onPressed: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const MessageScreen(),
-                    ),
-                  );
-                },
-              ),*/
 
               // Plus Icon Button
               IconButton(
@@ -366,60 +353,63 @@ class _HomeScreenState extends State<HomeScreen>
               ),
             ),
           ),
+          SliverFillRemaining(
+            child: BlocBuilder<ConversationCubit, ConversationState>(
+              builder: (context, state) {
+                final cubit = context.read<ConversationCubit>();
+
+                Widget buildAllTab() {
+                  if (state is ConversationLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (state is ConversationError) {
+                    return Center(child: Text('Error: ${state.message}'));
+                  }
+
+                  final isSearching = cubit.currentQuery.isNotEmpty;
+                  final chats = isSearching
+                      ? cubit.filteredAllChats
+                      : cubit.allChats;
+                  return _buildChatList(
+                    chats,
+                    cubit.hasMoreConversations,
+                    cubit.isLoadingMoreConversations,
+                    isSearching,
+                    controller: _scrollController,
+                  );
+                }
+
+                Widget buildUnreadTab() {
+                  if (state is ConversationLoading) {
+                    return const Center(child: CircularProgressIndicator());
+                  }
+                  if (state is ConversationError) {
+                    return Center(child: Text('Error: ${(state).message}'));
+                  }
+
+                  final isSearching = cubit.unreadQuery.isNotEmpty;
+                  final chats = isSearching
+                      ? cubit.filteredUnreadChats
+                      : cubit.unreadChats;
+                  return _buildChatList(
+                    chats,
+                    cubit.hasMoreUnread,
+                    cubit.isLoadingMoreUnread,
+                    isSearching,
+                    controller: _unreadScrollController,
+                  );
+                }
+
+                return TabBarView(
+                  controller: _tabController,
+                  children: [buildAllTab(), buildUnreadTab()],
+                );
+              },
+            ),
+          ),
         ],
-        body: BlocBuilder<ConversationCubit, ConversationState>(
-          builder: (context, state) {
-            final cubit = context.read<ConversationCubit>();
-
-            Widget buildAllTab() {
-              if (state is ConversationLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state is ConversationError) {
-                return Center(child: Text('Error: ${state.message}'));
-              }
-
-              final isSearching = cubit.currentQuery.isNotEmpty;
-              final chats = isSearching
-                  ? cubit.filteredAllChats
-                  : cubit.allChats;
-              return _buildChatList(
-                chats,
-                cubit.hasMoreConversations,
-                cubit.isLoadingMoreConversations,
-                isSearching,
-                controller: _scrollController,
-              );
-            }
-
-            Widget buildUnreadTab() {
-              if (state is ConversationLoading) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              if (state is ConversationError) {
-                return Center(child: Text('Error: ${(state).message}'));
-              }
-
-              final isSearching = cubit.unreadQuery.isNotEmpty;
-              final chats = isSearching
-                  ? cubit.filteredUnreadChats
-                  : cubit.unreadChats;
-              return _buildChatList(
-                chats,
-                cubit.hasMoreUnread,
-                cubit.isLoadingMoreUnread,
-                isSearching,
-                controller: _unreadScrollController,
-              );
-            }
-
-            return TabBarView(
-              controller: _tabController,
-              children: [buildAllTab(), buildUnreadTab()],
-            );
-          },
-        ),
       ),
+
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppClr.primaryColor,
         child: const Icon(Icons.chat, color: Colors.white),
@@ -749,9 +739,10 @@ class _HomeScreenState extends State<HomeScreen>
         print('🆔 Group ID: ${conv.groupId}');
         print('👤 User ID: ${conv.id}');
 
-        final chatId = conv.groupId;
+        final chatId = conv.id;
+        final groupId = conv.groupId;
 
-        if (chatId!.isEmpty) {
+        /* if (chatId.isEmpty || groupId!.isEmpty) {
           print('❌ Error: Invalid chat ID');
           showCustomSnackBar(
             context,
@@ -759,7 +750,7 @@ class _HomeScreenState extends State<HomeScreen>
             type: SnackBarType.error,
           );
           return;
-        }
+        }*/
 
         Navigator.push(
           context,

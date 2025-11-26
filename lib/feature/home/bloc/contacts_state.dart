@@ -51,7 +51,7 @@ class MyContactsError extends MessageState {
 // Users List States
 class UsersListLoading extends MessageState {}
 class UsersListLoaded extends MessageState {
-  final List<UserModel> users;
+  final List<ContactModel> users;
   final Pagination pagination;
   final bool hasMore;
   final bool isLoadingMore;
@@ -66,7 +66,7 @@ class UsersListLoaded extends MessageState {
   });
 
   UsersListLoaded copyWith({
-    List<UserModel>? users,
+    List<ContactModel>? users,
     Pagination? pagination,
     bool? hasMore,
     bool? isLoadingMore,

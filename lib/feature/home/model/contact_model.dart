@@ -35,7 +35,7 @@ class ContactResponse {
   final bool success;
   final String message;
   final List<ContactModel> contacts;
-  final Pagination pagination;
+  final Pagination? pagination;
 
   ContactResponse({
     required this.success,

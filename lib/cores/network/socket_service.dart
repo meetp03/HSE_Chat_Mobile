@@ -1,10 +1,14 @@
 // lib/cores/network/socket_service.dart
+import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/home/model/message_model.dart';
-import 'package:socket_io_client/socket_io_client.dart' as IO;
+import 'package:hsc_chat/feature/notification/notification_repository.dart';
+ import 'package:socket_io_client/socket_io_client.dart' as IO;
 
-class SocketService {
+class SocketService with WidgetsBindingObserver {
   static final SocketService _instance = SocketService._internal();
   factory SocketService() => _instance;
   SocketService._internal();
@@ -228,6 +232,157 @@ class SocketService {
       print('👥 Emitted GroupEvent: $eventData');
     }
   }
+
+  // Notification badge fields (merged from NotificationBadgeService)
+  final ValueNotifier<int> unseenCount = ValueNotifier<int>(0);
+  String? apiBaseUrl;
+  String? authToken;
+  int? loggedInUserId;
+  String? selectedConversationId;
+  String? selectedConversationType; // 'group'|'direct'
+  Timer? _resyncTimer;
+  final Set<String> _processedNotificationIds = <String>{};
+  DateTime? _lastUnseenFetch;
+  bool _isFetchingUnseen = false;
+
+  /// Initialize notification badge config. Call once after creating SocketService.
+  void initNotificationBadge({required String apiBase, String? token, int? userId}) {
+    apiBaseUrl = apiBase;
+    authToken = token;
+    loggedInUserId = userId;
+
+    // Register the observer to listen to app lifecycle changes
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  /// Optionally set currently open conversation to avoid incrementing badge for active convo
+  void setSelectedConversation({String? id, String? type}) {
+    selectedConversationId = id;
+    selectedConversationType = type;
+  }
+
+  bool _isOwnAction(Map<String, dynamic> data) {
+    if (loggedInUserId == null) return false;
+    final fromId = data['from_id'] ?? data['added_by'] ?? data['removed_by'] ?? data['creator_id'] ?? data['left_user_id'] ?? data['by_user_id'];
+    if (fromId == null) return false;
+    try {
+      return int.tryParse(fromId.toString()) == loggedInUserId;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  bool _isForSelectedConversation(Map<String, dynamic> data) {
+    if (selectedConversationId == null) return false;
+
+    final groupId = data['group_id'] ?? data['groupId'] ?? data['channel'] ?? data['channel_id'];
+    if (groupId != null && selectedConversationType == 'group' && groupId.toString() == selectedConversationId) {
+      return true;
+    }
+
+    final convo = data['conversation'] ?? data;
+    final dynamic convoTo = (convo is Map) ? (convo['to_id'] ?? convo['to']) : null;
+    final dynamic convoFrom = (convo is Map) ? (convo['from_id'] ?? convo['from']) : null;
+    final toId = convoTo ?? data['to_id'] ?? data['to'];
+    final fromId = convoFrom ?? data['from_id'] ?? data['from'];
+    if (selectedConversationType != 'group') {
+      if (toId != null && toId.toString() == selectedConversationId) return true;
+      if (fromId != null && fromId.toString() == selectedConversationId) return true;
+    }
+
+    return false;
+  }
+
+  void _incrementFromSocket(dynamic data, {String? id}) {
+    if (id != null) _processedNotificationIds.add(id);
+    final current = unseenCount.value;
+    unseenCount.value = current + 1;
+    if (kDebugMode) print('🔔 SocketService: unseenCount -> ${unseenCount.value} (from socket)');
+  }
+
+  /// Refresh unseen count from the API (debounced). Use [force] to bypass debounce.
+  Future<void> refreshUnseenCount({bool force = false}) async {
+    // Simple debounce to avoid duplicate rapid API calls
+    final now = DateTime.now();
+    if (!force && _lastUnseenFetch != null) {
+      final diff = now.difference(_lastUnseenFetch!);
+      if (diff < const Duration(seconds: 2)) {
+        if (kDebugMode) print('🔔 SocketService: skipping unseen fetch (debounced)');
+        return;
+      }
+    }
+
+    if (_isFetchingUnseen) {
+      if (kDebugMode) print('🔔 SocketService: unseen fetch already in progress');
+      return;
+    }
+
+    _isFetchingUnseen = true;
+    try {
+      final repo = NotificationRepository();
+      final count = await repo.fetchUnseenCount();
+      if (count != null) {
+        unseenCount.value = count;
+        if (kDebugMode) print('🔔 SocketService: fetched unseenCount=$count (from API - authoritative)');
+      } else {
+        if (kDebugMode) print('⚠️ SocketService: API returned null for unseen count');
+      }
+      _lastUnseenFetch = DateTime.now();
+    } catch (e) {
+      if (kDebugMode) print('❌ SocketService: failed to fetch unseen count: $e');
+    } finally {
+      _isFetchingUnseen = false;
+    }
+  }
+
+  void resetUnseenCount() {
+    unseenCount.value = 0;
+    if (kDebugMode) print('🔔 SocketService: unseenCount reset to 0');
+  }
+
+  void _handleBadgeEvent(dynamic raw) {
+    try {
+      final Map<String, dynamic> data = (raw is String) ? json.decode(raw) as Map<String, dynamic> : Map<String, dynamic>.from(raw as Map);
+      final actionRaw = data['action'] ?? data['type'] ?? '';
+      final action = actionRaw.toString().toLowerCase();
+
+      const incrementActions = <String>{
+        'group_created',
+        'members_added',
+        'member_removed',
+        'member_left',
+        'chat_request',
+        'chat_request_accepted',
+        'chat_request_declined',
+        'admin_promoted',
+        'admin_dismissed',
+        'group_updated',
+        'new_message',
+        'message_updated',
+      };
+
+      dynamic nestedNotification = data['notification'] ?? data['systemMessage'] ?? data['created_group'] ?? data['conversation'];
+      final nestedType = (nestedNotification is Map) ? (nestedNotification['type'] ?? nestedNotification['message_type'] ?? nestedNotification['title']) : null;
+      final nestedId = (nestedNotification is Map) ? (nestedNotification['id'] ?? nestedNotification['_id'] ?? nestedNotification['system_message_id']) : null;
+      final nestedTypeStr = nestedType?.toString().toLowerCase();
+      final shouldIncrementBasedOnNestedType = nestedTypeStr != null && (nestedTypeStr.contains('group_member') || nestedTypeStr.contains('group_created') || nestedTypeStr.contains('member_added') || nestedTypeStr.contains('member_removed') || nestedTypeStr.contains('member_left'));
+
+      final notifIdStr = nestedId?.toString();
+      if (notifIdStr != null && _processedNotificationIds.contains(notifIdStr)) return;
+
+      if (incrementActions.contains(action) || shouldIncrementBasedOnNestedType) {
+        if (_isOwnAction(data)) return;
+        if (_isForSelectedConversation(data)) return;
+        _incrementFromSocket(data, id: notifIdStr);
+      }
+    } catch (e) {
+      // best-effort: if parsing fails, increment once
+      try {
+        _incrementFromSocket(raw);
+      } catch (_) {}
+    }
+  }
+
   void _setupSocketListeners() {
     _socket?.onConnect((_) {
       _isConnected = true;
@@ -236,6 +391,8 @@ class SocketService {
       }
       onConnectCallback?.call(() {});
       joinUserRoom(_currentUserId);
+      // Resync authoritative unseen notifications count when socket connects
+      try { refreshUnseenCount(); } catch (_) {}
     });
 
     _socket?.onDisconnect((_) {
@@ -251,6 +408,8 @@ class SocketService {
       if (kDebugMode) {
         print('📨 UserEvent received: $data');
       }
+      // Update badge logic
+      _handleBadgeEvent(data);
       _notifyMessageListeners({'event': 'UserEvent', 'data': data});
     });
 
@@ -258,6 +417,7 @@ class SocketService {
       if (kDebugMode) {
         print('📨 GroupEvent received: $data');
       }
+      _handleBadgeEvent(data);
       _notifyMessageListeners({'event': 'GroupEvent', 'data': data});
     });
 
@@ -267,7 +427,6 @@ class SocketService {
     _socket?.on('new_message', (data) {
       if (kDebugMode) print('📨 new_message received (forwarded to UserEvent): $data');
       try {
-        // Wrap the payload in a UserEvent-like shape if necessary
         final shaped = (data is Map<String, dynamic> && data.containsKey('conversation'))
             ? {'action': 'new_message', 'conversation': data['conversation'], 'user_id': data['user_id'], 'sender_id': data['sender_id']}
             : data;
@@ -278,19 +437,6 @@ class SocketService {
       } catch (e) {
         if (kDebugMode) print('⚠️ Failed to forward new_message: $e');
       }
-    });
-    // NEW: Listen for block/unblock events
-    _socket?.on('user.block_unblock', (data) {
-      if (kDebugMode) {
-        print('🔒 Block/Unblock event received: $data');
-      }
-      _notifyMessageListeners({'event': 'user.block_unblock', 'data': data});
-    });
-    _socket?.on('conversation_updated', (data) {
-      if (kDebugMode) {
-        print('🔄 conversation_updated received: $data');
-      }
-      _notifyMessageListeners({'event': 'conversation_updated', 'data': data});
     });
 
     // Debug: Listen to ALL events
@@ -367,9 +513,33 @@ class SocketService {
 
   bool get isConnected => _isConnected;
 
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    super.didChangeAppLifecycleState(state);
+    if (state == AppLifecycleState.resumed) {
+      // Resync unseen count when the app is resumed (debounced)
+      _resyncUnseenCount();
+    }
+  }
+
+  void _resyncUnseenCount() {
+    // Cancel any pending resync timer
+    _resyncTimer?.cancel();
+    // Debounce resyncing unseen count
+    _resyncTimer = Timer(const Duration(seconds: 2), () {
+      refreshUnseenCount();
+    });
+  }
+
   void dispose() {
     disconnect();
     _messageListeners.clear();
     _socket?.dispose();
+    // dispose badge notifier
+    try { unseenCount.dispose(); } catch (_) {}
+    // Unregister the observer
+    WidgetsBinding.instance.removeObserver(this);
+    // Cancel any pending resync timer
+    try { _resyncTimer?.cancel(); } catch (_) {}
   }
 }

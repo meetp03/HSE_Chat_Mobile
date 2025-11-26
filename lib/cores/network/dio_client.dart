@@ -63,37 +63,6 @@ class DioClient {
               wrapWidth: 1200,
             );
 
-            // If this is the conversations endpoint, pretty-print the full JSON using debugPrint
-            try {
-              final path = response.requestOptions.path;
-              if (path.contains('/api/messages/') && path.contains('/conversations')) {
-                // Print full pretty JSON for conversation endpoints so developer
-                // can inspect all messages returned by the server (debug only).
-                try {
-                  final encoder = const JsonEncoder.withIndent('  ');
-                  final pretty = encoder.convert(response.data);
-                  debugPrint('--- FULL RESPONSE for ${response.requestOptions.uri} ---', wrapWidth: 1200);
-                  const int chunkSize = 2000;
-                  for (var i = 0; i < pretty.length; i += chunkSize) {
-                    final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
-                    debugPrint(pretty.substring(i, end), wrapWidth: 1200);
-                  }
-                  debugPrint('--- END FULL RESPONSE ---', wrapWidth: 1200);
-                } catch (e) {
-                  debugPrint('⚠️ Failed to pretty-print conversations response: $e', wrapWidth: 1200);
-                  debugPrint(response.data.toString(), wrapWidth: 1200);
-                }
-              } else {
-                // For other endpoints print a concise summary
-                debugPrint('📦 Response data type: ${response.data.runtimeType}', wrapWidth: 1200);
-              }
-            } catch (e) {
-              debugPrint('⚠️ Error while pretty-printing response: $e', wrapWidth: 1200);
-              // fallback: show truncated response string safely
-              try {
-                debugPrint(response.data.toString(), wrapWidth: 1200);
-              } catch (_) {}
-            }
           }
 
           // Check for 401 errors in response and handle them
@@ -117,34 +86,6 @@ class DioClient {
               wrapWidth: 1200,
             );
             debugPrint('Message: ${error.message}', wrapWidth: 1200);
-
-            try {
-              final path = error.requestOptions.path;
-              if (path.contains('/api/messages/') && path.contains('/conversations')) {
-                debugPrint('--- FULL ERROR RESPONSE for ${error.requestOptions.uri} ---', wrapWidth: 1200);
-                if (error.response != null && error.response!.data != null) {
-                  final encoder = const JsonEncoder.withIndent('  ');
-                  String pretty;
-                  try {
-                    pretty = encoder.convert(error.response!.data);
-                  } catch (_) {
-                    pretty = error.response!.data.toString();
-                  }
-                  const int chunkSize = 2000;
-                  for (var i = 0; i < pretty.length; i += chunkSize) {
-                    final end = (i + chunkSize < pretty.length) ? i + chunkSize : pretty.length;
-                    debugPrint(pretty.substring(i, end), wrapWidth: 1200);
-                  }
-                } else {
-                  debugPrint(error.toString(), wrapWidth: 1200);
-                }
-                debugPrint('--- END FULL ERROR RESPONSE ---', wrapWidth: 1200);
-              } else {
-                debugPrint('Error response data: ${error.response?.data}', wrapWidth: 1200);
-              }
-            } catch (e) {
-              debugPrint('⚠️ Error while logging error response: $e', wrapWidth: 1200);
-            }
           }
 
           // Handle 401 errors from onError as well
@@ -190,7 +131,7 @@ class DioClient {
     try {
       debugPrint('🌐 POST Request: $path', wrapWidth: 1200);
       debugPrint('📝 Query Params: $queryParameters', wrapWidth: 1200);
-      debugPrint('📦 Body Data type: ${data.runtimeType}', wrapWidth: 1200);
+      debugPrint('📦 payload  : $data ', wrapWidth: 1200);
 
       final response = await _dio.post(
         path,

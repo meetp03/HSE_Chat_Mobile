@@ -25,7 +25,7 @@ class MessageCubit extends Cubit<MessageState> {
   bool _usersHasMore = true;
   bool _usersIsLoadingMore = false;
   String _usersCurrentQuery = ''; // Add search query
-  List<UserModel> _users = [];
+  List<ContactModel> _users = [];
 
   // Blocked Users pagination & search
   int _blockedUsersCurrentPage = 1;
@@ -140,7 +140,7 @@ class MessageCubit extends Cubit<MessageState> {
       }
 
       final List<ContactModel> newContacts = response.data?.contacts ?? [];
-      final Pagination pagination = response.data!.pagination;
+      final Pagination? pagination = response.data?.pagination;
 
       if (refresh) {
         _contacts = newContacts;
@@ -156,15 +156,23 @@ class MessageCubit extends Cubit<MessageState> {
         }
       }
 
-      _contactsHasMore = pagination.currentPage < pagination.totalPages;
-      if (_contactsHasMore) {
-        _contactsCurrentPage = pagination.currentPage + 1;
+      // FIXED: Handle nullable pagination
+      if (pagination != null) {
+        final currentPage = pagination.currentPage ?? 1;
+        final totalPages = pagination.totalPages ?? 1;
+
+        _contactsHasMore = currentPage < totalPages;
+        if (_contactsHasMore) {
+          _contactsCurrentPage = currentPage + 1;
+        }
+      } else {
+        _contactsHasMore = false;
       }
 
       emit(
         MyContactsLoaded(
           contacts: List.from(_contacts),
-          pagination: pagination,
+          pagination: pagination ?? Pagination(),
           hasMore: _contactsHasMore,
           isLoadingMore: false,
           currentQuery: _contactsCurrentQuery, // Pass current query
@@ -196,12 +204,13 @@ class MessageCubit extends Cubit<MessageState> {
     try {
       _usersIsLoadingMore = !refresh;
 
-      final ApiResponse<UserResponse> response = await _repository.getUsersList(
-        userId: userId,
-        page: _usersCurrentPage,
-        perPage: 10,
-        query: _usersCurrentQuery, // Pass search query
-      );
+      final ApiResponse<ContactResponse> response = await _repository
+          .getUsersList(
+            userId: userId,
+            page: _usersCurrentPage,
+            perPage: 10,
+            query: _usersCurrentQuery, // Pass search query
+          );
 
       if (!response.success || response.data == null) {
         emit(UsersListError(response.message ?? 'Failed to load users'));
@@ -209,8 +218,8 @@ class MessageCubit extends Cubit<MessageState> {
         return;
       }
 
-      final List<UserModel> newUsers = response.data!.users;
-      final Pagination pagination = response.data!.pagination;
+      final List<ContactModel> newUsers = response.data!.contacts;
+      final Pagination? pagination = response.data!.pagination;
 
       if (refresh) {
         _users = newUsers;
@@ -224,15 +233,23 @@ class MessageCubit extends Cubit<MessageState> {
         }
       }
 
-      _usersHasMore = pagination.currentPage < pagination.totalPages;
-      if (_usersHasMore) {
-        _usersCurrentPage = pagination.currentPage + 1;
+      // FIXED: Handle nullable pagination
+      if (pagination != null) {
+        final currentPage = pagination.currentPage ?? 1;
+        final totalPages = pagination.totalPages ?? 1;
+
+        _usersHasMore = currentPage < totalPages;
+        if (_usersHasMore) {
+          _usersCurrentPage = currentPage + 1;
+        }
+      } else {
+        _usersHasMore = false;
       }
 
       emit(
         UsersListLoaded(
           users: List.from(_users),
-          pagination: pagination,
+          pagination: pagination ?? Pagination(),
           hasMore: _usersHasMore,
           isLoadingMore: false,
           currentQuery: _usersCurrentQuery, // Pass current query
@@ -297,9 +314,13 @@ class MessageCubit extends Cubit<MessageState> {
         }
       }
 
-      _blockedUsersHasMore = pagination.currentPage < pagination.totalPages;
+      // FIXED: Handle nullable pagination properties
+      final currentPage = pagination.currentPage ?? 1;
+      final totalPages = pagination.totalPages ?? 1;
+
+      _blockedUsersHasMore = currentPage < totalPages;
       if (_blockedUsersHasMore) {
-        _blockedUsersCurrentPage = pagination.currentPage + 1;
+        _blockedUsersCurrentPage = currentPage + 1;
       }
 
       emit(
