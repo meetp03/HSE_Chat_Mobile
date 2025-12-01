@@ -1,4 +1,6 @@
 // user_repository.dart
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/network/api_response.dart';
@@ -139,6 +141,48 @@ class UserRepository {
       throw Exception('Failed to remove member: ${resp.statusCode}');
     } catch (e) {
       throw Exception('Network error: $e');
+    }
+  }
+
+  /// Update group information
+  Future<ApiResponse> updateGroup({
+    required String groupId,
+    required String name,
+    required String description,
+    required File? photo,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/group-update/$groupId';
+      final formData = FormData.fromMap({
+        'name': name,
+        'description': description,
+        if (photo != null) 'photo_url': await MultipartFile.fromFile(photo.path),
+      });
+      final resp = await _dio.patch(path, data: formData);
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return ApiResponse.success(resp.data);
+      }
+      return ApiResponse.error('Update failed with status: ${resp.statusCode}');
+    } catch (e) {
+      return ApiResponse.error('Network error: $e');
+    }
+  }
+
+  /// Add members to group
+  Future<ApiResponse> addMembers({
+    required String groupId,
+    required List<int> memberIds,
+  }) async {
+    try {
+      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/add-members';
+      final payload = {'members': memberIds};
+      final resp = await _dio.put(path, data: payload);
+      if (resp.statusCode == 200 || resp.statusCode == 201) {
+        return ApiResponse.success(resp.data);
+      }
+      return ApiResponse.error('Add members failed with status: ${resp.statusCode}');
+    } catch (e) {
+      return ApiResponse.error('Network error: $e');
     }
   }
 }

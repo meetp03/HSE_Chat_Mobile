@@ -30,8 +30,11 @@ class ConversationCubit extends Cubit<ConversationState> {
   String _unreadCurrentQuery = '';
   List<Conversation> _unreadConversations = [];
 
-  // Track processed messages to avoid duplicates
-  final Set<String> _processedMessageIds = {};
+  // Note: previous dedup used a processed ID set which could swallow legitimate
+  // updates (like delete-for-everyone events). We'll remove that global set and
+  // instead perform local, conversation-scoped duplicate checks when handling
+  // incoming messages. This avoids ignoring updates while still preventing
+  // obvious exact-duplicates.
 
   void search(String query) {
     _currentQuery = query.trim();
@@ -392,7 +395,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     _unreadHasMore = true;
     _unreadCurrentQuery = '';
     _unreadIsLoadingMore = false;
-    _processedMessageIds.clear();
     emit(ConversationInitial());
   }
 
@@ -437,15 +439,35 @@ class ConversationCubit extends Cubit<ConversationState> {
       // ══════════════════════════════════════════════════════════════
       // GROUP 2: GROUP MANAGEMENT ACTIONS
       // ══════════════════════════════════════════════════════════════
+
+      case 'members_added':
+        _handleMembersAdded(data);
+        break;
+
+      case 'admin_promoted':
+        _handleAdminPromoted(data);
+        break;
+
+      case 'admin_dismissed':
+        _handleAdminDismissed(data);
+        break;
+
+      case 'member_removed':
+        _handleMemberRemoved(data);
+        break;
+
+      case 'member_left':
+        _handleMemberLeft(data);
+        break;
+
       case 'group_created':
         _handleGroupCreated(data);
         break;
 
       case 'group_updated':
-        _handleGroupUpdated(data['group'] as Map<String, dynamic>?);
+        _handleGroupUpdated(data);
         break;
 
-      case 'group_deleted':
       case 'deleted':
         _handleGroupDeleted(data['group_id']?.toString());
         break;
@@ -469,12 +491,536 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleConversationEvent(data);
         break;
 
+      // Handle message deletion events so conversation preview updates
+      case 'message_deleted_for_everyone':
+      case 'message_deleted':
+        _handleMessageDeletedForConversation(data);
+        break;
+
       // ══════════════════════════════════════════════════════════════
       // UNKNOWN ACTIONS
       // ══════════════════════════════════════════════════════════════
       default:
         print('ℹ️ Unhandled action: $action');
         break;
+    }
+  }
+
+  /// Handle when an admin is promoted in a group
+  void _handleAdminPromoted(dynamic payload) {
+    try {
+      print('👑 Processing admin_promoted event');
+
+      final groupId = payload['group_id']?.toString();
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in admin_promoted payload');
+        return;
+      }
+
+      // Extract system message for last message preview
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+          systemMessage?['body']?.toString() ??
+          'Admin promoted';
+
+      bool changed = false;
+
+      // Update conversations with new last message
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      // Re-sort to move to top
+      if (changed) {
+        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after admin_promoted');
+      }
+    } catch (e) {
+      print('❌ Error handling admin_promoted: $e');
+    }
+  }
+
+  /// Handle when an admin is dismissed in a group
+  void _handleAdminDismissed(dynamic payload) {
+    try {
+      print('👥 Processing admin_dismissed event');
+
+      final groupId = payload['group_id']?.toString();
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in admin_dismissed payload');
+        return;
+      }
+
+      // Extract system message
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+          systemMessage?['body']?.toString() ??
+          'Admin dismissed';
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after admin_dismissed');
+      }
+    } catch (e) {
+      print('❌ Error handling admin_dismissed: $e');
+    }
+  }
+
+
+  // ##################### temporary method ##########################
+  void _handleMemberRemoved(dynamic payload) {
+    try {
+      print('🚫 Processing member_removed event');
+
+      final groupId = payload['group_id']?.toString();
+      final removedUserId = payload['removed_user_id']?.toString();
+      final removedBy = payload['removed_by']?.toString();
+
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in member_removed payload');
+        return;
+      }
+
+      if (removedUserId == null || removedUserId.isEmpty) {
+        print('⚠️ No removed_user_id in member_removed payload');
+        return;
+      }
+
+      print('🔍 Group: $groupId, Removed User: $removedUserId, Removed By: $removedBy, Current User: $_currentUserId');
+
+      // Check if the current user was removed (either by someone else OR by themselves)
+      final isCurrentUserRemoved = removedUserId == _currentUserId.toString();
+
+      if (isCurrentUserRemoved) {
+        print('🚪 Current user was removed from group: $groupId');
+
+        // Remove the group from conversations completely
+        _allConversations = _allConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _unreadConversations = _unreadConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _emitUnifiedLoadedState();
+        print('✅ Group removed from conversations (current user removed)');
+        return;
+      }
+
+      // If another member was removed (not current user), just update the last message
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+              systemMessage?['body']?.toString() ??
+              'Member removed';
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after member_removed (other member)');
+      } else {
+        print('⚠️ Group $groupId not found in conversations');
+      }
+    } catch (e) {
+      print('❌ Error handling member_removed: $e');
+    }
+  }
+  /// ################# working method ##############################
+  /// Handle when a member is removed from a group
+/*
+  void _handleMemberRemoved(dynamic payload) {
+    try {
+      print('🚫 Processing member_removed event');
+
+      final groupId = payload['group_id']?.toString();
+      final removedUserId = payload['removed_user_id']?.toString();
+
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in member_removed payload');
+        return;
+      }
+
+      // Check if the current user was removed
+      final isCurrentUserRemoved = removedUserId == _currentUserId.toString();
+
+      if (isCurrentUserRemoved) {
+        print('🚪 Current user was removed from group: $groupId');
+        // Remove the group from conversations
+        _allConversations = _allConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _unreadConversations = _unreadConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _emitUnifiedLoadedState();
+        print('✅ Group removed from conversations');
+        return;
+      }
+
+      // If another member was removed, just update the last message
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+          systemMessage?['body']?.toString() ??
+          'Member removed';
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after member_removed');
+      }
+    } catch (e) {
+      print('❌ Error handling member_removed: $e');
+    }
+  }
+*/
+
+  /// Handle when a member leaves a group
+  void _handleMemberLeft(dynamic payload) {
+    try {
+      print('🚶 Processing member_left event');
+
+      final groupId = payload['group_id']?.toString();
+      final leftUserId = payload['left_user_id']?.toString();
+
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in member_left payload');
+        return;
+      }
+
+      // Check if the current user left the group
+      final isCurrentUserLeft = leftUserId == _currentUserId.toString();
+
+      if (isCurrentUserLeft) {
+        print('🚪 Current user left group: $groupId');
+        // Remove the group from conversations
+        _allConversations = _allConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _unreadConversations = _unreadConversations
+            .where((c) => !(c.isGroup && c.groupId == groupId))
+            .toList();
+
+        _emitUnifiedLoadedState();
+        print('✅ Group removed from conversations after leaving');
+        return;
+      }
+
+      // If another member left, update the last message
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+          systemMessage?['body']?.toString() ??
+          'Member left';
+
+      bool changed = false;
+
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+      }
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after member_left');
+      }
+    } catch (e) {
+      print('❌ Error handling member_left: $e');
+    }
+  }
+
+  // Add this new handler method
+  void _handleMembersAdded(dynamic payload) {
+    try {
+      print('👥 Processing members_added event');
+
+      final groupId = payload['group_id']?.toString();
+      if (groupId == null || groupId.isEmpty) {
+        print('⚠️ No group_id in members_added payload');
+        return;
+      }
+
+      // Extract system message for last message preview
+      final systemMessage = payload['systemMessage'] ?? payload['notification'];
+      final lastMessageText =
+          systemMessage?['message']?.toString() ??
+          systemMessage?['body']?.toString() ??
+          'Members added to group';
+
+      bool changed = false;
+
+      // Update existing conversations with new last message
+      _allConversations = _allConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          changed = true;
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      _unreadConversations = _unreadConversations.map((c) {
+        if (c.isGroup && c.groupId == groupId) {
+          return c.copyWith(
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+          );
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print('✅ Conversation updated after members_added');
+      } else {
+        // Group might be new to this user - refresh to get it
+        print('🔄 Group not found locally, refreshing conversations');
+        loadConversations(refresh: true);
+      }
+    } catch (e) {
+      print('❌ Error handling members_added: $e');
+    }
+  }
+
+  // New: update conversation preview when a message is deleted (for everyone)
+  void _handleMessageDeletedForConversation(dynamic payload) {
+    try {
+      if (payload == null) return;
+
+      // deleted message may be under deleted_message / deletedMessage / previousMessage
+      final deletedMap =
+          (payload['deleted_message'] ??
+                  payload['deletedMessage'] ??
+                  payload['previousMessage'] ??
+                  payload)
+              as Map<String, dynamic>?;
+      if (deletedMap == null) return;
+
+      final deletedId = (deletedMap['_id'] ?? deletedMap['id'] ?? payload['id'])
+          ?.toString();
+      if (deletedId == null) return;
+
+      // Determine conversation key (group or direct)
+      final groupId =
+          (deletedMap['group_id'] ??
+                  payload['group_id'] ??
+                  payload['to_id'] ??
+                  payload['conversation_id'])
+              ?.toString();
+      final fromId = (deletedMap['from_id'] ?? payload['from_id'])?.toString();
+      final toId = (deletedMap['to_id'] ?? payload['to_id'])?.toString();
+
+      bool changed = false;
+
+      // Update all conversations list
+      _allConversations = _allConversations.map((c) {
+        final matches = c.isGroup
+            ? (groupId != null && (c.groupId == groupId || c.id == groupId))
+            : (c.id == fromId ||
+                  c.id == toId ||
+                  c.id == deletedMap['conversation_id']?.toString());
+
+        if (matches) {
+          changed = true;
+
+          // If the deleted message was the conversation's last message, we need to find a new lastMessage.
+          if (c.messages != null && c.messages!.isNotEmpty) {
+            final remaining = c.messages!
+                .where((m) => m.id != deletedId)
+                .toList();
+            if (remaining.isNotEmpty) {
+              final last = remaining.last;
+              // Safely read the last message text/timestamp from either Message model
+              final String lastMsgText =
+                  (last.content != null && last.content.isNotEmpty)
+                  ? last.content
+                  : (last.message ?? '');
+              final DateTime lastTs = (last.timestamp != null)
+                  ? last.timestamp
+                  : (last.updatedAt ?? DateTime.now());
+              return c.copyWith(lastMessage: lastMsgText, timestamp: lastTs);
+            }
+          }
+
+          // Fallback: show server-provided deleted message text or a generic placeholder
+          final rawText =
+              deletedMap['message']?.toString() ?? 'This message was deleted';
+          return c.copyWith(lastMessage: rawText, timestamp: DateTime.now());
+        }
+        return c;
+      }).toList();
+
+      // Update unread list similarly
+      _unreadConversations = _unreadConversations.map((c) {
+        final matches = c.isGroup
+            ? (groupId != null && (c.groupId == groupId || c.id == groupId))
+            : (c.id == fromId ||
+                  c.id == toId ||
+                  c.id == deletedMap['conversation_id']?.toString());
+
+        if (matches) {
+          // Try to compute an updated lastMessage
+          if (c.messages != null && c.messages!.isNotEmpty) {
+            final remaining = c.messages!
+                .where((m) => m.id != deletedId)
+                .toList();
+            if (remaining.isNotEmpty) {
+              final last = remaining.last;
+              final String lastMsgText =
+                  (last.content != null && last.content.isNotEmpty)
+                  ? last.content
+                  : (last.message ?? '');
+              final DateTime lastTs = (last.timestamp != null)
+                  ? last.timestamp
+                  : (last.updatedAt ?? DateTime.now());
+              return c.copyWith(lastMessage: lastMsgText, timestamp: lastTs);
+            }
+          }
+          final rawText =
+              deletedMap['message']?.toString() ?? 'This message was deleted';
+          return c.copyWith(lastMessage: rawText, timestamp: DateTime.now());
+        }
+        return c;
+      }).toList();
+
+      if (changed) {
+        _emitUnifiedLoadedState();
+        print(
+          '✅ Conversation preview updated after delete-for-everyone for id $deletedId',
+        );
+      }
+    } catch (e) {
+      print(
+        '❌ Error handling message_deleted_for_everyone in ConversationCubit: $e',
+      );
     }
   }
 
@@ -617,24 +1163,44 @@ class ConversationCubit extends Cubit<ConversationState> {
       return;
     }
 
-    // Create unique message ID
-    final messageId =
-        msg['_id']?.toString() ??
-        '${msg['from_id']}_${msg['to_id']}_${msg['created_at']}';
+    // Create unique message ID candidate (may be null-like)
+    final messageId = msg['_id']?.toString();
 
-    // ✅ Deduplication check
-    if (_processedMessageIds.contains(messageId)) {
-      print('⏭️ Skipping duplicate message: $messageId');
-      return;
+    // Instead of global dedupe state, check whether this message already exists
+    // in our conversation lists and whether the incoming message is actually
+    // newer/meaningful (e.g. updated/deleted). If it's an exact duplicate with
+    // no newer timestamp/content, skip; otherwise allow processing so updates
+    // (like delete-for-everyone) are applied.
+
+    bool appearsDuplicateAndStale() {
+      if (messageId == null || messageId.isEmpty) return false;
+      // Look through conversations' message caches if available.
+      for (final conv in [..._allConversations, ..._unreadConversations]) {
+        if (conv.messages == null) continue;
+        Message? found;
+        for (final m in conv.messages!) {
+          if (m.id == messageId) {
+            found = m;
+            break;
+          }
+        }
+        if (found != null) {
+          // If incoming created_at is not newer than existing message, treat as stale
+          final incomingTs = _parseTimestamp(msg);
+          final existingTs = found.timestamp;
+          final incomingText = _formatLastMessage(msg);
+          final existingText = found.content;
+          if (!incomingTs.isAfter(existingTs) && incomingText == existingText) {
+            return true;
+          }
+        }
+      }
+      return false;
     }
 
-    // Mark as processed
-    _processedMessageIds.add(messageId);
-
-    // Clean up old IDs (keep last 100)
-    if (_processedMessageIds.length > 100) {
-      final toRemove = _processedMessageIds.length - 100;
-      _processedMessageIds.removeAll(_processedMessageIds.take(toRemove));
+    if (appearsDuplicateAndStale()) {
+      print('⏭️ Skipping stale duplicate message: ${messageId ?? '<no-id>'}');
+      return;
     }
 
     final isGroup = _isGroupMessage(msg);
@@ -815,6 +1381,79 @@ class ConversationCubit extends Cubit<ConversationState> {
     print('🆕 Processing group_created');
 
     try {
+      final createdGroup =
+          data['created_group'] ?? data['group'] ?? data['groupData'];
+
+      if (createdGroup != null && createdGroup is Map<String, dynamic>) {
+        final groupId = createdGroup['id']?.toString();
+        final groupName = createdGroup['name']?.toString() ?? 'New Group';
+        final creatorId =
+            data['creator_id']?.toString() ??
+                createdGroup['created_by']?.toString();
+
+        // ✅ FIX: Handle photo URL construction
+        String? photoUrl = createdGroup['photo_url']?.toString();
+        if (photoUrl != null && photoUrl.isNotEmpty && !photoUrl.startsWith('http')) {
+          photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
+        }
+
+        // Get system message
+        final systemMessage = data['systemMessage'] ?? data['notification'];
+        final lastMessageText =
+            systemMessage?['message']?.toString() ??
+                systemMessage?['body']?.toString() ??
+                'Group created';
+
+        // Check if group already exists
+        final existingIndex = _allConversations.indexWhere(
+              (c) => c.isGroup && c.groupId == groupId,
+        );
+
+        if (existingIndex >= 0) {
+          // Update existing
+          _allConversations[existingIndex] = _allConversations[existingIndex]
+              .copyWith(
+            title: groupName,
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+            avatarUrl: photoUrl,
+          );
+        } else {
+          // Create new conversation
+          final newConv = Conversation(
+            id: groupId ?? '',
+            groupId: groupId,
+            title: groupName,
+            email: '',
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(),
+            unreadCount: 0,
+            avatarUrl: photoUrl,
+            isGroup: true,
+            isUnread: false,
+          );
+
+          // Insert at the beginning of the list
+          _allConversations.insert(0, newConv);
+        }
+
+        // ✅ KEY FIX: Always emit state to update UI
+        _emitUnifiedLoadedState();
+        print('✅ Group created/updated: $groupName with photo: $photoUrl');
+        return;
+      }
+    } catch (e) {
+      print('❌ Error in group_created: $e');
+    }
+  }
+  /*
+
+  void _handleGroupCreated(Map<String, dynamic>? data) {
+    if (data == null) return;
+
+    print('🆕 Processing group_created');
+
+    try {
       // Priority 1: Use system message if available
       final systemMessage =
           data['systemMessage'] ?? data['conversation'] ?? data['notification'];
@@ -860,51 +1499,140 @@ class ConversationCubit extends Cubit<ConversationState> {
       print('❌ Error in group_created: $e');
     }
   }
+*/
 
-  void _handleGroupUpdated(Map<String, dynamic>? group) {
-    if (group == null) return;
+  void _handleGroupUpdated(Map<String, dynamic>? data) {
+    if (data == null) return;
 
-    final gid = (group['id'] ?? group['group_id'] ?? group['groupId'])
-        ?.toString();
+    print('♻️ Processing group_updated event');
 
-    if (gid == null || gid.isEmpty) return;
+    // Extract group_id from root level
+    final gid = data['group_id']?.toString();
 
-    print('♻️ Processing group_updated: $gid');
+    if (gid == null || gid.isEmpty) {
+      print('⚠️ No group_id in group_updated payload');
+      return;
+    }
+
+    print('♻️ Group ID: $gid');
+
+    // Extract updated_group data - it has a complex nested structure
+    final updatedGroup = data['updated_group'];
+
+    if (updatedGroup == null) {
+      print('⚠️ No updated_group data');
+      return;
+    }
+
+    // The actual group data is inside _doc
+    final groupData = updatedGroup['_doc'] as Map<String, dynamic>?;
+
+    if (groupData == null) {
+      print('⚠️ No _doc in updated_group');
+      return;
+    }
+
+    // ✅ FIX: Check for photo_url at multiple levels
+    // Priority: root level photo_url > _doc photo_url
+    String? photoUrl;
+
+    // Check root level first (sometimes socket sends full URL here)
+    if (updatedGroup['photo_url'] != null &&
+        updatedGroup['photo_url'].toString().isNotEmpty) {
+      photoUrl = updatedGroup['photo_url'].toString();
+    }
+
+    // Fallback to _doc photo_url
+    if (photoUrl == null &&
+        groupData['photo_url'] != null &&
+        groupData['photo_url'].toString().isNotEmpty) {
+      photoUrl = groupData['photo_url'].toString();
+    }
+
+    // ✅ FIX: If photo_url is relative path, construct full URL
+    if (photoUrl != null && !photoUrl.startsWith('http')) {
+      photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
+    }
+
+    print(
+      '✅ Extracted group data: name=${groupData['name']}, photo=$photoUrl',
+    );
+
+    // Extract system message for last message update
+    final systemMessage = data['systemMessage'] ?? data['notification'];
+    final lastMessageText =
+        systemMessage?['message']?.toString() ??
+            systemMessage?['body']?.toString();
 
     bool changed = false;
 
+    // Update in all conversations list
     _allConversations = _allConversations.map((c) {
       if (c.isGroup && c.groupId == gid) {
         changed = true;
-        return c.copyWith(
-          title: (group['name'] ?? group['title'])?.toString() ?? c.title,
-          avatarUrl:
-              (group['photo_url'] ?? group['photoUrl'])?.toString() ??
-              c.avatarUrl,
-        );
+
+        final newName = groupData['name']?.toString() ?? c.title;
+        // Use the properly constructed photoUrl
+        final newPhoto = photoUrl ?? c.avatarUrl;
+
+        print('🔄 Updating conversation: $newName with photo: $newPhoto');
+
+        // Update last message if available
+        if (lastMessageText != null && lastMessageText.isNotEmpty) {
+          return c.copyWith(
+            title: newName,
+            avatarUrl: newPhoto,
+            lastMessage: lastMessageText,
+            timestamp: DateTime.now(), // Move to top
+          );
+        } else {
+          return c.copyWith(
+            title: newName,
+            avatarUrl: newPhoto,
+            timestamp: DateTime.now(), // Move to top
+          );
+        }
       }
       return c;
     }).toList();
 
+    // Re-sort to put updated group at top
+    if (changed) {
+      _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
+    }
+
+    // Update in unread conversations list
     _unreadConversations = _unreadConversations.map((c) {
       if (c.isGroup && c.groupId == gid) {
-        return c.copyWith(
-          title: (group['name'] ?? group['title'])?.toString() ?? c.title,
-          avatarUrl:
-              (group['photo_url'] ?? group['photoUrl'])?.toString() ??
-              c.avatarUrl,
-        );
+        final newName = groupData['name']?.toString() ?? c.title;
+        final newPhoto = photoUrl ?? c.avatarUrl;
+
+        // Update last message in unread list too
+        if (lastMessageText != null && lastMessageText.isNotEmpty) {
+          return c.copyWith(
+            title: newName,
+            avatarUrl: newPhoto,
+            lastMessage: lastMessageText,
+          );
+        } else {
+          return c.copyWith(
+            title: newName,
+            avatarUrl: newPhoto,
+          );
+        }
       }
       return c;
     }).toList();
 
     if (changed) {
       _emitUnifiedLoadedState();
-      print('✅ Group updated: $gid');
+      print('✅ Group updated successfully: ${groupData['name']} with photo: $photoUrl');
+    } else {
+      print('⚠️ Group $gid not found in local conversations');
+      // Optionally refresh to get the group
+      loadConversations(refresh: true);
     }
-  }
-
-  void _handleGroupDeleted(String? groupId) {
+  }  void _handleGroupDeleted(String? groupId) {
     if (groupId == null || groupId.isEmpty) {
       print('⚠️ group_deleted: No group ID');
       return;

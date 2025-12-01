@@ -382,6 +382,12 @@ class Message {
     this.reactions,
     this.replyTo,
   });
+
+  // Compatibility aliases: some parts of the codebase expect `message`/`updatedAt`
+  // (from the other Message model). Provide read-only aliases to avoid refactors.
+  String get message => content;
+  DateTime get updatedAt => timestamp;
+
   factory Message.fromJson(Map<String, dynamic> json) {
     final reply = json['reply_to'] as Map<String, dynamic>?;
 

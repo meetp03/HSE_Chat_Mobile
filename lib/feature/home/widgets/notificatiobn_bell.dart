@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import '../../../cores/network/socket_service.dart';
+import '../../../cores/network/notification_badge_service.dart';
 import '../../../cores/utils/shared_preferences.dart';
 
 class NotificationBell extends StatefulWidget {
@@ -36,7 +37,7 @@ class _NotificationBellState extends State<NotificationBell> {
     }
 
     // Fetch initial count from API
-    socketSvc.refreshUnseenCount(force: true);
+    NotificationBadgeService().fetchUnseenCount();
   }
 
   @override
@@ -51,7 +52,7 @@ class _NotificationBellState extends State<NotificationBell> {
           onPressed: () {
             // Sync with server when notification bell is tapped
             // This ensures the badge shows the authoritative count from API
-            SocketService().refreshUnseenCount(force: true);
+            NotificationBadgeService().fetchUnseenCount();
 
             if (widget.onTap != null) widget.onTap!();
           },

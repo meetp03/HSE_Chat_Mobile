@@ -8,9 +8,16 @@ import 'package:hsc_chat/cores/utils/utils.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/user_info_cubit.dart';
 import 'package:hsc_chat/feature/home/bloc/user_info_state.dart';
+import 'package:hsc_chat/feature/home/bloc/contacts_cubit.dart';
+import 'package:hsc_chat/feature/home/bloc/contacts_state.dart';
 import 'package:hsc_chat/feature/home/model/chat_models.dart';
 import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
 import 'package:hsc_chat/feature/home/repository/user_repository.dart';
+import 'package:hsc_chat/feature/home/repository/message_repository.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+
+import '../../../cores/network/dio_client.dart';
 
 class UserInfoScreen extends StatefulWidget {
   final String userId;
@@ -44,12 +51,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   List<GroupModel> _commonGroups = [];
   late final UserInfoCubit _cubit;
   bool _isDeleting = false;
+  ChatGroup? _currentGroupData;
 
   @override
   void initState() {
     super.initState();
     _isIBlockedThem = widget.isIBlockedThem;
     _isTheyBlockedMe = widget.isTheyBlockedMe;
+    _currentGroupData = widget.groupData;
     _cubit = UserInfoCubit(UserRepository());
     _cubit.loadUserInfo(otherUserId: int.tryParse(widget.userId) ?? 0);
   }
@@ -68,6 +77,17 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         backgroundColor: AppClr.primaryColor,
         foregroundColor: Colors.white,
         elevation: 0,
+        actions:
+            widget.isGroup &&
+                _currentGroupData != null &&
+                _isCurrentUserAdmin(_currentGroupData!)
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.edit),
+                  onPressed: _showEditGroupDialog,
+                ),
+              ]
+            : null,
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(16),
@@ -252,7 +272,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   }
 
   Widget _buildGroupDetailSection() {
-    final grp = widget.groupData;
+    final grp = _currentGroupData;
     if (grp == null || grp.id.isEmpty) return const SizedBox.shrink();
 
     final groupId = grp.id;
@@ -287,6 +307,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     fontSize: 16,
                   ),
                 ),
+                if (_isCurrentUserAdmin(grp)) ...[
+                  const Spacer(),
+                  IconButton(
+                    icon: const Icon(Icons.add, color: Colors.green),
+                    onPressed: _showAddMembersDialog,
+                  ),
+                ],
               ],
             ),
             const SizedBox(height: 12),
@@ -825,7 +852,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             // Update local member role
             setState(() {
               final idx = group.members.indexWhere((m) => m.id == member.id);
-              if (idx >= 0)
+              if (idx >= 0) {
                 group.members[idx] = ChatMember(
                   id: member.id,
                   name: member.name,
@@ -833,6 +860,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   photoUrl: member.photoUrl,
                   role: 1,
                 );
+              }
             });
             showCustomSnackBar(
               context,
@@ -948,5 +976,337 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           Navigator.of(context).pop();
           showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
         });
+  }
+
+  void _showEditGroupDialog() {
+    final group = _currentGroupData;
+    if (group == null) return;
+
+    final nameController = TextEditingController(text: group.name);
+    final descriptionController = TextEditingController(
+      text: group.description ?? '',
+    );
+    File? selectedImage;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setState) => AlertDialog(
+          title: const Text('Edit Group'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Image picker
+                GestureDetector(
+                  onTap: () async {
+                    final picker = ImagePicker();
+                    final pickedFile = await picker.pickImage(
+                      source: ImageSource.gallery,
+                    );
+                    if (pickedFile != null) {
+                      setState(() {
+                        selectedImage = File(pickedFile.path);
+                      });
+                    }
+                  },
+                  child: CircleAvatar(
+                    radius: 40,
+                    backgroundColor: AppClr.primaryColor.withValues(alpha: 0.1),
+                    backgroundImage: selectedImage != null
+                        ? FileImage(selectedImage!)
+                        : (group.photoUrl != null && group.photoUrl!.isNotEmpty
+                              ? CachedNetworkImageProvider(group.photoUrl!)
+                              : null),
+                    child:
+                        selectedImage == null &&
+                            (group.photoUrl == null || group.photoUrl!.isEmpty)
+                        ? Icon(Icons.camera_alt, color: AppClr.primaryColor)
+                        : null,
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: nameController,
+                  decoration: const InputDecoration(
+                    labelText: 'Group Name',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: descriptionController,
+                  decoration: const InputDecoration(
+                    labelText: 'Group Description',
+                    border: OutlineInputBorder(),
+                  ),
+                  maxLines: 3,
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () async {
+                final name = nameController.text.trim();
+                final description = descriptionController.text.trim();
+
+                if (name.isEmpty) {
+                  showCustomSnackBar(
+                    context,
+                    'Group name cannot be empty',
+                    type: SnackBarType.error,
+                  );
+                  return;
+                }
+
+                // Show loading
+                showDialog(
+                  context: context,
+                  barrierDismissible: false,
+                  builder: (_) =>
+                      const Center(child: CircularProgressIndicator()),
+                );
+
+                try {
+                  final updatedGroup = await _cubit.updateGroup(
+                    groupId: group.id,
+                    name: name,
+                    description: description,
+                    photo: selectedImage,
+                  );
+
+                  Navigator.of(context).pop(); // Close loading
+                  Navigator.of(ctx).pop(); // Close dialog
+
+                  if (updatedGroup != null) {
+                    showCustomSnackBar(
+                      context,
+                      'Group updated successfully',
+                      type: SnackBarType.success,
+                    );
+                    // Update local group data with server response
+                    setState(() {
+                      _currentGroupData = updatedGroup;
+                    });
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                    Navigator.of(context).pop();
+                    // Refresh conversations to update group data in list
+                    try {
+                      final conversationCubit = context
+                          .read<ConversationCubit>();
+                      await conversationCubit.refresh();
+                      await conversationCubit.refreshUnread();
+                    } catch (e) {
+                      print('Failed to refresh conversations: $e');
+                    }
+                  } else {
+                    showCustomSnackBar(
+                      context,
+                      'Failed to update group',
+                      type: SnackBarType.error,
+                    );
+                  }
+                } catch (e) {
+                  Navigator.of(context).pop(); // Close loading
+                  Navigator.of(ctx).pop(); // Close dialog
+                  showCustomSnackBar(
+                    context,
+                    'Error updating group: $e',
+                    type: SnackBarType.error,
+                  );
+                }
+              },
+              child: const Text('Save Changes'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showAddMembersDialog() {
+    final group = _currentGroupData;
+    if (group == null) return;
+
+    final selectedMembers = <int>{};
+
+    showDialog(
+      context: context,
+      builder: (ctx) => BlocProvider(
+        create: (_) =>
+            MessageCubit(repository: MessageRepository(DioClient()))
+              ..loadMyContacts(refresh: true),
+
+        child: StatefulBuilder(
+          builder: (context, setState) => AlertDialog(
+            title: const Text('Add Members'),
+            content: SizedBox(
+              width: double.maxFinite,
+              height: 400,
+              child: Column(
+                children: [
+                  // Search Bar
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: TextField(
+                      decoration: InputDecoration(
+                        hintText: 'Search contacts...',
+                        prefixIcon: const Icon(Icons.search),
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      onChanged: (query) {
+                        context.read<MessageCubit>().searchContacts(query);
+                      },
+                    ),
+                  ),
+                  // Contacts List
+                  Expanded(
+                    child: BlocBuilder<MessageCubit, MessageState>(
+                      builder: (context, state) {
+                        if (state is MyContactsLoading) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        } else if (state is MyContactsError) {
+                          return Center(child: Text('Error: ${state.message}'));
+                        } else if (state is MyContactsLoaded) {
+                          final contacts = state.contacts.where((contact) {
+                            // Exclude members already in the group
+                            return !group.members.any(
+                              (member) => member.id == contact.id,
+                            );
+                          }).toList();
+
+                          if (contacts.isEmpty) {
+                            return const Center(
+                              child: Text('No contacts available to add'),
+                            );
+                          }
+
+                          return ListView.builder(
+                            itemCount: contacts.length,
+                            itemBuilder: (context, index) {
+                              final contact = contacts[index];
+                              final isSelected = selectedMembers.contains(
+                                contact.id,
+                              );
+
+                              return CheckboxListTile(
+                                value: isSelected,
+                                onChanged: (value) {
+                                  setState(() {
+                                    if (value == true) {
+                                      selectedMembers.add(contact.id);
+                                    } else {
+                                      selectedMembers.remove(contact.id);
+                                    }
+                                  });
+                                },
+                                title: Text(contact.name),
+                                subtitle: Text(contact.email),
+                                secondary: CircleAvatar(
+                                  backgroundColor: AppClr.primaryColor
+                                      .withAlpha(25),
+                                  backgroundImage: contact.photoUrl != null
+                                      ? CachedNetworkImageProvider(
+                                          contact.photoUrl!,
+                                        )
+                                      : null,
+                                  child: contact.photoUrl == null
+                                      ? Text(
+                                          contact.name.substring(0, 1),
+                                          style: const TextStyle(
+                                            fontWeight: FontWeight.bold,
+                                          ),
+                                        )
+                                      : null,
+                                ),
+                              );
+                            },
+                          );
+                        }
+                        return const SizedBox.shrink();
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: selectedMembers.isEmpty
+                    ? null
+                    : () async {
+                        // Show loading
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (_) =>
+                              const Center(child: CircularProgressIndicator()),
+                        );
+
+                        try {
+                          final success = await _cubit.addMembers(
+                            groupId: group.id,
+                            memberIds: selectedMembers.toList(),
+                          );
+
+                          Navigator.of(context).pop(); // Close loading
+                          Navigator.of(ctx).pop(); // Close dialog
+
+                          if (success) {
+                            showCustomSnackBar(
+                              context,
+                              'Members added successfully',
+                              type: SnackBarType.success,
+                            );
+                            Navigator.of(context).pop();
+                            Navigator.of(context).pop();
+                            Navigator.of(context).pop();
+                            // Refresh conversations
+                            try {
+                              final conversationCubit = context
+                                  .read<ConversationCubit>();
+                              await conversationCubit.refresh();
+                              await conversationCubit.refreshUnread();
+                            } catch (e) {
+                              print('Failed to refresh conversations: $e');
+                            }
+                          } else {
+                            showCustomSnackBar(
+                              context,
+                              'Failed to add members',
+                              type: SnackBarType.error,
+                            );
+                          }
+                        } catch (e) {
+                          Navigator.of(context).pop(); // Close loading
+                          Navigator.of(ctx).pop(); // Close dialog
+                          showCustomSnackBar(
+                            context,
+                            'Error adding members: $e',
+                            type: SnackBarType.error,
+                          );
+                        }
+                      },
+                child: Text('Add Selected Members (${selectedMembers.length})'),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 }

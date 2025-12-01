@@ -1004,6 +1004,29 @@ class _ChatScreenState extends State<ChatScreen>
           _scrollToBottom(animate: true);
         }
       },
+      // ✅ ADD THIS: Rebuild when messages change
+      buildWhen: (previous, current) {
+        if (previous is ChatLoaded && current is ChatLoaded) {
+          // Rebuild if message count changes OR if any message content changed
+          if (previous.messages.length != current.messages.length) {
+            return true;
+          }
+
+          // Check if any message was updated (deleted, edited, etc.)
+          for (int i = 0; i < previous.messages.length; i++) {
+            final prevMsg = previous.messages[i];
+            final currMsg = current.messages[i];
+
+            if (prevMsg.id == currMsg.id &&
+                (prevMsg.message != currMsg.message ||
+                    prevMsg.updatedAt != currMsg.updatedAt)) {
+              print('🔄 Message ${currMsg.id} was updated, rebuilding list');
+              return true;
+            }
+          }
+        }
+        return true; // Default: always rebuild on state change
+      },
       builder: (context, state) {
         if (state is ChatLoading) {
           return const Center(child: CircularProgressIndicator());
@@ -1059,10 +1082,8 @@ class _ChatScreenState extends State<ChatScreen>
           return ListView.builder(
             controller: _scrollController,
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-            // Show loading indicator at TOP when loading more old messages
             itemCount: visibleMessages.length + (state.isLoadingMore ? 1 : 0),
             itemBuilder: (context, index) {
-              // Loading indicator at TOP (index 0)
               if (state.isLoadingMore && index == 0) {
                 return Container(
                   padding: const EdgeInsets.all(16),
@@ -1075,12 +1096,12 @@ class _ChatScreenState extends State<ChatScreen>
                 );
               }
 
-              // Adjust index if loading indicator is present
               final messageIndex = state.isLoadingMore ? index - 1 : index;
               final msg = visibleMessages[messageIndex];
 
+              // ✅ Use ValueKey to help Flutter identify when message content changes
               return KeyedSubtree(
-                key: ValueKey(msg.id),
+                key: ValueKey('${msg.id}_${msg.updatedAt.millisecondsSinceEpoch}'),
                 child: _buildMessageBubble(msg),
               );
             },
@@ -1091,7 +1112,6 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
-
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
     if (message.replyMessage != null) {
@@ -3315,38 +3335,72 @@ class _ChatScreenState extends State<ChatScreen>
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
+
   Widget _buildMessageInput() {
+    // ✅ CRITICAL: Wrap in BlocBuilder and set buildWhen to rebuild on block status changes
     return BlocBuilder<ChatCubit, ChatState>(
+      buildWhen: (previous, current) {
+        // Rebuild when:
+        // 1. State type changes (Loading -> Loaded, etc.)
+        if (previous.runtimeType != current.runtimeType) return true;
+
+        // 2. Block status changes
+        if (previous is ChatLoaded && current is ChatLoaded) {
+          return previous.isIBlockedThem != current.isIBlockedThem ||
+              previous.isTheyBlockedMe != current.isTheyBlockedMe ||
+              previous.groupData?.chatRequestStatus != current.groupData?.chatRequestStatus;
+        }
+
+        return true;
+      },
       builder: (context, state) {
+        print('🔄 Message input rebuilding - State: ${state.runtimeType}');
+
         // Check if blocked OR if chat request is pending
         final isBlocked =
             state is ChatLoaded &&
-            (state.isIBlockedThem || state.isTheyBlockedMe);
+                (state.isIBlockedThem || state.isTheyBlockedMe);
 
         final isPendingRequest =
             state is ChatLoaded &&
-            state.groupData?.chatRequestStatus == 'pending';
+                state.groupData?.chatRequestStatus == 'pending';
+
         final isDeclineRequest =
             state is ChatLoaded &&
-            state.groupData?.chatRequestStatus == 'declined';
+                state.groupData?.chatRequestStatus == 'declined';
 
-        //  Show different messages based on state
+        // ✅ Add debug logging
+        if (state is ChatLoaded) {
+          print('📊 Block Status Debug:');
+          print('   - isIBlockedThem: ${state.isIBlockedThem}');
+          print('   - isTheyBlockedMe: ${state.isTheyBlockedMe}');
+          print('   - Chat Request Status: ${state.groupData?.chatRequestStatus}');
+          print('   - Should Show Blocked UI: $isBlocked');
+        }
+
+        // Show different messages based on state
         if (isBlocked) {
+          final blockMessage = state is ChatLoaded && state.isIBlockedThem
+              ? 'Messaging disabled – this user is blocked'
+              : 'Messaging disabled – you are blocked by this user';
+
           return Container(
             padding: const EdgeInsets.all(12),
             color: Colors.white,
             child: Center(
               child: Text(
-                state.isIBlockedThem ? 'Messaging disabled – this user is blocked' : 'Messaging disabled – you are blocked by this user',
+                blockMessage,
                 style: TextStyle(color: Colors.grey[600]),
               ),
             ),
           );
         }
+
         if (isPendingRequest) {
           final isRecipient =
-              state.groupData?.chatRequestTo ==
-              SharedPreferencesHelper.getCurrentUserId().toString();
+              state is ChatLoaded &&
+                  state.groupData?.chatRequestTo ==
+                      SharedPreferencesHelper.getCurrentUserId().toString();
 
           return Container(
             padding: const EdgeInsets.all(12),
@@ -3364,6 +3418,7 @@ class _ChatScreenState extends State<ChatScreen>
             ),
           );
         }
+
         if (isDeclineRequest) {
           return Container(
             padding: const EdgeInsets.all(12),
@@ -3529,11 +3584,11 @@ class _ChatScreenState extends State<ChatScreen>
                               child: _attachedFileType == 1
                                   ? const Icon(Icons.image, size: 20)
                                   : (_attachedFileType == 2
-                                        ? const Icon(Icons.videocam, size: 20)
-                                        : const Icon(
-                                            Icons.insert_drive_file,
-                                            size: 20,
-                                          )),
+                                  ? const Icon(Icons.videocam, size: 20)
+                                  : const Icon(
+                                Icons.insert_drive_file,
+                                size: 20,
+                              )),
                             ),
                           ),
                         ),
@@ -3564,7 +3619,6 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
-
   /*
   Widget _buildMessageInput() {
     return BlocBuilder<ChatCubit, ChatState>(

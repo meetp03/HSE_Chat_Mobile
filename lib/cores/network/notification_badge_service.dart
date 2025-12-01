@@ -4,6 +4,7 @@
 
 import 'package:flutter/widgets.dart';
 import 'package:hsc_chat/cores/network/socket_service.dart';
+import 'package:hsc_chat/feature/home/repository/notification_repository.dart';
 
 class NotificationBadgeService with WidgetsBindingObserver {
   // Singleton wrapper
@@ -26,7 +27,17 @@ class NotificationBadgeService with WidgetsBindingObserver {
   }
 
   /// Request an authoritative fetch of unseen notifications
-  Future<void> fetchUnseenCount() => SocketService().refreshUnseenCount();
+  Future<void> fetchUnseenCount() async {
+    try {
+      final repo = NotificationRepository();
+      final count = await repo.fetchUnseenCount();
+      if (count != null) {
+        SocketService().unseenCount.value = count;
+      }
+    } catch (e) {
+      // Handle error if needed
+    }
+  }
 
   /// Reset unseen count locally
   void resetCount() => SocketService().resetUnseenCount();
@@ -34,8 +45,8 @@ class NotificationBadgeService with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      // Let SocketService debounce and resync
-      SocketService().refreshUnseenCount();
+      // Fetch unseen count directly
+      fetchUnseenCount();
     }
   }
 

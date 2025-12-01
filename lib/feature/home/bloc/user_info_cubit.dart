@@ -1,6 +1,9 @@
 // user_info_cubit.dart
+import 'dart:io';
+
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
+import 'package:hsc_chat/feature/home/model/chat_models.dart';
 import 'user_info_state.dart';
 import 'package:hsc_chat/feature/home/repository/user_repository.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
@@ -121,6 +124,43 @@ class UserInfoCubit extends Cubit<UserInfoState> {
       return false;
     } catch (e) {
       print('❌ removeMember error: $e');
+      return false;
+    }
+  }
+
+  Future<ChatGroup?> updateGroup({
+    required String groupId,
+    required String name,
+    required String description,
+    required File? photo,
+  }) async {
+    try {
+      final resp = await _repo.updateGroup(
+        groupId: groupId,
+        name: name,
+        description: description,
+        photo: photo,
+      );
+      if (resp.success && resp.data != null) {
+        // Assuming resp.data is the updated group map
+        return ChatGroup.fromJson(resp.data);
+      }
+      return null;
+    } catch (e) {
+      print('❌ updateGroup error: $e');
+      return null;
+    }
+  }
+
+  Future<bool> addMembers({
+    required String groupId,
+    required List<int> memberIds,
+  }) async {
+    try {
+      final resp = await _repo.addMembers(groupId: groupId, memberIds: memberIds);
+      return resp.success;
+    } catch (e) {
+      print('❌ addMembers error: $e');
       return false;
     }
   }

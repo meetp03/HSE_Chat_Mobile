@@ -420,7 +420,25 @@ class SocketService with WidgetsBindingObserver {
       _handleBadgeEvent(data);
       _notifyMessageListeners({'event': 'GroupEvent', 'data': data});
     });
+// Inside _setupSocketListeners(), add:
+    _socket?.on('user.block_unblock', (data) {
+      if (kDebugMode) print('BLOCK EVENT: $data');
+      _notifyEventListeners('user.block_unblock', data);
+      _notifyMessageListeners({'event': 'user.block_unblock', 'data': data});
+    });
 
+// Optional: Support old events
+    _socket?.on('block_user', (data) => _notifyEventListeners('user.block_unblock', {
+      'blockedBy': data['blocked_by'],
+      'blockedTo': data['blocked_to'],
+      'isBlocked': true,
+    }));
+
+    _socket?.on('unblock_user', (data) => _notifyEventListeners('user.block_unblock', {
+      'blockedBy': data['blocked_by'],
+      'blockedTo': data['blocked_to'],
+      'isBlocked': false,
+    }));
     // Some servers emit a top-level 'new_message' event in addition to or
     // instead of embedding it in 'UserEvent'. Forward those events into the
     // same UserEvent pipeline so onNewMessage wrappers get them.
@@ -454,7 +472,15 @@ class SocketService with WidgetsBindingObserver {
   void requestConversations() {
     _socket?.emit('get_conversations');
   }
+// Add these inside SocketService class (near other on/off methods)
 
+  void onBlockUnblock(Function(dynamic data) callback) {
+    on('user.block_unblock', callback);
+  }
+
+  void offBlockUnblock(Function(dynamic data) callback) {
+    off('user.block_unblock', callback);
+  }
   void connect() {
     _socket?.connect();
   }

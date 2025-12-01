@@ -175,6 +175,13 @@ class Message {
       'reply_message': replyMessage?.toJson(),
     };
   }
+
+  // Compatibility aliases so code that expects the other Message shape
+  // (used in Conversation model) continues to work. This avoids large
+  // refactors across the codebase where both `message`/`updatedAt` and
+  // `content`/`timestamp` are used interchangeably.
+  String get content => message;
+  DateTime get timestamp => updatedAt;
 }
 
 class Sender {
@@ -216,6 +223,13 @@ enum MessageKind { SYSTEM, IMAGE, VIDEO, AUDIO, FILE, TEXT }
 
 extension MessageKindHelper on Message {
   MessageKind kind() {
+
+    // ✅ Check if message is deleted FIRST
+    final normalizedMessage = message.toLowerCase().trim();
+    if (normalizedMessage == 'this message was deleted' ||
+        normalizedMessage.contains('message was deleted')) {
+      return MessageKind.TEXT;
+    }
     // Prefer server-provided `messageType` when available to avoid false-positive
     // detections based on filename/URL. This prevents trying to decode video/audio
     // bytes as an image which triggers FlutterJNI decode errors.

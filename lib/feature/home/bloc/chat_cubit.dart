@@ -31,7 +31,12 @@ class ChatCubit extends Cubit<ChatState> {
     required SocketService socketService,
   }) : _chatRepository = chatRepository,
        _socketService = socketService,
-       super(ChatInitial());
+       super(ChatInitial()){
+// Listen ONCE when cubit is created – global block/unblock
+    _socketService.onBlockUnblock((data) {
+      _handleBlockUnblockEvent(data);
+    });
+  }
 
   int get currentUserId => SharedPreferencesHelper.getCurrentUserId();
 
@@ -910,6 +915,14 @@ class ChatCubit extends Cubit<ChatState> {
           if (event == 'user.block_unblock' && data is Map<String, dynamic>) {
             _handleBlockUnblockEvent(data);
           }
+
+          // Handle UserEvent actions such as delete-for-everyone
+          if (event == 'UserEvent' && data is Map<String, dynamic>) {
+            final action = data['action'] ?? data['type'];
+            if (action == 'message_deleted_for_everyone' || action == 'message_deleted') {
+              _handleMessageDeletedEvent(data);
+            }
+          }
         }
       } catch (e) {
         if (kDebugMode) print('⚠️ Error processing socket message: $e');
@@ -919,31 +932,46 @@ class ChatCubit extends Cubit<ChatState> {
     _socketService.onNewMessage(_otherUserId!, _isGroup!, currentUserId, (
       newMessage,
     ) {
-      print('📨 Received new message via socket: ${newMessage.id}');
-      print(
-        '👤 Message from: ${newMessage.fromId}, Current user: $currentUserId',
-      );
-      print('🔍 Is sent by me: ${newMessage.isSentByMe}');
-
       if (state is! ChatLoaded) return;
 
-      final currentState = state as ChatLoaded;
+      // Early-id check: if we already have this message ID, try to replace when
+      // incoming message is newer or its content changed (this fixes "delete for everyone" updates)
+      try {
+        final currentState = state as ChatLoaded;
+        if (newMessage.id.isNotEmpty) {
+          final existingIndex = currentState.messages.indexWhere((m) => m.id.isNotEmpty && m.id == newMessage.id);
+          if (existingIndex >= 0) {
+            final existing = currentState.messages[existingIndex];
+            final shouldReplace = newMessage.updatedAt.isAfter(existing.updatedAt) || newMessage.message != existing.message;
+            if (shouldReplace) {
+              if (kDebugMode) print('🔁 Replacing existing message ${newMessage.id} with updated socket message');
+              final updatedMessages = List<Message>.from(currentState.messages);
+              updatedMessages[existingIndex] = newMessage;
+              final deduped = _dedupeMessages(updatedMessages);
+              emit(currentState.copyWith(messages: deduped));
 
-      final exists = _isDuplicateInList(currentState.messages, newMessage);
+              if (!newMessage.isSentByMe) markAsRead();
+            } else {
+              if (kDebugMode) print('🔁 Skipping socket message (already present and not newer): ${newMessage.id}');
+            }
+            return;
+          }
+        }
 
-      if (!exists) {
-        print('✅ Adding new message to chat');
+        if (kDebugMode) {
+          print('📨 Received new message via socket: ${newMessage.id}');
+          print('👤 Message from: ${newMessage.fromId}, Current user: $currentUserId');
+          print('🔍 Is sent by me: ${newMessage.isSentByMe}');
+        }
 
-        // Append new incoming message at the end (oldest->newest)
+        // Append incoming message and dedupe as a safety net
         final appended = [...currentState.messages, newMessage];
         final deduped = _dedupeMessages(appended);
         emit(currentState.copyWith(messages: deduped));
 
-        if (!newMessage.isSentByMe) {
-          markAsRead();
-        }
-      } else {
-        print('⭐ Message already exists, skipping');
+        if (!newMessage.isSentByMe) markAsRead();
+      } catch (e) {
+        if (kDebugMode) print('⚠️ Error handling onNewMessage: $e');
       }
     });
 
@@ -978,17 +1006,16 @@ class ChatCubit extends Cubit<ChatState> {
           final newMessage = Message.fromJson(conv, currentUserId);
           if (state is! ChatLoaded) return;
           final currentState = state as ChatLoaded;
-          final exists = _isDuplicateInList(currentState.messages, newMessage);
-          if (!exists) {
-            if (kDebugMode)
-              print(
-                '🔁 Fallback listener adding message ${newMessage.id} for conv $_otherUserId',
-              );
-            final appended = [...currentState.messages, newMessage];
-            final deduped = _dedupeMessages(appended);
-            emit(currentState.copyWith(messages: deduped));
-            if (!newMessage.isSentByMe) markAsRead();
-          }
+
+          // Append and dedupe centrally
+          if (kDebugMode)
+            print(
+              '🔁 Fallback listener appending message ${newMessage.id} for conv $_otherUserId',
+            );
+          final appended = [...currentState.messages, newMessage];
+          final deduped = _dedupeMessages(appended);
+          emit(currentState.copyWith(messages: deduped));
+          if (!newMessage.isSentByMe) markAsRead();
         }
       } catch (e) {
         if (kDebugMode) print('⚠️ Generic socket listener error: $e');
@@ -998,6 +1025,90 @@ class ChatCubit extends Cubit<ChatState> {
     _socketService.addMessageListener(_genericSocketListener!);
   }
 
+  // Handle server "delete for everyone" events and update the open chat
+  void _handleMessageDeletedEvent(Map<String, dynamic> data) {
+    try {
+      if (kDebugMode) print('🗑️ Handling message deleted event: $data');
+
+      final deletedMap = (data['deleted_message'] ??
+          data['deletedMessage'] ??
+          data['previousMessage'] ??
+          data) as Map<String, dynamic>?;
+
+      if (deletedMap == null) {
+        print('⚠️ No deleted message data found in event');
+        return;
+      }
+
+      final idCandidates = <String?>[
+        deletedMap['_id']?.toString(),
+        deletedMap['id']?.toString(),
+        data['id']?.toString(),
+      ].where((e) => e != null).map((e) => e!).toList();
+
+      if (idCandidates.isEmpty) {
+        print('⚠️ No valid message ID found in delete event');
+        return;
+      }
+
+      print('🔍 Looking for message with IDs: $idCandidates');
+
+      if (state is ChatLoaded) {
+        final s = state as ChatLoaded;
+
+        // Find if message exists in current list
+        final messageExists = s.messages.any((m) => idCandidates.contains(m.id));
+
+        if (!messageExists) {
+          print('⚠️ Deleted message not found in current chat');
+          return;
+        }
+
+        final updated = s.messages.map((m) {
+          final matches = idCandidates.contains(m.id);
+          if (matches) {
+            print('✅ Found matching message ${m.id}, replacing with deleted version');
+
+            try {
+              // Try to parse the server's deleted message payload
+              final replaced = Message.fromJson(deletedMap, currentUserId);
+              print('✅ Successfully parsed deleted message: "${replaced.message}"');
+              return replaced;
+            } catch (e) {
+              print('⚠️ Failed to parse deleted message map: $e');
+              // Fallback: just update the text
+              return m.copyWith(
+                message: deletedMap['message']?.toString() ?? 'This message was deleted',
+                updatedAt: DateTime.now(), // ✅ Update timestamp to force UI rebuild
+              );
+            }
+          }
+          return m;
+        }).toList();
+
+        // ✅ IMPORTANT: Always emit new state, even if content looks similar
+        print('🔄 Emitting updated state with ${updated.length} messages');
+        emit(s.copyWith(
+          messages: updated,
+          // Force a new list instance to ensure Flutter detects the change
+        ));
+
+        // Refresh conversation list
+        try {
+          _socketService.requestConversations();
+        } catch (e) {
+          print('⚠️ Failed to request conversations refresh: $e');
+        }
+
+        print('✅ Message deleted event processed successfully');
+      } else {
+        print('⚠️ Cannot process delete event - chat not loaded');
+      }
+    } catch (e, stackTrace) {
+      print('❌ Error handling message deleted event: $e');
+      print('Stack trace: $stackTrace');
+    }
+  }
   void dispose() {
     print('🧹 Disposing ChatCubit');
 
@@ -1022,70 +1133,20 @@ class ChatCubit extends Cubit<ChatState> {
     return super.close();
   }
 
-  // Normalize text: remove HTML tags and trim
-  String _normalizeText(String input) {
-    return input.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-  }
-
-  // Return true if `candidate` appears to be a duplicate of any in list
-  bool _isDuplicateInList(List<Message> list, Message candidate) {
-    final candText = _normalizeText(candidate.message);
-    final candFingerprint =
-        '${candidate.fromId}|$candText|${candidate.fileUrl ?? ''}|${candidate.messageType}';
-
-    for (var m in list) {
-      // Exact id match
-      if (m.id.isNotEmpty && candidate.id.isNotEmpty && m.id == candidate.id) {
-        print(
-          '🔁 Duplicate detected by id: existing=${m.id} candidate=${candidate.id}',
-        );
-        return true;
-      }
-
-      // Fingerprint match (same sender + content/file + type)
-      final mText = _normalizeText(m.message);
-      final mFingerprint =
-          '${m.fromId}|$mText|${m.fileUrl ?? ''}|${m.messageType}';
-      if (mFingerprint == candFingerprint) {
-        print(
-          '🔁 Duplicate detected by fingerprint: existing=${m.id} candidate=${candidate.id} fp=$mFingerprint',
-        );
-        return true;
-      }
-
-      // Fallback: same sender, same text and within 60s
-      final sameSender = m.fromId == candidate.fromId;
-      final sameText = mText == candText && candText.isNotEmpty;
-      // tighten fuzzy window to 5 seconds to avoid collapsing distinct messages
-      final timeDiff = m.createdAt
-          .difference(candidate.createdAt)
-          .inSeconds
-          .abs();
-      if (sameSender && sameText && timeDiff <= 5) {
-        print(
-          '🔁 Duplicate detected by fuzzy match: existing=${m.id} candidate=${candidate.id} dt=$timeDiff s',
-        );
-        return true;
-      }
-    }
-    return false;
-  }
 
   // Remove duplicates while keeping chronological order (oldest->newest)
+
   List<Message> _dedupeMessages(List<Message> messages) {
     final out = <Message>[];
-    final seenFp = <String>{};
     final seenIds = <String>{};
+
     for (var m in messages) {
-      // If server provided an ID, prefer exact-id dedupe (safe and reliable)
+      // ✅ PRIMARY: Use MongoDB _id for deduplication (most reliable)
       if (m.id.isNotEmpty) {
         if (seenIds.contains(m.id)) {
-          print('🔇 Skipping duplicate by id: ${m.id}');
-          continue;
-        }
-        // still run fuzzy list check to avoid exact duplicates in `out`
-        if (_isDuplicateInList(out, m)) {
-          print('🔇 Skipping duplicate by list check: ${m.id}');
+          if (kDebugMode) {
+            print('🔇 Skipping duplicate by id: ${m.id}');
+          }
           continue;
         }
         seenIds.add(m.id);
@@ -1093,22 +1154,19 @@ class ChatCubit extends Cubit<ChatState> {
         continue;
       }
 
-      // For messages without id (temporary/edge cases), fall back to fingerprint
-      final fp =
-          '${m.fromId}|${_normalizeText(m.message)}|${m.fileUrl ?? ''}|${m.messageType}|${m.createdAt.millisecondsSinceEpoch}';
-      if (seenFp.contains(fp)) {
-        print('🔇 Skipping duplicate fingerprint (no id): fp=$fp');
+      // ✅ FALLBACK: For messages without ID (temporary messages only)
+      // Use timestamp + fromId to avoid false positives
+      final fallbackKey = '${m.fromId}|${m.createdAt.millisecondsSinceEpoch}';
+      if (seenIds.contains(fallbackKey)) {
+        if (kDebugMode) {
+          print('🔇 Skipping duplicate by fallback key: $fallbackKey');
+        }
         continue;
       }
-
-      if (_isDuplicateInList(out, m)) {
-        print('🔇 Skipping duplicate by list check (no id): ${m.id}');
-        continue;
-      }
-
-      seenFp.add(fp);
+      seenIds.add(fallbackKey);
       out.add(m);
     }
+
     return out;
   }
 
@@ -1120,9 +1178,11 @@ class ChatCubit extends Cubit<ChatState> {
   }) async {
     if (state is! ChatLoaded) return 'Chat not loaded';
     try {
-      print(
+      if (kDebugMode) {
+        print(
         '🗑️ Requesting delete-for-me: $targetMessageId in conv $conversationId',
       );
+      }
       final resp = await _chatRepository.deleteMessageForMe(
         conversationId: conversationId,
         previousMessageId: previousMessageId,
@@ -1130,8 +1190,8 @@ class ChatCubit extends Cubit<ChatState> {
 
       if (resp.success) {
         // Remove the message locally
-        if (this.state is ChatLoaded) {
-          final s = this.state as ChatLoaded;
+        if (state is ChatLoaded) {
+          final s = state as ChatLoaded;
           final updated = s.messages
               .where((m) => m.id != targetMessageId)
               .toList();
@@ -1142,7 +1202,9 @@ class ChatCubit extends Cubit<ChatState> {
         return resp.message ?? 'Failed to delete message';
       }
     } catch (e) {
-      print('❌ deleteMessageForMe error: $e');
+      if (kDebugMode) {
+        print('❌ deleteMessageForMe error: $e');
+      }
       return 'Failed to delete message: $e';
     }
   }
@@ -1155,9 +1217,11 @@ class ChatCubit extends Cubit<ChatState> {
   }) async {
     if (state is! ChatLoaded) return 'Chat not loaded';
     try {
-      print(
+      if (kDebugMode) {
+        print(
         '🗑️ Requesting delete-for-everyone: $targetMessageId in conv $conversationId',
       );
+      }
       final resp = await _chatRepository.deleteMessageForEveryone(
         conversationId: conversationId,
         previousMessageId: previousMessageId,
@@ -1165,21 +1229,52 @@ class ChatCubit extends Cubit<ChatState> {
 
       if (resp.success) {
         // Remove locally as well
-        if (this.state is ChatLoaded) {
-          final s = this.state as ChatLoaded;
-          final updated = s.messages
-              .where((m) => m.id != targetMessageId)
-              .toList();
+        if (state is ChatLoaded) {
+          final s = state as ChatLoaded;
+          // Instead of removing the message locally, replace it with the
+          // server-provided "deleted" payload so UI shows "This message was deleted"
+          Map<String, dynamic>? deletedPayload;
+          try {
+            // server may provide previousMessage or previous_message or deleted_message
+            deletedPayload = resp.data?.previousMessage as Map<String, dynamic>? ??
+                resp.data?.deletedMessage as Map<String, dynamic>? ??
+                resp.data?.data?.deleted_message as Map<String, dynamic>?;
+          } catch (_) {
+            deletedPayload = null;
+          }
+
+          final updated = s.messages.map((m) {
+            if (m.id == targetMessageId) {
+              if (deletedPayload != null) {
+                try {
+                  return Message.fromJson(deletedPayload, currentUserId);
+                } catch (_) {
+                  return m.copyWith(message: deletedPayload['message']?.toString() ?? 'This message was deleted');
+                }
+              }
+              return m.copyWith(message: 'This message was deleted');
+            }
+            return m;
+          }).toList();
+
           emit(s.copyWith(messages: updated));
-        }
-        return null;
-      } else {
-        return resp.message ?? 'Failed to delete message for everyone';
-      }
-    } catch (e) {
-      print('❌ deleteMessageForEveryone error: $e');
-      return 'Failed to delete message for everyone: $e';
-    }
+
+          // Ask the socket/service to refresh conversations so the conversation
+          // preview / last-message shown on home updates consistently.
+          try {
+            _socketService.requestConversations();
+          } catch (_) {}
+         }
+         return null;
+       } else {
+         return resp.message ?? 'Failed to delete message for everyone';
+       }
+     } catch (e) {
+       if (kDebugMode) {
+         print('❌ deleteMessageForEveryone error: $e');
+       }
+       return 'Failed to delete message for everyone: $e';
+     }
   }
 
   /// Public aliases so UI code can call either `deleteMessageForMe`/`deleteMessageForEveryone`
