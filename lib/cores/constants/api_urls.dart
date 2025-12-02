@@ -16,6 +16,7 @@ class ApiUrls {
   static const String groupBase = '${baseUrl}messages/groups';
   static const String blockUnblockUsers = '${baseUrl}core/users';
   static const String getNotification = '${baseUrl}notifications/get-notifications';
+  static const String markAllNotificationsRead = '${baseUrl}notifications/mark-all-read';
   // Chat URLs
   static const String sendMessage = '${baseUrl}messages/send-message';
   static const String readMessage = '${baseUrl}messages/read-message';

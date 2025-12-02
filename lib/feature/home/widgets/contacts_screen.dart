@@ -11,6 +11,12 @@ import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hsc_chat/feature/home/repository/user_repository.dart';
 
+import '../../../cores/network/dio_client.dart';
+import '../../../cores/network/socket_service.dart';
+import '../bloc/chat_cubit.dart';
+import '../bloc/conversation_cubit.dart';
+import '../repository/chat_repository.dart';
+
 class MessageScreen extends StatefulWidget {
   const MessageScreen({Key? key}) : super(key: key);
 
@@ -22,29 +28,32 @@ class _MessageScreenState extends State<MessageScreen>
     with SingleTickerProviderStateMixin {
   late TabController _tabController;
 
-  // Scroll controllers for each tab
   final ScrollController _contactsScrollController = ScrollController();
   final ScrollController _usersScrollController = ScrollController();
   final ScrollController _blockedUsersScrollController = ScrollController();
 
-  // Search controllers for each tab
-  final TextEditingController _contactsSearchController =
-      TextEditingController();
+  final TextEditingController _contactsSearchController = TextEditingController();
   final TextEditingController _usersSearchController = TextEditingController();
-  final TextEditingController _blockedUsersSearchController =
-      TextEditingController();
+  final TextEditingController _blockedUsersSearchController = TextEditingController();
 
-  // Search focus nodes
   final FocusNode _contactsSearchFocus = FocusNode();
   final FocusNode _usersSearchFocus = FocusNode();
   final FocusNode _blockedUsersSearchFocus = FocusNode();
+
+  Timer? _contactsDebounce;
+  Timer? _usersDebounce;
+  Timer? _blockedUsersDebounce;
+
+  // ✅ Track last search query to prevent unnecessary calls
+  String _lastContactsQuery = '';
+  String _lastUsersQuery = '';
+  String _lastBlockedUsersQuery = '';
 
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
 
-    // Setup scroll listeners
     _setupScrollController(_contactsScrollController, () {
       context.read<MessageCubit>().loadMoreContacts();
     });
@@ -57,52 +66,85 @@ class _MessageScreenState extends State<MessageScreen>
       context.read<MessageCubit>().loadMoreBlockedUsers();
     });
 
-    // Listen to tab changes
     _tabController.addListener(_onTabChanged);
 
-    // Load initial data
     WidgetsBinding.instance.addPostFrameCallback((_) {
       context.read<MessageCubit>().loadMyContacts(refresh: true);
     });
 
-    // Listen to search controller changes with debounce
-    _setupSearchController(_contactsSearchController, (query) {
-      context.read<MessageCubit>().searchContacts(query);
-    });
-
-    _setupSearchController(_usersSearchController, (query) {
-      context.read<MessageCubit>().searchUsers(query);
-    });
-
-    _setupSearchController(_blockedUsersSearchController, (query) {
-      context.read<MessageCubit>().searchBlockedUsers(query);
-    });
+    _contactsSearchController.addListener(_onContactsSearchChanged);
+    _usersSearchController.addListener(_onUsersSearchChanged);
+    _blockedUsersSearchController.addListener(_onBlockedUsersSearchChanged);
   }
 
-  void _setupScrollController(
-    ScrollController controller,
-    VoidCallback onLoadMore,
-  ) {
-    controller.addListener(() {
-      if (controller.position.pixels >=
-              controller.position.maxScrollExtent - 100 &&
-          controller.position.maxScrollExtent > 0) {
-        onLoadMore();
+  void _onContactsSearchChanged() {
+    final query = _contactsSearchController.text.trim();
+
+    // ✅ Cancel previous timer
+    _contactsDebounce?.cancel();
+
+    // ✅ Set new timer
+    _contactsDebounce = Timer(const Duration(milliseconds: 500), () {
+      // ✅ Only search if query actually changed
+      if (query != _lastContactsQuery) {
+        print('🔎 Contacts search: "$_lastContactsQuery" → "$query"');
+        _lastContactsQuery = query;
+
+        if (query.isEmpty) {
+          context.read<MessageCubit>().clearContactsSearch();
+        } else {
+          context.read<MessageCubit>().searchContacts(query);
+        }
       }
     });
   }
 
-  void _setupSearchController(
-    TextEditingController controller,
-    Function(String) onSearch,
-  ) {
-    // Simple debounce implementation
-    Timer? _debounce;
+  void _onUsersSearchChanged() {
+    final query = _usersSearchController.text.trim();
+    _usersDebounce?.cancel();
+
+    _usersDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (query != _lastUsersQuery) {
+        print('🔎 Users search: "$_lastUsersQuery" → "$query"');
+        _lastUsersQuery = query;
+
+        if (query.isEmpty) {
+          context.read<MessageCubit>().clearUsersSearch();
+        } else {
+          context.read<MessageCubit>().searchUsers(query);
+        }
+      }
+    });
+  }
+
+  void _onBlockedUsersSearchChanged() {
+    final query = _blockedUsersSearchController.text.trim();
+    _blockedUsersDebounce?.cancel();
+
+    _blockedUsersDebounce = Timer(const Duration(milliseconds: 500), () {
+      if (query != _lastBlockedUsersQuery) {
+        print('🔎 Blocked users search: "$_lastBlockedUsersQuery" → "$query"');
+        _lastBlockedUsersQuery = query;
+
+        if (query.isEmpty) {
+          context.read<MessageCubit>().clearBlockedUsersSearch();
+        } else {
+          context.read<MessageCubit>().searchBlockedUsers(query);
+        }
+      }
+    });
+  }
+
+  void _setupScrollController(
+      ScrollController controller,
+      VoidCallback onLoadMore,
+      ) {
     controller.addListener(() {
-      if (_debounce?.isActive ?? false) _debounce?.cancel();
-      _debounce = Timer(const Duration(milliseconds: 500), () {
-        onSearch(controller.text);
-      });
+      if (controller.position.pixels >=
+          controller.position.maxScrollExtent - 100 &&
+          controller.position.maxScrollExtent > 0) {
+        onLoadMore();
+      }
     });
   }
 
@@ -111,7 +153,6 @@ class _MessageScreenState extends State<MessageScreen>
       final cubit = context.read<MessageCubit>();
       cubit.loadTabData(_tabController.index);
 
-      // Clear search focus when changing tabs
       _contactsSearchFocus.unfocus();
       _usersSearchFocus.unfocus();
       _blockedUsersSearchFocus.unfocus();
@@ -120,6 +161,14 @@ class _MessageScreenState extends State<MessageScreen>
 
   @override
   void dispose() {
+    _contactsDebounce?.cancel();
+    _usersDebounce?.cancel();
+    _blockedUsersDebounce?.cancel();
+
+    _contactsSearchController.removeListener(_onContactsSearchChanged);
+    _usersSearchController.removeListener(_onUsersSearchChanged);
+    _blockedUsersSearchController.removeListener(_onBlockedUsersSearchChanged);
+
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _contactsScrollController.dispose();
@@ -156,13 +205,8 @@ class _MessageScreenState extends State<MessageScreen>
       body: TabBarView(
         controller: _tabController,
         children: [
-          // My Contacts Tab
           _buildContactsTab(),
-
-          // New Conversation Tab
           _buildUsersListTab(),
-
-          // Blocked Users Tab
           _buildBlockedUsersTab(),
         ],
       ),
@@ -172,27 +216,31 @@ class _MessageScreenState extends State<MessageScreen>
   Widget _buildContactsTab() {
     return Column(
       children: [
-        // Search Bar
         _buildSearchBar(
           controller: _contactsSearchController,
           focusNode: _contactsSearchFocus,
           hintText: 'Search contacts...',
           onClear: () {
             _contactsSearchController.clear();
-            context.read<MessageCubit>().clearContactsSearch();
+            // Listener will handle the search automatically
           },
         ),
         Expanded(
           child: BlocBuilder<MessageCubit, MessageState>(
             builder: (context, state) {
+              // ✅ Debug: Print current state
+              print('📱 Contacts State: ${state.runtimeType}');
+
               if (state is MyContactsLoading) {
                 return const Center(child: CircularProgressIndicator());
-              } else if (state is MyContactsError) {
+              }
+
+              if (state is MyContactsError) {
                 return Center(
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Error: ${state.message}'),
+                      Text(state.message),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () => context
@@ -203,10 +251,106 @@ class _MessageScreenState extends State<MessageScreen>
                     ],
                   ),
                 );
-              } else if (state is MyContactsLoaded) {
-                return _buildContactsList(state);
               }
-              return const Center(child: Text('No contacts found'));
+
+              if (state is MyContactsLoaded) {
+                final contacts = state.contacts;
+                final query = state.currentQuery;
+
+                // ✅ Debug: Print what we're showing
+                print('📱 Showing ${contacts.length} contacts for query: "$query"');
+
+                if (query.isNotEmpty && contacts.isEmpty) {
+                  return Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                        const SizedBox(height: 16),
+                        Text(
+                          'No contacts found for "$query"',
+                          style: const TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                        const SizedBox(height: 16),
+                        ElevatedButton(
+                          onPressed: () {
+                            _contactsSearchController.clear();
+                          },
+                          child: const Text('Clear Search'),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                if (contacts.isEmpty) {
+                  return const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.contacts, size: 64, color: Colors.grey),
+                        SizedBox(height: 16),
+                        Text(
+                          'No contacts yet',
+                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                        ),
+                      ],
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  controller: _contactsScrollController,
+                  itemCount: contacts.length + (state.hasMore ? 1 : 0),
+                  itemBuilder: (context, index) {
+                    if (index == contacts.length) {
+                      return const Center(
+                        child: Padding(
+                          padding: EdgeInsets.all(16.0),
+                          child: CircularProgressIndicator(),
+                        ),
+                      );
+                    }
+
+                    final contact = contacts[index];
+                    return ListTile(
+                      leading: CircleAvatar(
+                        backgroundColor: AppClr.primaryColor.withAlpha(25),
+                        backgroundImage: contact.photoUrl != null
+                            ? CachedNetworkImageProvider(contact.photoUrl!)
+                            : null,
+                        child: contact.photoUrl == null
+                            ? Text(
+                          contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
+                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        )
+                            : null,
+                      ),
+                      title: Text(contact.name),
+                      subtitle: Text(contact.email),
+                      trailing: contact.isOnline
+                          ? Container(
+                        width: 10,
+                        height: 10,
+                        decoration: const BoxDecoration(
+                          color: Colors.green,
+                          shape: BoxShape.circle,
+                        ),
+                      )
+                          : null,
+                      onTap: () => _startConversation(
+                        contact.id,
+                        contact.name,
+                        contact.photoUrl,
+                        contact.email,
+                        false,
+                      ),
+                    );
+                  },
+                );
+              }
+
+              return const SizedBox();
             },
           ),
         ),
@@ -217,14 +361,12 @@ class _MessageScreenState extends State<MessageScreen>
   Widget _buildUsersListTab() {
     return Column(
       children: [
-        // Search Bar
         _buildSearchBar(
           controller: _usersSearchController,
           focusNode: _usersSearchFocus,
           hintText: 'Search users...',
           onClear: () {
             _usersSearchController.clear();
-            context.read<MessageCubit>().clearUsersSearch();
           },
         ),
         Expanded(
@@ -262,14 +404,12 @@ class _MessageScreenState extends State<MessageScreen>
   Widget _buildBlockedUsersTab() {
     return Column(
       children: [
-        // Search Bar
         _buildSearchBar(
           controller: _blockedUsersSearchController,
           focusNode: _blockedUsersSearchFocus,
           hintText: 'Search blocked users...',
           onClear: () {
             _blockedUsersSearchController.clear();
-            context.read<MessageCubit>().clearBlockedUsersSearch();
           },
         ),
         Expanded(
@@ -304,7 +444,6 @@ class _MessageScreenState extends State<MessageScreen>
     );
   }
 
-  // Reusable Search Bar Widget
   Widget _buildSearchBar({
     required TextEditingController controller,
     required FocusNode focusNode,
@@ -313,105 +452,35 @@ class _MessageScreenState extends State<MessageScreen>
   }) {
     return Padding(
       padding: const EdgeInsets.all(16.0),
-      child: TextField(
-        controller: controller,
-        focusNode: focusNode,
-        decoration: InputDecoration(
-          hintText: hintText,
-          prefixIcon: const Icon(Icons.search),
-          suffixIcon: controller.text.isNotEmpty
-              ? IconButton(icon: const Icon(Icons.clear), onPressed: onClear)
-              : null,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey, width: 1.5),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
-          ),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16),
-        ),
-      ),
-    );
-  }
-
-  Widget _buildContactsList(MyContactsLoaded state) {
-    if (state.contacts.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              state.currentQuery.isNotEmpty ? Icons.search_off : Icons.contacts,
-              size: 64,
-              color: Colors.grey,
-            ),
-            SizedBox(height: 16),
-            Text(
-              state.currentQuery.isNotEmpty
-                  ? 'No contacts found for "${state.currentQuery}"'
-                  : 'No contacts found',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
-            ),
-          ],
-        ),
-      );
-    }
-
-    return ListView.builder(
-      controller: _contactsScrollController,
-      itemCount: state.contacts.length + (state.hasMore ? 1 : 0),
-      itemBuilder: (context, index) {
-        if (index == state.contacts.length && state.hasMore) {
-          return const Center(
-            child: Padding(
-              padding: EdgeInsets.all(16.0),
-              child: CircularProgressIndicator(),
+      child: ValueListenableBuilder<TextEditingValue>(
+        valueListenable: controller,
+        builder: (context, value, child) {
+          return TextField(
+            controller: controller,
+            focusNode: focusNode,
+            decoration: InputDecoration(
+              hintText: hintText,
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: value.text.isNotEmpty
+                  ? IconButton(
+                icon: const Icon(Icons.clear),
+                onPressed: onClear,
+              )
+                  : null,
+              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: const BorderSide(color: Colors.grey, width: 1.5),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
+              ),
+              contentPadding: const EdgeInsets.symmetric(horizontal: 16),
             ),
           );
-        }
-
-        final contact = state.contacts[index];
-        return ListTile(
-          leading: CircleAvatar(
-            backgroundColor: AppClr.primaryColor.withAlpha(25),
-            backgroundImage: contact.photoUrl != null
-                ? CachedNetworkImageProvider(contact.photoUrl!)
-                : null,
-            child: contact.photoUrl == null
-                ? Text(
-                    contact.name.substring(0, 1),
-                    style: const TextStyle(fontWeight: FontWeight.bold),
-                  )
-                : null,
-          ),
-          title: Text(contact.name),
-          subtitle: Text(contact.email),
-          trailing: contact.isOnline
-              ? const Icon(Icons.circle, color: Colors.green, size: 12)
-              : null,
-          onTap: () {
-            // Navigate to chat screen
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) => BlocProvider(
-                  create: (_) => Providers.createChatCubit(),
-                  child: ChatScreen(
-                    userId: contact.id.toString(),
-                    userName: contact.name,
-                    userAvatar: contact.photoUrl,
-                    isGroup: false,
-                    userEmail: contact.email,
-                  ),
-                ),
-              ),
-            );
-          },
-        );
-      },
+        },
+      ),
     );
   }
 
@@ -422,18 +491,16 @@ class _MessageScreenState extends State<MessageScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              state.currentQuery.isNotEmpty
-                  ? Icons.search_off
-                  : Icons.person_add,
+              state.currentQuery.isNotEmpty ? Icons.search_off : Icons.person_add,
               size: 64,
               color: Colors.grey,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               state.currentQuery.isNotEmpty
                   ? 'No users found for "${state.currentQuery}"'
                   : 'No users found',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+              style: const TextStyle(fontSize: 18, color: Colors.grey),
             ),
           ],
         ),
@@ -458,7 +525,7 @@ class _MessageScreenState extends State<MessageScreen>
           leading: CircleAvatar(
             backgroundColor: Colors.green.shade100,
             child: Text(
-              user.name.substring(0, 1),
+              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -486,12 +553,12 @@ class _MessageScreenState extends State<MessageScreen>
               size: 64,
               color: Colors.grey,
             ),
-            SizedBox(height: 16),
+            const SizedBox(height: 16),
             Text(
               state.currentQuery.isNotEmpty
                   ? 'No blocked users found for "${state.currentQuery}"'
                   : 'No blocked users found',
-              style: TextStyle(fontSize: 18, color: Colors.grey),
+              style: const TextStyle(fontSize: 18, color: Colors.grey),
             ),
           ],
         ),
@@ -526,7 +593,6 @@ class _MessageScreenState extends State<MessageScreen>
           subtitle: Text(user.email),
           trailing: TextButton(
             onPressed: () {
-              // open confirmation and perform unblock via UserRepository
               _showUnblockDialog(user.name, user.id);
             },
             child: const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
@@ -536,13 +602,13 @@ class _MessageScreenState extends State<MessageScreen>
     );
   }
 
-  Future<void> _startConversation(
-    int? userId,
-    String userName,
-    String? photoUrl,
-    String email,
-    bool isGroup,
-  ) async {
+ /* Future<void> _startConversation(
+      int? userId,
+      String userName,
+      String? photoUrl,
+      String email,
+      bool isGroup,
+      ) async {
     print('Starting conversation with $userName (ID: $userId)');
 
     final messageCubit = context.read<MessageCubit>();
@@ -551,7 +617,6 @@ class _MessageScreenState extends State<MessageScreen>
       final resp = await messageCubit.sendChatRequestTo(userId.toString());
 
       if (!mounted) return;
-      // hide loading and show result
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (resp.success) {
@@ -577,7 +642,89 @@ class _MessageScreenState extends State<MessageScreen>
       );
     }
   }
+*/
 
+  Future<void> _startConversation(
+      int? userId,
+      String userName,
+      String? photoUrl,
+      String email,
+      bool isGroup,
+      ) async {
+    print('Starting conversation with $userName (ID: $userId)');
+
+    final messageCubit = context.read<MessageCubit>();
+
+    try {
+      final resp = await messageCubit.sendChatRequestTo(userId.toString());
+
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+      if (resp.success) {
+        // ✅ Check if existing conversation was found
+        final isExistingConversation = resp.message?.toLowerCase().contains('existing conversation') ?? false;
+
+        if (isExistingConversation) {
+          // Navigate to chat screen for existing conversation
+          showCustomSnackBar(
+            context,
+            'Opening existing conversation...',
+            type: SnackBarType.info,
+          );
+
+          // Navigate to chat screen
+          Navigator.of(context).pushReplacement(
+            MaterialPageRoute(
+              builder: (context) => BlocProvider(
+                create: (context) => ChatCubit(
+                  chatRepository: ChatRepository(DioClient()),
+                  socketService: SocketService(),
+                ),
+                child: ChatScreen(
+                  userId: userId.toString(),
+                  userName: userName,
+                  userEmail: email,
+                  userAvatar: photoUrl,
+                  isGroup: isGroup,
+                  groupData: null,
+                  isOnline: false,
+                ),
+              ),
+            ),
+          ).then((_) {
+            // Refresh conversations when returning
+            try {
+              context.read<ConversationCubit>().refresh();
+            } catch (e) {
+              print('⚠️ Failed to refresh conversations: $e');
+            }
+          });
+        } else {
+          // New chat request sent
+          showCustomSnackBar(
+            context,
+            resp.message ?? 'Chat request sent',
+            type: SnackBarType.success,
+          );
+        }
+      } else {
+        showCustomSnackBar(
+          context,
+          resp.message ?? 'Failed to send chat request',
+          type: SnackBarType.error,
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).hideCurrentSnackBar();
+      showCustomSnackBar(
+        context,
+        'Failed to send chat request: $e',
+        type: SnackBarType.error,
+      );
+    }
+  }
   void _showUnblockDialog(String username, int userId) {
     showDialog(
       context: context,
@@ -597,60 +744,51 @@ class _MessageScreenState extends State<MessageScreen>
                   onPressed: isLoading
                       ? null
                       : () async {
-                          setState(() => isLoading = true);
-                          try {
-                            final currentUserId = context
-                                .read<MessageCubit>()
-                                .userId;
-                            final repo = UserRepository();
-                            final success = await repo.blockUnblock(
-                              currentUserId: currentUserId,
-                              userId: userId,
-                              isBlocked: false,
-                            );
+                    setState(() => isLoading = true);
+                    try {
+                      final currentUserId = context.read<MessageCubit>().userId;
+                      final repo = UserRepository();
+                      final success = await repo.blockUnblock(
+                        currentUserId: currentUserId,
+                        userId: userId,
+                        isBlocked: false,
+                      );
 
-                            // close dialog
-                            if (mounted) Navigator.pop(context);
+                      if (mounted) Navigator.pop(context);
 
-                            if (success) {
-                              showCustomSnackBar(
-                                context,
-                                '$username has been unblocked',
-                                type: SnackBarType.success,
-                              );
+                      if (success) {
+                        showCustomSnackBar(
+                          context,
+                          '$username has been unblocked',
+                          type: SnackBarType.success,
+                        );
 
-                              // refresh blocked list
-                              try {
-                                context.read<MessageCubit>().loadBlockedUsers(
-                                  refresh: true,
-                                );
-                              } catch (_) {}
-                            } else {
-                              showCustomSnackBar(
-                                context,
-                                'Failed to unblock $username. Please try again.',
-                                type: SnackBarType.error,
-                              );
-                            }
-                          } catch (e) {
-                            if (mounted) Navigator.pop(context);
-                            showCustomSnackBar(
-                              context,
-                              'Error while unblocking: ${e.toString()}',
-                              type: SnackBarType.error,
-                            );
-                          }
-                        },
+                        try {
+                          context.read<MessageCubit>().loadBlockedUsers(refresh: true);
+                        } catch (_) {}
+                      } else {
+                        showCustomSnackBar(
+                          context,
+                          'Failed to unblock $username. Please try again.',
+                          type: SnackBarType.error,
+                        );
+                      }
+                    } catch (e) {
+                      if (mounted) Navigator.pop(context);
+                      showCustomSnackBar(
+                        context,
+                        'Error while unblocking: ${e.toString()}',
+                        type: SnackBarType.error,
+                      );
+                    }
+                  },
                   child: isLoading
                       ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text(
-                          'UNBLOCK',
-                          style: TextStyle(color: Colors.blue),
-                        ),
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(strokeWidth: 2),
+                  )
+                      : const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
                 ),
               ],
             );

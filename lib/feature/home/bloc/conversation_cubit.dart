@@ -616,7 +616,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     }
   }
 
-
   // ##################### temporary method ##########################
   void _handleMemberRemoved(dynamic payload) {
     try {
@@ -636,7 +635,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         return;
       }
 
-      print('🔍 Group: $groupId, Removed User: $removedUserId, Removed By: $removedBy, Current User: $_currentUserId');
+      print(
+        '🔍 Group: $groupId, Removed User: $removedUserId, Removed By: $removedBy, Current User: $_currentUserId',
+      );
 
       // Check if the current user was removed (either by someone else OR by themselves)
       final isCurrentUserRemoved = removedUserId == _currentUserId.toString();
@@ -662,8 +663,8 @@ class ConversationCubit extends Cubit<ConversationState> {
       final systemMessage = payload['systemMessage'] ?? payload['notification'];
       final lastMessageText =
           systemMessage?['message']?.toString() ??
-              systemMessage?['body']?.toString() ??
-              'Member removed';
+          systemMessage?['body']?.toString() ??
+          'Member removed';
 
       bool changed = false;
 
@@ -702,9 +703,10 @@ class ConversationCubit extends Cubit<ConversationState> {
       print('❌ Error handling member_removed: $e');
     }
   }
+
   /// ################# working method ##############################
   /// Handle when a member is removed from a group
-/*
+  /*
   void _handleMemberRemoved(dynamic payload) {
     try {
       print('🚫 Processing member_removed event');
@@ -1389,11 +1391,13 @@ class ConversationCubit extends Cubit<ConversationState> {
         final groupName = createdGroup['name']?.toString() ?? 'New Group';
         final creatorId =
             data['creator_id']?.toString() ??
-                createdGroup['created_by']?.toString();
+            createdGroup['created_by']?.toString();
 
         // ✅ FIX: Handle photo URL construction
         String? photoUrl = createdGroup['photo_url']?.toString();
-        if (photoUrl != null && photoUrl.isNotEmpty && !photoUrl.startsWith('http')) {
+        if (photoUrl != null &&
+            photoUrl.isNotEmpty &&
+            !photoUrl.startsWith('http')) {
           photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
         }
 
@@ -1401,23 +1405,23 @@ class ConversationCubit extends Cubit<ConversationState> {
         final systemMessage = data['systemMessage'] ?? data['notification'];
         final lastMessageText =
             systemMessage?['message']?.toString() ??
-                systemMessage?['body']?.toString() ??
-                'Group created';
+            systemMessage?['body']?.toString() ??
+            'Group created';
 
         // Check if group already exists
         final existingIndex = _allConversations.indexWhere(
-              (c) => c.isGroup && c.groupId == groupId,
+          (c) => c.isGroup && c.groupId == groupId,
         );
 
         if (existingIndex >= 0) {
           // Update existing
           _allConversations[existingIndex] = _allConversations[existingIndex]
               .copyWith(
-            title: groupName,
-            lastMessage: lastMessageText,
-            timestamp: DateTime.now(),
-            avatarUrl: photoUrl,
-          );
+                title: groupName,
+                lastMessage: lastMessageText,
+                timestamp: DateTime.now(),
+                avatarUrl: photoUrl,
+              );
         } else {
           // Create new conversation
           final newConv = Conversation(
@@ -1431,6 +1435,8 @@ class ConversationCubit extends Cubit<ConversationState> {
             avatarUrl: photoUrl,
             isGroup: true,
             isUnread: false,
+            isOnline: false,
+            isActive: false,
           );
 
           // Insert at the beginning of the list
@@ -1554,15 +1560,13 @@ class ConversationCubit extends Cubit<ConversationState> {
       photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
     }
 
-    print(
-      '✅ Extracted group data: name=${groupData['name']}, photo=$photoUrl',
-    );
+    print('✅ Extracted group data: name=${groupData['name']}, photo=$photoUrl');
 
     // Extract system message for last message update
     final systemMessage = data['systemMessage'] ?? data['notification'];
     final lastMessageText =
         systemMessage?['message']?.toString() ??
-            systemMessage?['body']?.toString();
+        systemMessage?['body']?.toString();
 
     bool changed = false;
 
@@ -1615,10 +1619,7 @@ class ConversationCubit extends Cubit<ConversationState> {
             lastMessage: lastMessageText,
           );
         } else {
-          return c.copyWith(
-            title: newName,
-            avatarUrl: newPhoto,
-          );
+          return c.copyWith(title: newName, avatarUrl: newPhoto);
         }
       }
       return c;
@@ -1626,13 +1627,17 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     if (changed) {
       _emitUnifiedLoadedState();
-      print('✅ Group updated successfully: ${groupData['name']} with photo: $photoUrl');
+      print(
+        '✅ Group updated successfully: ${groupData['name']} with photo: $photoUrl',
+      );
     } else {
       print('⚠️ Group $gid not found in local conversations');
       // Optionally refresh to get the group
       loadConversations(refresh: true);
     }
-  }  void _handleGroupDeleted(String? groupId) {
+  }
+
+  void _handleGroupDeleted(String? groupId) {
     if (groupId == null || groupId.isEmpty) {
       print('⚠️ group_deleted: No group ID');
       return;
@@ -1902,6 +1907,8 @@ class ConversationCubit extends Cubit<ConversationState> {
       isGroup: isGroup,
       isUnread: !_isOwnMessage(msg),
       email: '',
+      isOnline: false,
+      isActive: false,
     );
 
     _allConversations = [newConv, ..._allConversations];

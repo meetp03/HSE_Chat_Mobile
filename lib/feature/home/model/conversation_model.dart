@@ -1,5 +1,7 @@
 import 'package:intl/intl.dart';
 
+import '../../../cores/utils/utils.dart';
+
 class ConversationResponse {
   final bool success;
   final ConversationData data;
@@ -97,6 +99,10 @@ class Conversation {
   final String? chatRequestTo;      // User ID of recipient
   final String? chatRequestId;      // Server ID for the request
 
+  // Online and Active status for direct chats
+  final bool isOnline;
+  final bool isActive;
+
   Conversation({
     required this.id,
     required this.groupId,
@@ -117,6 +123,8 @@ class Conversation {
     this.chatRequestFrom,
     this.chatRequestTo,
     this.chatRequestId,
+    required this.isOnline,
+    required this.isActive,
   });
   factory Conversation.fromJson(Map<String, dynamic> json) {
     final bool isGroup = json['group_id'] != "0" && json['group_id'] != null;
@@ -231,6 +239,8 @@ class Conversation {
       chatRequestFrom: json['chat_request_from']?.toString(),
       chatRequestTo: json['chat_request_to']?.toString(),
       chatRequestId: json['chat_request_id']?.toString(),
+      isOnline: isGroup ? false : (user?['is_online'] == 1 || user?['is_online'] == true),
+      isActive: isGroup ? false : (user?['is_active'] == 1 || user?['is_active'] == true),
     );
   }
 
@@ -267,6 +277,8 @@ class Conversation {
     String? chatRequestFrom,
     String? chatRequestTo,
     String? chatRequestId,
+    bool? isOnline,
+    bool? isActive,
 
   }) {
     return Conversation(
@@ -290,6 +302,8 @@ class Conversation {
       chatRequestFrom: chatRequestFrom ?? this.chatRequestFrom,
       chatRequestTo: chatRequestTo ?? this.chatRequestTo,
       chatRequestId: chatRequestId ?? this.chatRequestId,
+      isOnline: isOnline ?? this.isOnline,
+      isActive: isActive ?? this.isActive,
     );
   }
 
@@ -318,20 +332,9 @@ class Conversation {
     return copyWith(isTyping: typing, typingUser: user);
   }
 
-  // ---- Human readable time ----
   String get formattedTime {
-    final now = DateTime.now();
-    final today = DateTime(now.year, now.month, now.day);
-    final yesterday = DateTime(now.year, now.month, now.day - 1);
-    if (timestamp.isAfter(today)) {
-      return DateFormat('HH:mm').format(timestamp);
-    } else if (timestamp.isAfter(yesterday)) {
-      return 'Yesterday';
-    } else {
-      return DateFormat('MM/dd/yyyy').format(timestamp);
-    }
+    return Utils.formatConversationTime(timestamp!);
   }
-
   // ---- Get last message preview ----
   String get lastMessagePreview {
     if (lastMessage.length > 50) {

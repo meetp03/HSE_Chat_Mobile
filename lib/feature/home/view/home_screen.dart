@@ -579,159 +579,10 @@ class _HomeScreenState extends State<HomeScreen>
   }
 
   Widget _buildChatItem(Conversation conv) {
-    return ListTile(
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      leading: CircleAvatar(
-        radius: 25,
-        backgroundColor: AppClr.primaryColor.withAlpha(25),
-        backgroundImage: conv.avatarUrl != null
-            ? CachedNetworkImageProvider(conv.avatarUrl!)
-            : null,
-        child: conv.avatarUrl == null
-            ? Text(
-                Utils.getInitials(conv.title),
-                style: TextStyle(
-                  color: AppClr.primaryColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              )
-            : null,
-      ),
-      title: Row(
-        children: [
-          Expanded(
-            child: Text(
-              conv.title,
-              style: TextStyle(
-                fontWeight: conv.isUnread ? FontWeight.w600 : FontWeight.w500,
-                fontSize: 16,
-              ),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          // Show "Request" badge if pending
-          if (conv.chatRequestStatus == 'pending' &&
-              (conv.chatRequestTo ==
-                  SharedPreferencesHelper.getCurrentUserId().toString()))
-            Container(
-              margin: const EdgeInsets.only(left: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade100,
-                borderRadius: BorderRadius.circular(12),
-                border: Border.all(color: Colors.orange.shade300),
-              ),
-              child: Text(
-                'Request',
-                style: TextStyle(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.orange.shade800,
-                ),
-              ),
-            ),
-          if (conv.unreadCount > 0 && conv.chatRequestStatus != 'pending')
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-              decoration: BoxDecoration(
-                color: AppClr.primaryColor,
-                borderRadius: BorderRadius.circular(10),
-              ),
-              child: Text(
-                conv.unreadCount.toString(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-            ),
-        ],
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Text(
-            conv.lastMessage.isNotEmpty ? conv.lastMessage : 'No messages',
-            style: TextStyle(
-              color: conv.isUnread ? Colors.black87 : Colors.grey[600],
-              fontWeight: conv.isUnread ? FontWeight.w500 : FontWeight.normal,
-              fontSize: 14,
-            ),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Row(
-            children: [
-              Text(
-                conv.formattedTime,
-                style: const TextStyle(color: Colors.grey, fontSize: 12),
-              ),
-            ],
-          ),
-        ],
-      ),
-      trailing: PopupMenuButton<String>(
-        onSelected: (value) async {
-          if (value == 'delete') {
-            final confirmed = await showDialog<bool>(
-              context: context,
-              builder: (ctx) => AlertDialog(
-                title: const Text('Delete Conversation'),
-                content: const Text(
-                  'Are you sure you want to delete this conversation?',
-                ),
-                actions: [
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, false),
-                    child: const Text('Cancel'),
-                  ),
-                  TextButton(
-                    onPressed: () => Navigator.pop(ctx, true),
-                    child: const Text(
-                      'Delete',
-                      style: TextStyle(color: Colors.red),
-                    ),
-                  ),
-                ],
-              ),
-            );
-
-            if (confirmed == true) {
-              final convId = conv.isGroup ? (conv.groupId ?? '') : conv.id;
-              final ok = await context
-                  .read<ConversationCubit>()
-                  .deleteConversation(convId);
-              if (ok) {
-                showCustomSnackBar(
-                  context,
-                  'Conversation deleted',
-                  type: SnackBarType.success,
-                );
-              } else {
-                showCustomSnackBar(
-                  context,
-                  'Failed to delete conversation',
-                  type: SnackBarType.error,
-                );
-              }
-            }
-          }
-        },
-        itemBuilder: (_) => [
-          const PopupMenuItem(
-            value: 'delete',
-            child: Text(
-              'Delete Conversation',
-              style: TextStyle(color: Colors.red),
-            ),
-          ),
-        ],
-      ),
+    return GestureDetector(
+      onLongPress: () async {
+        await _showDeleteDialog(conv);
+      },
       onTap: () {
         print('🎯 Opening chat: ${conv.title}');
         print('📋 Conversation ID: ${conv.id}');
@@ -739,18 +590,11 @@ class _HomeScreenState extends State<HomeScreen>
         print('🆔 Group ID: ${conv.groupId}');
         print('👤 User ID: ${conv.id}');
 
-        final chatId = conv.id;
-        final groupId = conv.groupId;
-
-        /* if (chatId.isEmpty || groupId!.isEmpty) {
-          print('❌ Error: Invalid chat ID');
-          showCustomSnackBar(
-            context,
-            'Cannot open chat: Invalid ID',
-            type: SnackBarType.error,
-          );
-          return;
-        }*/
+        // ✅ NEW: Tell socket service this conversation is now active
+        SocketService().setSelectedConversation(
+          id: conv.isGroup ? (conv.groupId ?? conv.id) : conv.id,
+          type: conv.isGroup ? 'group' : 'direct',
+        );
 
         Navigator.push(
           context,
@@ -767,10 +611,14 @@ class _HomeScreenState extends State<HomeScreen>
                 userAvatar: conv.avatarUrl,
                 isGroup: conv.isGroup,
                 groupData: conv,
+                isOnline: conv.isOnline,
               ),
             ),
           ),
         ).then((result) {
+          // ✅ NEW: Clear active conversation when user returns
+          SocketService().setSelectedConversation(id: null, type: null);
+
           if (result != null) {
             try {
               context.read<ConversationCubit>().processRawMessage(result);
@@ -780,9 +628,170 @@ class _HomeScreenState extends State<HomeScreen>
           }
         });
       },
+      child: ListTile(
+        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        leading: Stack(
+          children: [
+            CircleAvatar(
+              radius: 25,
+              backgroundColor: AppClr.primaryColor.withAlpha(25),
+              backgroundImage: conv.avatarUrl != null
+                  ? CachedNetworkImageProvider(conv.avatarUrl!)
+                  : null,
+              child: conv.avatarUrl == null
+                  ? Text(
+                Utils.getInitials(conv.title),
+                style: TextStyle(
+                  color: AppClr.primaryColor,
+                  fontWeight: FontWeight.bold,
+                  fontSize: 18,
+                ),
+              )
+                  : null,
+            ),
+            if (!conv.isGroup && conv.isOnline)
+              Positioned(
+                bottom: 0,
+                right: 0,
+                child: Container(
+                  width: 12,
+                  height: 12,
+                  decoration: BoxDecoration(
+                    color: Colors.green,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: Colors.white, width: 2),
+                  ),
+                ),
+              ),
+          ],
+        ),
+        title: Row(
+          children: [
+            Expanded(
+              child: Text(
+                conv.title,
+                style: TextStyle(
+                  fontWeight: conv.isUnread ? FontWeight.w600 : FontWeight.w500,
+                  fontSize: 16,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+         /*   // Show "Request" badge if pending
+            if (conv.chatRequestStatus != 'pending' &&
+                (conv.chatRequestTo ==
+                    SharedPreferencesHelper.getCurrentUserId().toString()))
+              Container(
+                margin: const EdgeInsets.only(left: 6),
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.orange.shade300),
+                ),
+                child: Text(
+                  'Request',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.orange.shade800,
+                  ),
+                ),
+              ),*/
+             Row(
+              children: [
+                Text(
+                  conv.formattedTime,
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                ),
+                const SizedBox(width: 8),
+              ],
+            ),
+            if (conv.unreadCount > 0 && conv.chatRequestStatus != 'pending')
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: AppClr.primaryColor,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Text(
+                  conv.unreadCount.toString(),
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Text(
+              conv.lastMessage.isNotEmpty ? conv.lastMessage : 'No messages',
+              style: TextStyle(
+                color: conv.isUnread ? Colors.black87 : Colors.grey[600],
+                fontWeight: conv.isUnread ? FontWeight.w500 : FontWeight.normal,
+                fontSize: 14,
+              ),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+
+          ],
+        ),
+        // Remove the trailing PopupMenuButton
+      ),
     );
   }
 
+  Future<void> _showDeleteDialog(Conversation conv) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Delete Conversation'),
+        content: const Text(
+          'Are you sure you want to delete this conversation?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text(
+              'Delete',
+              style: TextStyle(color: Colors.red),
+            ),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed == true && mounted) {
+      final convId = conv.isGroup ? (conv.groupId ?? '') : conv.id;
+      final ok = await context
+          .read<ConversationCubit>()
+          .deleteConversation(convId);
+      if (ok) {
+        showCustomSnackBar(
+          context,
+          'Conversation deleted',
+          type: SnackBarType.success,
+        );
+      } else {
+        showCustomSnackBar(
+          context,
+          'Failed to delete conversation',
+          type: SnackBarType.error,
+        );
+      }
+    }
+  }
   /*
   Widget _buildChatItem(Conversation conv) {
     return ListTile(

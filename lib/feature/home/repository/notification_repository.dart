@@ -92,4 +92,26 @@ class NotificationRepository {
       return ApiResponse.error('Network error: $e');
     }
   }
+
+   Future<ApiResponse<void>> markAllNotificationsRead(int userId) async {
+     try {
+       final resp = await _dio.post(
+         ApiUrls.markAllNotificationsRead,
+         data: {'user_id': userId},
+       );
+
+       if (resp.statusCode == 200) {
+         return ApiResponse.success(
+             null,
+             message: 'All notifications marked as read'
+         );
+       }
+
+       return ApiResponse.error(
+           'Failed to mark notifications as read: ${resp.statusCode}'
+       );
+     } catch (e) {
+       return ApiResponse.error('Network error: $e');
+     }
+   }
 }

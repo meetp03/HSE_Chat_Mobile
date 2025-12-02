@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+import '../../../cores/utils/utils.dart';
+
 // message_model.dart (Key parts to check/update)
 
 class Message {
@@ -37,6 +39,8 @@ class Message {
 
   // ✅ CRITICAL: This determines message alignment
   factory Message.fromJson(Map<String, dynamic> json, int currentUserId) {
+
+
     // Helpers
     int parseInt(dynamic v) {
       if (v == null) return 0;
@@ -51,23 +55,8 @@ class Message {
     }
 
     DateTime parseDate(dynamic v) {
-      if (v == null) return DateTime.now();
-      if (v is DateTime) return v;
-      if (v is int) {
-        // Heuristic: if it's > 10^12 it's milliseconds, else seconds
-        if (v > 1000000000000) return DateTime.fromMillisecondsSinceEpoch(v);
-        return DateTime.fromMillisecondsSinceEpoch(v * 1000);
-      }
-      if (v is String) {
-        final parsed = DateTime.tryParse(v);
-        if (parsed != null) return parsed;
-        // try parsing as int string
-        final maybeInt = int.tryParse(v);
-        if (maybeInt != null) return parseDate(maybeInt);
-      }
-      return DateTime.now();
+      return Utils.parseUtcDate(v);
     }
-
     try {
       // Parse fromId properly (could be int or string)
       final fromId = parseInt(json['from_id']);
@@ -182,6 +171,22 @@ class Message {
   // `content`/`timestamp` are used interchangeably.
   String get content => message;
   DateTime get timestamp => updatedAt;
+
+  String get formattedTime {
+    return Utils.formatConversationTime(createdAt);
+  }
+
+  String get chatTime {
+    return Utils.formatTimeOnly(createdAt);
+  }
+
+  String get relativeTime {
+    return Utils.formatRelativeTime(createdAt);
+  }
+
+  String get debugTimeInfo {
+    return Utils.getDebugTimeInfo(createdAt);
+  }
 }
 
 class Sender {

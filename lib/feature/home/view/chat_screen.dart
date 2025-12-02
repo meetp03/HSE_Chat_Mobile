@@ -16,6 +16,7 @@ import 'package:hsc_chat/feature/home/model/conversation_model.dart'
     show Conversation;
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/home/widgets/user_info_screen.dart';
+import 'package:open_file/open_file.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
@@ -38,6 +39,7 @@ class ChatScreen extends StatefulWidget {
   final String userEmail;
   final String? userAvatar;
   final bool isGroup;
+  final bool isOnline;
   final Conversation? groupData;
 
   const ChatScreen({
@@ -48,6 +50,7 @@ class ChatScreen extends StatefulWidget {
     this.userAvatar,
     this.groupData,
     this.isGroup = false,
+    this.isOnline = false,
   });
 
   @override
@@ -81,6 +84,7 @@ class _ChatScreenState extends State<ChatScreen>
   double? _scrollOffsetBeforeLoad;
   int? _messageCountBeforeLoad;
   bool _isSending = false;
+
 
   @override
   void initState() {
@@ -518,9 +522,7 @@ class _ChatScreenState extends State<ChatScreen>
                 'message_type': last.messageType,
                 'file_url': last.fileUrl,
                 'file_name': last.fileName,
-                'group_id': widget.isGroup
-                    ? widget.groupData?.groupId
-                    : null,
+                'group_id': widget.isGroup ? widget.groupData?.groupId : null,
               },
             };
             context.read<ConversationCubit>().processRawMessage(payload);
@@ -920,7 +922,10 @@ class _ChatScreenState extends State<ChatScreen>
                   builder: (context, state) {
                     if (state is ChatLoaded) {
                       return Text(
-                        widget.isGroup ? 'Group' : 'online',
+                        (!widget.isGroup && widget.isOnline)
+                            ? 'online'
+                            : (widget.isGroup ? 'Group' : 'offline'),
+
                         style: const TextStyle(
                           color: Colors.white70,
                           fontSize: 12,
@@ -1101,7 +1106,9 @@ class _ChatScreenState extends State<ChatScreen>
 
               // ✅ Use ValueKey to help Flutter identify when message content changes
               return KeyedSubtree(
-                key: ValueKey('${msg.id}_${msg.updatedAt.millisecondsSinceEpoch}'),
+                key: ValueKey(
+                  '${msg.id}_${msg.updatedAt.millisecondsSinceEpoch}',
+                ),
                 child: _buildMessageBubble(msg),
               );
             },
@@ -1112,6 +1119,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
     if (message.replyMessage != null) {
@@ -1266,7 +1274,7 @@ class _ChatScreenState extends State<ChatScreen>
                         mainAxisSize: MainAxisSize.min,
                         children: [
                           Text(
-                            _formatTime(message.createdAt),
+                            message.chatTime,
                             style: TextStyle(
                               color: message.isSentByMe
                                   ? Colors.black54
@@ -2741,21 +2749,173 @@ class _ChatScreenState extends State<ChatScreen>
                   await _saveToGallery(File(localPath));
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.share),
-                title: const Text('Share'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  // TODO: Implement share
-                },
-              ),
+              // ListTile(
+              //   leading: const Icon(Icons.share),
+              //   title: const Text('Share'),
+              //   onTap: () {
+              //     Navigator.of(ctx).pop();
+              //     // TODO: Implement share
+              //   },
+              // ),
             ],
           ),
         );
       },
     );
   }
+  Widget _buildFileContent(Message message) {
+    final url = message.fileUrl;
+    if (url == null || url.isEmpty) return const SizedBox.shrink();
 
+    final ext = p.extension(message.fileName ?? url).toLowerCase();
+    IconData iconData = Icons.insert_drive_file;
+    Color iconColor = Colors.blue;
+
+    if (ext == '.pdf') {
+      iconData = Icons.picture_as_pdf;
+      iconColor = Colors.red;
+    } else if (['.doc', '.docx'].contains(ext)) {
+      iconData = Icons.description;
+      iconColor = Colors.blue[700]!;
+    } else if (['.xls', '.xlsx'].contains(ext)) {
+      iconData = Icons.table_chart;
+      iconColor = Colors.green[700]!;
+    } else if (['.ppt', '.pptx'].contains(ext)) {
+      iconData = Icons.slideshow;
+      iconColor = Colors.orange[700]!;
+    } else if (ext == '.txt') {
+      iconData = Icons.text_snippet;
+      iconColor = Colors.grey[700]!;
+    }
+
+    return FutureBuilder<FileInfo?>(
+      future: DefaultCacheManager().getFileFromCache(url),
+      builder: (context, snapshot) {
+        final isCached = snapshot.data != null;
+        final isDownloading =
+            _downloadProgress[message.id] != null &&
+                _downloadProgress[message.id]! < 1.0;
+
+        return GestureDetector(
+          // ✅ TAP: Auto download and open (same as before on long press)
+          onTap: () async {
+            print('📄 Tapped file ${message.id}');
+            if (isCached) {
+              // File already downloaded, just open it
+              await _openDocument(url, message.id, ext);
+            } else {
+              // Download first, then open
+              try {
+                await _fetchAndCache(url, message.id);
+                if (mounted) {
+                  await _openDocument(url, message.id, ext);
+                }
+              } catch (e) {
+                showCustomSnackBar(
+                  context,
+                  'Download failed: $e',
+                  type: SnackBarType.error,
+                );
+              }
+            }
+          },
+          // ✅ LONG PRESS: Show options (download/cancel)
+          onLongPress: () {
+            print('🔍 Long pressed file ${message.id}');
+            _showMediaOptions(message, url);
+          },
+          child: Container(
+            padding: const EdgeInsets.all(12),
+            constraints: const BoxConstraints(maxWidth: 250),
+            decoration: BoxDecoration(
+              color: message.isSentByMe
+                  ? Colors.white.withValues(alpha: 0.2)
+                  : Colors.grey[100],
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(
+                color: isCached
+                    ? iconColor
+                    : Colors.grey.withValues(alpha: 0.3),
+                width: 1.5,
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: isCached
+                        ? iconColor.withValues(alpha: 0.2)
+                        : Colors.grey[200],
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Icon(
+                    iconData,
+                    size: 28,
+                    color: isCached ? iconColor : Colors.grey[600],
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Flexible(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        message.message,
+                        style: const TextStyle(
+                          color: Colors.black87,
+                          fontSize: 14,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        isDownloading
+                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
+                            : (isCached
+                            ? ext.toUpperCase().replaceFirst('.', '')
+                            : 'Tap to download'),
+                        style: TextStyle(
+                          color: isCached
+                              ? iconColor // ✅ Show file type color when cached
+                              : Colors.blueAccent,
+                          fontSize: 11,
+                          fontWeight: isCached ? FontWeight.w600 : FontWeight.normal,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 8),
+                if (isDownloading)
+                  SizedBox(
+                    width: 24,
+                    height: 24,
+                    child: CircularProgressIndicator(
+                      value: _downloadProgress[message.id],
+                      strokeWidth: 2,
+                      color: iconColor,
+                    ),
+                  )
+                else
+                  Icon(
+                    isCached
+                        ? Icons.file_present // ✅ Show "file present" icon when cached
+                        : Icons.download_rounded, // ✅ Show download icon when not cached
+                    size: 20,
+                    color: isCached ? iconColor : Colors.grey[600],
+                  ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+/*latest
   Widget _buildFileContent(Message message) {
     final url = message.fileUrl;
     if (url == null || url.isEmpty) return const SizedBox.shrink();
@@ -2851,11 +3011,9 @@ class _ChatScreenState extends State<ChatScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        message.fileName ?? 'Document',
+                        message.message,
                         style: TextStyle(
-                          color: message.isSentByMe
-                              ? Colors.white
-                              : Colors.black87,
+                          color: Colors.black87,
                           fontSize: 14,
                           fontWeight: FontWeight.w500,
                         ),
@@ -2870,9 +3028,8 @@ class _ChatScreenState extends State<ChatScreen>
                                   ? ext.toUpperCase().replaceFirst('.', '')
                                   : 'Tap to download'),
                         style: TextStyle(
-                          color: message.isSentByMe
-                              ? Colors.white70
-                              : Colors.grey[600],
+                          color:  Colors.blueAccent
+                              ,
                           fontSize: 11,
                         ),
                       ),
@@ -2894,7 +3051,7 @@ class _ChatScreenState extends State<ChatScreen>
                   Icon(
                     isCached ? Icons.open_in_new : Icons.download_rounded,
                     size: 20,
-                    color: message.isSentByMe ? Colors.white : iconColor,
+                    color:   Colors.black87 ,
                   ),
               ],
             ),
@@ -2903,6 +3060,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+*/
   // FILE/DOCUMENT: Show document icon with name
   /*
   Widget _buildFileContent(Message message) {
@@ -3156,60 +3314,52 @@ class _ChatScreenState extends State<ChatScreen>
       ),
     );
   }
-
+  void _showNoAppAvailableDialog(String filePath, String ext) {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('No App Available'),
+        content: Text(
+          'No app found to open ${ext.toUpperCase()} files.\n\n'
+              'Please install an appropriate app from the app store.\n\n'
+              'File saved at: ${p.basename(filePath)}',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
   Future<void> _openDocument(String url, String messageId, String ext) async {
     try {
       final file = await _fetchAndCache(url, messageId);
       if (file == null) {
-        showCustomSnackBar(
-          context,
+        showCustomSnackBar(context,
           'Document not available',
           type: SnackBarType.error,
         );
         return;
       }
 
-      if (ext == '.pdf') {
-        // Open PDF viewer
-        await Navigator.of(context).push(
-          MaterialPageRoute(
-            builder: (_) {
-              final controller = PdfController(
-                document: PdfDocument.openFile(file.path),
-              );
-              return Scaffold(
-                appBar: AppBar(
-                  title: Text(p.basename(file.path)),
-                  actions: [
-                    IconButton(
-                      icon: const Icon(Icons.share),
-                      onPressed: () {
-                        // Implement share functionality
-                      },
-                    ),
-                  ],
-                ),
-                body: PdfView(controller: controller),
-              );
-            },
-          ),
-        );
-      } else {
-        // For other document types, try to open with system viewer
-        final uri = Uri.file(file.path);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
+
+      final result = await OpenFile.open(file.path);
+
+      if (result.type != ResultType.done) {
+        // If open_file fails, show appropriate message
+        if (result.type == ResultType.noAppToOpen) {
+          _showNoAppAvailableDialog(file.path, ext);
         } else {
-          showCustomSnackBar(
-            context,
-            'No app available to open this file type',
+          showCustomSnackBar(context,
+            'Failed to open document: ${result.message}',
             type: SnackBarType.error,
           );
         }
       }
     } catch (e) {
-      showCustomSnackBar(
-        context,
+      showCustomSnackBar(context,
         'Failed to open document: $e',
         type: SnackBarType.error,
       );
@@ -3335,7 +3485,6 @@ class _ChatScreenState extends State<ChatScreen>
     return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
   }
 
-
   Widget _buildMessageInput() {
     // ✅ CRITICAL: Wrap in BlocBuilder and set buildWhen to rebuild on block status changes
     return BlocBuilder<ChatCubit, ChatState>(
@@ -3348,7 +3497,8 @@ class _ChatScreenState extends State<ChatScreen>
         if (previous is ChatLoaded && current is ChatLoaded) {
           return previous.isIBlockedThem != current.isIBlockedThem ||
               previous.isTheyBlockedMe != current.isTheyBlockedMe ||
-              previous.groupData?.chatRequestStatus != current.groupData?.chatRequestStatus;
+              previous.groupData?.chatRequestStatus !=
+                  current.groupData?.chatRequestStatus;
         }
 
         return true;
@@ -3359,22 +3509,24 @@ class _ChatScreenState extends State<ChatScreen>
         // Check if blocked OR if chat request is pending
         final isBlocked =
             state is ChatLoaded &&
-                (state.isIBlockedThem || state.isTheyBlockedMe);
+            (state.isIBlockedThem || state.isTheyBlockedMe);
 
         final isPendingRequest =
             state is ChatLoaded &&
-                state.groupData?.chatRequestStatus == 'pending';
+            state.groupData?.chatRequestStatus == 'pending';
 
         final isDeclineRequest =
             state is ChatLoaded &&
-                state.groupData?.chatRequestStatus == 'declined';
+            state.groupData?.chatRequestStatus == 'declined';
 
         // ✅ Add debug logging
         if (state is ChatLoaded) {
           print('📊 Block Status Debug:');
           print('   - isIBlockedThem: ${state.isIBlockedThem}');
           print('   - isTheyBlockedMe: ${state.isTheyBlockedMe}');
-          print('   - Chat Request Status: ${state.groupData?.chatRequestStatus}');
+          print(
+            '   - Chat Request Status: ${state.groupData?.chatRequestStatus}',
+          );
           print('   - Should Show Blocked UI: $isBlocked');
         }
 
@@ -3399,8 +3551,8 @@ class _ChatScreenState extends State<ChatScreen>
         if (isPendingRequest) {
           final isRecipient =
               state is ChatLoaded &&
-                  state.groupData?.chatRequestTo ==
-                      SharedPreferencesHelper.getCurrentUserId().toString();
+              state.groupData?.chatRequestTo ==
+                  SharedPreferencesHelper.getCurrentUserId().toString();
 
           return Container(
             padding: const EdgeInsets.all(12),
@@ -3584,11 +3736,11 @@ class _ChatScreenState extends State<ChatScreen>
                               child: _attachedFileType == 1
                                   ? const Icon(Icons.image, size: 20)
                                   : (_attachedFileType == 2
-                                  ? const Icon(Icons.videocam, size: 20)
-                                  : const Icon(
-                                Icons.insert_drive_file,
-                                size: 20,
-                              )),
+                                        ? const Icon(Icons.videocam, size: 20)
+                                        : const Icon(
+                                            Icons.insert_drive_file,
+                                            size: 20,
+                                          )),
                             ),
                           ),
                         ),
@@ -3619,6 +3771,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+
   /*
   Widget _buildMessageInput() {
     return BlocBuilder<ChatCubit, ChatState>(
@@ -4237,35 +4390,35 @@ class _ChatScreenState extends State<ChatScreen>
                   }
                 },
               ),
-              ListTile(
-                leading: const Icon(Icons.save_alt),
-                title: const Text('Save to gallery'),
-                onTap: () async {
-                  Navigator.of(ctx).pop();
-                  try {
-                    final file = await _fetchAndCache(url, message.id);
-                    if (file != null) await _saveToGallery(file);
-                  } catch (e) {
-                    showCustomSnackBar(
-                      context,
-                      'Save failed: $e',
-                      type: SnackBarType.error,
-                    );
-                  }
-                },
-              ),
-              ListTile(
-                leading: const Icon(Icons.share),
-                title: const Text('Share'),
-                onTap: () {
-                  Navigator.of(ctx).pop();
-                  showCustomSnackBar(
-                    context,
-                    'Share not implemented',
-                    type: SnackBarType.info,
-                  );
-                },
-              ),
+              // ListTile(
+              //   leading: const Icon(Icons.save_alt),
+              //   title: const Text('Save to gallery'),
+              //   onTap: () async {
+              //     Navigator.of(ctx).pop();
+              //     try {
+              //       final file = await _fetchAndCache(url, message.id);
+              //       if (file != null) await _saveToGallery(file);
+              //     } catch (e) {
+              //       showCustomSnackBar(
+              //         context,
+              //         'Save failed: $e',
+              //         type: SnackBarType.error,
+              //       );
+              //     }
+              //   },
+              // ),
+              // ListTile(
+              //   leading: const Icon(Icons.share),
+              //   title: const Text('Share'),
+              //   onTap: () {
+              //     Navigator.of(ctx).pop();
+              //     showCustomSnackBar(
+              //       context,
+              //       'Share not implemented',
+              //       type: SnackBarType.info,
+              //     );
+              //   },
+              // ),
             ],
           ),
         );

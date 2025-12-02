@@ -342,9 +342,26 @@ class SocketService with WidgetsBindingObserver {
 
   void _handleBadgeEvent(dynamic raw) {
     try {
-      final Map<String, dynamic> data = (raw is String) ? json.decode(raw) as Map<String, dynamic> : Map<String, dynamic>.from(raw as Map);
+      final Map<String, dynamic> data = (raw is String)
+          ? json.decode(raw) as Map<String, dynamic>
+          : Map<String, dynamic>.from(raw as Map);
       final actionRaw = data['action'] ?? data['type'] ?? '';
       final action = actionRaw.toString().toLowerCase();
+
+      // ✅ NEW: Handle DECREMENT for messages_read event
+      if (action == 'messages_read') {
+        final readCount = int.tryParse('${data['read_count'] ?? data['readCount'] ?? 1}') ?? 1;
+        final byUser = (data['by'] ?? data['by_id'] ?? data['user_id'])?.toString();
+        final performedByMe = byUser != null && byUser == loggedInUserId.toString();
+
+        // Only decrement if performed by current user
+        if (performedByMe) {
+          final current = unseenCount.value;
+          unseenCount.value = (current - readCount).clamp(0, current);
+          if (kDebugMode) print('📉 unseenCount -> ${unseenCount.value} (decremented by $readCount)');
+        }
+        return;
+      }
 
       const incrementActions = <String>{
         'group_created',
@@ -361,28 +378,62 @@ class SocketService with WidgetsBindingObserver {
         'message_updated',
       };
 
-      dynamic nestedNotification = data['notification'] ?? data['systemMessage'] ?? data['created_group'] ?? data['conversation'];
-      final nestedType = (nestedNotification is Map) ? (nestedNotification['type'] ?? nestedNotification['message_type'] ?? nestedNotification['title']) : null;
-      final nestedId = (nestedNotification is Map) ? (nestedNotification['id'] ?? nestedNotification['_id'] ?? nestedNotification['system_message_id']) : null;
+      dynamic nestedNotification = data['notification'] ??
+          data['systemMessage'] ??
+          data['created_group'] ??
+          data['conversation'];
+
+      final nestedType = (nestedNotification is Map)
+          ? (nestedNotification['type'] ??
+          nestedNotification['message_type'] ??
+          nestedNotification['title'])
+          : null;
+
+      final nestedId = (nestedNotification is Map)
+          ? (nestedNotification['id'] ??
+          nestedNotification['_id'] ??
+          nestedNotification['system_message_id'])
+          : null;
+
       final nestedTypeStr = nestedType?.toString().toLowerCase();
-      final shouldIncrementBasedOnNestedType = nestedTypeStr != null && (nestedTypeStr.contains('group_member') || nestedTypeStr.contains('group_created') || nestedTypeStr.contains('member_added') || nestedTypeStr.contains('member_removed') || nestedTypeStr.contains('member_left'));
+      final shouldIncrementBasedOnNestedType = nestedTypeStr != null &&
+          (nestedTypeStr.contains('group_member') ||
+              nestedTypeStr.contains('group_created') ||
+              nestedTypeStr.contains('member_added') ||
+              nestedTypeStr.contains('member_removed') ||
+              nestedTypeStr.contains('member_left'));
 
       final notifIdStr = nestedId?.toString();
-      if (notifIdStr != null && _processedNotificationIds.contains(notifIdStr)) return;
+
+      // ✅ Check for duplicate
+      if (notifIdStr != null && _processedNotificationIds.contains(notifIdStr)) {
+        if (kDebugMode) print('⏭️ Skipping duplicate notification: $notifIdStr');
+        return;
+      }
 
       if (incrementActions.contains(action) || shouldIncrementBasedOnNestedType) {
-        if (_isOwnAction(data)) return;
-        if (_isForSelectedConversation(data)) return;
+        // ✅ Don't increment if it's user's own action
+        if (_isOwnAction(data)) {
+          if (kDebugMode) print('⏭️ Skipping own action: $action');
+          return;
+        }
+
+        // ✅ Don't increment if notification is for currently active conversation
+        if (_isForSelectedConversation(data)) {
+          if (kDebugMode) print('⏭️ Skipping notification for active conversation');
+          return;
+        }
+
         _incrementFromSocket(data, id: notifIdStr);
       }
     } catch (e) {
-      // best-effort: if parsing fails, increment once
+      if (kDebugMode) print('⚠️ Error in _handleBadgeEvent: $e');
+      // Best-effort: if parsing fails, try to increment once
       try {
         _incrementFromSocket(raw);
       } catch (_) {}
     }
   }
-
   void _setupSocketListeners() {
     _socket?.onConnect((_) {
       _isConnected = true;

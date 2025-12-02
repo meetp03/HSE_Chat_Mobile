@@ -14,18 +14,134 @@ class Utils {
     return (parts[0][0] + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
   }
 
-  // Generate random string
-  static String generateRandomString(int length) {
-    const chars =
-        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789';
-    return String.fromCharCodes(
-      Iterable.generate(
-        length,
-        (_) => chars.codeUnitAt(
-          (DateTime.now().millisecondsSinceEpoch * 9301 + 49297) % chars.length,
-        ),
-      ),
-    );
+  /// Format UTC time to local time with date comparison
+  static String formatConversationTime(DateTime utcTime) {
+    try {
+      // Convert to local time
+      final localTime = utcTime.toLocal();
+
+      // Format for display
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final yesterday = DateTime(now.year, now.month, now.day - 1);
+      final messageDay = DateTime(localTime.year, localTime.month, localTime.day);
+
+      // Format time based on date
+      final timeFormat = DateFormat('h:mm a'); // e.g., 11:00 AM
+
+      if (messageDay == today) {
+        return timeFormat.format(localTime); // Show time only for today
+      } else if (messageDay == yesterday) {
+        return 'Yesterday ${timeFormat.format(localTime)}';
+      } else if (now.difference(localTime).inDays < 7) {
+        final dayFormat = DateFormat('EEE'); // Mon, Tue, etc.
+        return '${dayFormat.format(localTime)} ${timeFormat.format(localTime)}';
+      } else {
+        final dateFormat = DateFormat('MMM d'); // Dec 1
+        return '${dateFormat.format(localTime)} ${timeFormat.format(localTime)}';
+      }
+    } catch (e) {
+      print('Error formatting conversation time: $e');
+      return '';
+    }
+  }
+
+  /// Format UTC time to simple time (just hours and minutes)
+  static String formatTimeOnly(DateTime utcTime) {
+    try {
+      final localTime = utcTime.toLocal();
+      return DateFormat('h:mm a').format(localTime); // 11:00 AM
+    } catch (e) {
+      print('Error formatting time only: $e');
+      return '';
+    }
+  }
+
+  /// Format UTC time to relative time (e.g., "2 hours ago")
+  static String formatRelativeTime(DateTime utcTime) {
+    try {
+      final localTime = utcTime.toLocal();
+      final now = DateTime.now();
+      final difference = now.difference(localTime);
+
+      if (difference.inMinutes < 1) {
+        return 'Just now';
+      } else if (difference.inMinutes < 60) {
+        return '${difference.inMinutes}m ago';
+      } else if (difference.inHours < 24) {
+        return '${difference.inHours}h ago';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays}d ago';
+      } else {
+        return DateFormat('MMM d').format(localTime);
+      }
+    } catch (e) {
+      print('Error formatting relative time: $e');
+      return '';
+    }
+  }
+
+  /// Parse UTC date string to DateTime object with robust error handling
+  static DateTime parseUtcDate(dynamic value) {
+    try {
+      if (value == null) return DateTime.now();
+      if (value is DateTime) return value;
+      if (value is int) {
+        // Heuristic: if it's > 10^12 it's milliseconds, else seconds
+        if (value > 1000000000000) {
+          return DateTime.fromMillisecondsSinceEpoch(value);
+        }
+        return DateTime.fromMillisecondsSinceEpoch(value * 1000);
+      }
+      if (value is String) {
+        // Try parsing directly
+        DateTime? parsed = DateTime.tryParse(value);
+        if (parsed != null) return parsed;
+
+        // Try common date formats
+        final formats = [
+          'yyyy-MM-dd HH:mm:ss',
+          'yyyy-MM-ddTHH:mm:ss',
+          'yyyy-MM-dd',
+          'dd-MM-yyyy HH:mm:ss',
+          'MM/dd/yyyy HH:mm:ss',
+        ];
+
+        for (final format in formats) {
+          try {
+            final dateFormat = DateFormat(format);
+            return dateFormat.parse(value);
+          } catch (_) {}
+        }
+
+        // Try parsing as int string
+        final maybeInt = int.tryParse(value);
+        if (maybeInt != null) return parseUtcDate(maybeInt);
+      }
+      return DateTime.now();
+    } catch (e) {
+      print('Error parsing UTC date: $e');
+      return DateTime.now();
+    }
+  }
+
+  /// Get debug info for timezone debugging
+  static String getDebugTimeInfo(DateTime utcTime) {
+    try {
+      final local = utcTime.toLocal();
+      final utc = utcTime.toUtc();
+
+      return '''
+Original UTC: ${utcTime.toIso8601String()}
+Local Time: ${local.toIso8601String()}
+UTC Time: ${utc.toIso8601String()}
+Formatted Local: ${DateFormat('h:mm a').format(local)}
+Timezone Offset: ${utcTime.timeZoneOffset}
+Chat Time: ${formatTimeOnly(utcTime)}
+  ''';
+    } catch (e) {
+      return 'Error getting time info: $e';
+    }
   }
 
   /// Convert DateTime or String to dd/MM/yyyy format
@@ -54,60 +170,12 @@ class Utils {
     ],
   );
 
-  // Show keyboard
-  static void showKeyboard(BuildContext context) {
-    FocusScope.of(context).requestFocus(FocusNode());
-  }
 
-  // Hide keyboard
-  static void hideKeyboard(BuildContext context) {
-    FocusScope.of(context).unfocus();
-  }
 
-  // Get screen size
-  static Size getScreenSize(BuildContext context) {
-    return MediaQuery.of(context).size;
-  }
 
-  // Check if device is tablet
-  static bool isTablet(BuildContext context) {
-    final size = MediaQuery.of(context).size;
-    return size.shortestSide >= 600;
-  }
 
-  // Get time ago string
-  static String getTimeAgo(DateTime dateTime) {
-    final now = DateTime.now();
-    final difference = now.difference(dateTime);
 
-    if (difference.inDays > 0) {
-      return '${difference.inDays} day${difference.inDays > 1 ? 's' : ''} ago';
-    } else if (difference.inHours > 0) {
-      return '${difference.inHours} hour${difference.inHours > 1 ? 's' : ''} ago';
-    } else if (difference.inMinutes > 0) {
-      return '${difference.inMinutes} minute${difference.inMinutes > 1 ? 's' : ''} ago';
-    } else {
-      return 'Just now';
-    }
-  }
 
-  // Calculate BMI
-  static double calculateBMI(double weight, double height) {
-    return weight / ((height / 100) * (height / 100));
-  }
-
-  // Get BMI category
-  static String getBMICategory(double bmi) {
-    if (bmi < 18.5) {
-      return 'Underweight';
-    } else if (bmi < 25) {
-      return 'Normal';
-    } else if (bmi < 30) {
-      return 'Overweight';
-    } else {
-      return 'Obese';
-    }
-  }
 
   static Widget getSVG({
     required String path,
@@ -125,13 +193,4 @@ class Utils {
     );
   }
 
-  // Debounce function
-  static Timer? _debounceTimer;
-  static void debounce(
-    VoidCallback action, {
-    Duration delay = const Duration(milliseconds: 500),
-  }) {
-    _debounceTimer?.cancel();
-    _debounceTimer = Timer(delay, action);
-  }
-}
+ }

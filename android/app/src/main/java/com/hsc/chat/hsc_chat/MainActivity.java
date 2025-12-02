@@ -1,4 +1,4 @@
-package com.hsc.chat.hsc_chat;
+package com.hec_chat;
 
 import io.flutter.embedding.android.FlutterActivity;
 

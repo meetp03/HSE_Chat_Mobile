@@ -38,6 +38,7 @@ dependencies:
   video_thumbnail: ^0.5.1
   gallery_saver_plus: ^3.2.9
   equatable: ^2.0.5
+  open_file: ^3.5.10
 
 dev_dependencies:
   flutter_test:

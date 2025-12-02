@@ -1,49 +1,19 @@
-/*
 import 'package:flutter/material.dart';
 
 enum SnackBarType { info, success, error }
 
-
-void showCustomSnackBar(BuildContext context, String message, {SnackBarType type = SnackBarType.info, Duration? duration}) {
-  final color = (type == SnackBarType.success)
-      ? Colors.green[700]
-      : (type == SnackBarType.error)
-          ? Colors.red[700]
-          : Colors.grey[900];
-
-  final textColor = Colors.white;
-
-  final snack = SnackBar(
-    content: Row(
-      children: [
-        Expanded(child: Text(message, style: TextStyle(color: textColor))),
-      ],
-    ),
-    backgroundColor: color,
-    behavior: SnackBarBehavior.floating,
-    duration: duration ?? const Duration(seconds: 3),
-    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-    margin: const EdgeInsets.only(left: 16, right: 16, bottom: 24),
-  );
-
-  final messenger = ScaffoldMessenger.maybeOf(context);
-  if (messenger != null) {
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(snack);
-  } else {
-    // fallback: if no ScaffoldMessenger found, try root messenger
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      ScaffoldMessenger.of(context).showSnackBar(snack);
-    });
+void showCustomSnackBar(
+    BuildContext context,
+    String message, {
+      SnackBarType type = SnackBarType.info,
+      Duration? duration,
+    }) {
+  // ✅ Check if context is still valid before showing dialog
+  if (!context.mounted) {
+    print('⚠️ Cannot show snackbar: context is not mounted');
+    return;
   }
-}
 
-*/
-import 'package:flutter/material.dart';
-
-enum SnackBarType { info, success, error }
-
-void showCustomSnackBar(BuildContext context, String message, {SnackBarType type = SnackBarType.info, Duration? duration}) {
   final color = (type == SnackBarType.success)
       ? Colors.green[700]
       : (type == SnackBarType.error)
@@ -59,18 +29,24 @@ void showCustomSnackBar(BuildContext context, String message, {SnackBarType type
   showDialog(
     context: context,
     barrierDismissible: true,
-    builder: (context) {
-      // Auto-dismiss after duration
+    builder: (dialogContext) {
+      // ✅ Auto-dismiss with proper context checking
       Future.delayed(duration ?? const Duration(seconds: 3), () {
-        if (Navigator.of(context).canPop()) {
-          Navigator.of(context).pop();
+        // Use dialogContext (from builder) instead of outer context
+        // This context is tied to the dialog's lifecycle
+        if (dialogContext.mounted && Navigator.of(dialogContext).canPop()) {
+          Navigator.of(dialogContext).pop();
         }
       });
 
       return Dialog(
         backgroundColor: Colors.transparent,
-        insetPadding: const EdgeInsets.all(40),
+        insetPadding: const EdgeInsets.symmetric(horizontal: 40, vertical: 24),
         child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(dialogContext).size.height * 0.8,
+            maxWidth: MediaQuery.of(dialogContext).size.width * 0.8,
+          ),
           padding: const EdgeInsets.all(24),
           decoration: BoxDecoration(
             color: Colors.white,
@@ -82,24 +58,26 @@ void showCustomSnackBar(BuildContext context, String message, {SnackBarType type
               )
             ],
           ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Icon(
-                icon,
-                color: color,
-                size: 48,
-              ),
-              const SizedBox(height: 16),
-              Text(
-                message,
-                textAlign: TextAlign.center,
-                style: const TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w500,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  icon,
+                  color: color,
+                  size: 48,
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Text(
+                  message,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ],
+            ),
           ),
         ),
       );

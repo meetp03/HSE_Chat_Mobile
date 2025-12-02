@@ -103,7 +103,7 @@ class MessageRepository implements IMessageRepository {
     }
   }
 
-  @override
+   @override
   Future<ApiResponse<ContactResponse>> getMyContacts({
     required int userId,
     int page = 1,
@@ -116,17 +116,21 @@ class MessageRepository implements IMessageRepository {
         'per_page': perPage,
       };
 
-      // Add search query if provided
-      if (query.isNotEmpty) {
-        queryParams['search'] = query;
+      // Only add search if not empty
+      if (query.trim().isNotEmpty) {
+        queryParams['search'] = query.trim();
       }
+
+      print('SEARCH QUERY SENT: "$query" → ${queryParams['search'] ?? 'NOT SENT'}');
 
       final response = await _dio.post(
         ApiUrls.myContacts,
         queryParameters: queryParams,
-        data: {'user_id': userId},
+        data: {
+          'user_id': userId,
+          'is_only_online': true,  // or false, as needed
+        },
       );
-
       if (response.statusCode == 200) {
         if (response.data['success'] == true) {
           final data = ContactResponse.fromJson(response.data);

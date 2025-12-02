@@ -3,17 +3,56 @@ import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/feature/home/bloc/notification_cubit.dart';
 import 'package:hsc_chat/feature/home/repository/notification_repository.dart';
- import 'package:hsc_chat/cores/constants/app_colors.dart';
+import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:intl/intl.dart';
+import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 
-class NotificationsScreen extends StatelessWidget {
+import '../../../cores/network/notification_badge_service.dart';
+import '../../../cores/network/socket_service.dart';
+
+class NotificationsScreen extends StatefulWidget {
   const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  @override
+  void initState() {
+    super.initState();
+
+    // ✅ NEW: Fetch authoritative count from server when opening notifications
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      NotificationBadgeService().fetchUnseenCount().then((_) {
+        // After fetching, mark all as read
+        _markAllNotificationsRead();
+      });
+    });
+  }
+
+  Future<void> _markAllNotificationsRead() async {
+    try {
+      final userId = SharedPreferencesHelper.getCurrentUserId();
+      final repository = NotificationRepository();
+      await repository.markAllNotificationsRead(userId);
+
+      // ✅ Reset badge count after marking all read
+      SocketService().resetUnseenCount();
+
+      if (mounted) {
+        print('✅ All notifications marked as read');
+      }
+    } catch (e) {
+      print('⚠️ Failed to mark notifications as read: $e');
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return BlocProvider(
       create: (_) =>
-          NotificationCubit(NotificationRepository())..loadNotifications(),
+      NotificationCubit(NotificationRepository())..loadNotifications(),
       child: Scaffold(
         backgroundColor: Colors.grey.shade100,
         appBar: AppBar(
@@ -85,7 +124,7 @@ class NotificationsScreen extends StatelessWidget {
 
                           const SizedBox(width: 14),
 
-                          // 🔤 Notification Text & Time
+                          // 📤 Notification Text & Time
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -107,7 +146,7 @@ class NotificationsScreen extends StatelessWidget {
                                 ),
                                 const SizedBox(height: 8),
 
-                                // 🕒 Time badge
+                                // 🕐 Time badge
                                 Row(
                                   children: [
                                     Icon(
