@@ -32,7 +32,6 @@ class _NotificationBellState extends State<NotificationBell> {
           socketSvc.initializeSocket(token);
         }
       } catch (_) {
-        // ignore
       }
     }
 
@@ -45,14 +44,14 @@ class _NotificationBellState extends State<NotificationBell> {
     return ValueListenableBuilder<int>(
       valueListenable: SocketService().unseenCount,
       builder: (context, count, _) {
-        // ✅ NEW: Cap display at 99+
+        //  Cap display at 99+
         final display = count <= 0
             ? null
             : (count > 99 ? '99+' : count.toString());
 
         return IconButton(
           onPressed: () {
-            // ✅ Sync with server when notification bell is tapped
+            // Sync with server when notification bell is tapped
             NotificationBadgeService().fetchUnseenCount();
 
             if (widget.onTap != null) widget.onTap!();

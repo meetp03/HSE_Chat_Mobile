@@ -1,16 +1,13 @@
 import 'dart:async';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/feature/home/bloc/contacts_state.dart';
 import 'package:hsc_chat/feature/home/bloc/contacts_cubit.dart';
 import 'package:hsc_chat/feature/home/view/chat_screen.dart';
-import 'package:hsc_chat/cores/utils/providers.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:hsc_chat/feature/home/repository/user_repository.dart';
-
 import '../../../cores/network/dio_client.dart';
 import '../../../cores/network/socket_service.dart';
 import '../bloc/chat_cubit.dart';
@@ -44,7 +41,7 @@ class _MessageScreenState extends State<MessageScreen>
   Timer? _usersDebounce;
   Timer? _blockedUsersDebounce;
 
-  // ✅ Track last search query to prevent unnecessary calls
+  //  Track last search query to prevent unnecessary calls
   String _lastContactsQuery = '';
   String _lastUsersQuery = '';
   String _lastBlockedUsersQuery = '';
@@ -80,12 +77,12 @@ class _MessageScreenState extends State<MessageScreen>
   void _onContactsSearchChanged() {
     final query = _contactsSearchController.text.trim();
 
-    // ✅ Cancel previous timer
+    //  Cancel previous timer
     _contactsDebounce?.cancel();
 
-    // ✅ Set new timer
+    // Set new timer
     _contactsDebounce = Timer(const Duration(milliseconds: 500), () {
-      // ✅ Only search if query actually changed
+      //  Only search if query actually changed
       if (query != _lastContactsQuery) {
         print('🔎 Contacts search: "$_lastContactsQuery" → "$query"');
         _lastContactsQuery = query;
@@ -102,12 +99,9 @@ class _MessageScreenState extends State<MessageScreen>
   void _onUsersSearchChanged() {
     final query = _usersSearchController.text.trim();
     _usersDebounce?.cancel();
-
     _usersDebounce = Timer(const Duration(milliseconds: 500), () {
       if (query != _lastUsersQuery) {
-        print('🔎 Users search: "$_lastUsersQuery" → "$query"');
         _lastUsersQuery = query;
-
         if (query.isEmpty) {
           context.read<MessageCubit>().clearUsersSearch();
         } else {
@@ -120,12 +114,9 @@ class _MessageScreenState extends State<MessageScreen>
   void _onBlockedUsersSearchChanged() {
     final query = _blockedUsersSearchController.text.trim();
     _blockedUsersDebounce?.cancel();
-
     _blockedUsersDebounce = Timer(const Duration(milliseconds: 500), () {
       if (query != _lastBlockedUsersQuery) {
-        print('🔎 Blocked users search: "$_lastBlockedUsersQuery" → "$query"');
         _lastBlockedUsersQuery = query;
-
         if (query.isEmpty) {
           context.read<MessageCubit>().clearBlockedUsersSearch();
         } else {
@@ -152,7 +143,6 @@ class _MessageScreenState extends State<MessageScreen>
     if (!_tabController.indexIsChanging && mounted) {
       final cubit = context.read<MessageCubit>();
       cubit.loadTabData(_tabController.index);
-
       _contactsSearchFocus.unfocus();
       _usersSearchFocus.unfocus();
       _blockedUsersSearchFocus.unfocus();
@@ -164,11 +154,9 @@ class _MessageScreenState extends State<MessageScreen>
     _contactsDebounce?.cancel();
     _usersDebounce?.cancel();
     _blockedUsersDebounce?.cancel();
-
     _contactsSearchController.removeListener(_onContactsSearchChanged);
     _usersSearchController.removeListener(_onUsersSearchChanged);
     _blockedUsersSearchController.removeListener(_onBlockedUsersSearchChanged);
-
     _tabController.removeListener(_onTabChanged);
     _tabController.dispose();
     _contactsScrollController.dispose();
@@ -228,8 +216,6 @@ class _MessageScreenState extends State<MessageScreen>
         Expanded(
           child: BlocBuilder<MessageCubit, MessageState>(
             builder: (context, state) {
-              // ✅ Debug: Print current state
-              print('📱 Contacts State: ${state.runtimeType}');
 
               if (state is MyContactsLoading) {
                 return const Center(child: CircularProgressIndicator());
@@ -256,9 +242,6 @@ class _MessageScreenState extends State<MessageScreen>
               if (state is MyContactsLoaded) {
                 final contacts = state.contacts;
                 final query = state.currentQuery;
-
-                // ✅ Debug: Print what we're showing
-                print('📱 Showing ${contacts.length} contacts for query: "$query"');
 
                 if (query.isNotEmpty && contacts.isEmpty) {
                   return Center(
@@ -602,47 +585,6 @@ class _MessageScreenState extends State<MessageScreen>
     );
   }
 
- /* Future<void> _startConversation(
-      int? userId,
-      String userName,
-      String? photoUrl,
-      String email,
-      bool isGroup,
-      ) async {
-    print('Starting conversation with $userName (ID: $userId)');
-
-    final messageCubit = context.read<MessageCubit>();
-
-    try {
-      final resp = await messageCubit.sendChatRequestTo(userId.toString());
-
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-
-      if (resp.success) {
-        showCustomSnackBar(
-          context,
-          resp.message ?? 'Chat request sent',
-          type: SnackBarType.success,
-        );
-      } else {
-        showCustomSnackBar(
-          context,
-          resp.message ?? 'Failed to send chat request',
-          type: SnackBarType.error,
-        );
-      }
-    } catch (e) {
-      if (!mounted) return;
-      ScaffoldMessenger.of(context).hideCurrentSnackBar();
-      showCustomSnackBar(
-        context,
-        'Failed to send chat request: $e',
-        type: SnackBarType.error,
-      );
-    }
-  }
-*/
 
   Future<void> _startConversation(
       int? userId,
@@ -662,7 +604,7 @@ class _MessageScreenState extends State<MessageScreen>
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
 
       if (resp.success) {
-        // ✅ Check if existing conversation was found
+        // Check if existing conversation was found
         final isExistingConversation = resp.message?.toLowerCase().contains('existing conversation') ?? false;
 
         if (isExistingConversation) {
@@ -697,7 +639,7 @@ class _MessageScreenState extends State<MessageScreen>
             try {
               context.read<ConversationCubit>().refresh();
             } catch (e) {
-              print('⚠️ Failed to refresh conversations: $e');
+              print('Failed to refresh conversations: $e');
             }
           });
         } else {
@@ -753,9 +695,7 @@ class _MessageScreenState extends State<MessageScreen>
                         userId: userId,
                         isBlocked: false,
                       );
-
                       if (mounted) Navigator.pop(context);
-
                       if (success) {
                         showCustomSnackBar(
                           context,

@@ -25,7 +25,6 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
   final _nameController = TextEditingController();
   final _descriptionController = TextEditingController();
   String? _selectedImagePath;
-
   final ImagePicker _imagePicker = ImagePicker();
 
   Future<void> _pickImage() async {

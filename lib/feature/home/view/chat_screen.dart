@@ -1122,9 +1122,6 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
-    if (message.replyMessage != null) {
-      _debugReplyMessage(message);
-    }
     // If it's a SYSTEM message render it as a standalone centered blue bubble
     if (kind == MessageKind.SYSTEM) {
       final maxWidth = MediaQuery.of(context).size.width * 0.85;
@@ -2915,304 +2912,6 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
-/*latest
-  Widget _buildFileContent(Message message) {
-    final url = message.fileUrl;
-    if (url == null || url.isEmpty) return const SizedBox.shrink();
-
-    final ext = p.extension(message.fileName ?? url).toLowerCase();
-    IconData iconData = Icons.insert_drive_file;
-    Color iconColor = Colors.blue;
-
-    if (ext == '.pdf') {
-      iconData = Icons.picture_as_pdf;
-      iconColor = Colors.red;
-    } else if (['.doc', '.docx'].contains(ext)) {
-      iconData = Icons.description;
-      iconColor = Colors.blue[700]!;
-    } else if (['.xls', '.xlsx'].contains(ext)) {
-      iconData = Icons.table_chart;
-      iconColor = Colors.green[700]!;
-    } else if (['.ppt', '.pptx'].contains(ext)) {
-      iconData = Icons.slideshow;
-      iconColor = Colors.orange[700]!;
-    } else if (ext == '.txt') {
-      iconData = Icons.text_snippet;
-      iconColor = Colors.grey[700]!;
-    }
-
-    return FutureBuilder<FileInfo?>(
-      future: DefaultCacheManager().getFileFromCache(url),
-      builder: (context, snapshot) {
-        final isCached = snapshot.data != null;
-        final isDownloading =
-            _downloadProgress[message.id] != null &&
-            _downloadProgress[message.id]! < 1.0;
-
-        return GestureDetector(
-          onTap: () async {
-            print('📄 Tapped file ${message.id}');
-            if (isCached) {
-              await _openDocument(url, message.id, ext);
-            } else {
-              try {
-                await _fetchAndCache(url, message.id);
-                if (mounted) {
-                  await _openDocument(url, message.id, ext);
-                }
-              } catch (e) {
-                showCustomSnackBar(
-                  context,
-                  'Download failed: $e',
-                  type: SnackBarType.error,
-                );
-              }
-            }
-          },
-          onLongPress: () {
-            print('🔍 Long pressed file ${message.id}');
-            _showMediaOptions(message, url);
-          },
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            constraints: const BoxConstraints(maxWidth: 250),
-            decoration: BoxDecoration(
-              color: message.isSentByMe
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isCached
-                    ? iconColor
-                    : Colors.grey.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isCached
-                        ? iconColor.withValues(alpha: 0.2)
-                        : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    iconData,
-                    size: 28,
-                    color: isCached ? iconColor : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        message.message,
-                        style: TextStyle(
-                          color: Colors.black87,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isDownloading
-                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
-                            : (isCached
-                                  ? ext.toUpperCase().replaceFirst('.', '')
-                                  : 'Tap to download'),
-                        style: TextStyle(
-                          color:  Colors.blueAccent
-                              ,
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                if (isDownloading)
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      value: _downloadProgress[message.id],
-                      strokeWidth: 2,
-                      color: message.isSentByMe ? Colors.white : iconColor,
-                    ),
-                  )
-                else
-                  Icon(
-                    isCached ? Icons.open_in_new : Icons.download_rounded,
-                    size: 20,
-                    color:   Colors.black87 ,
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-*/
-  // FILE/DOCUMENT: Show document icon with name
-  /*
-  Widget _buildFileContent(Message message) {
-    final url = message.fileUrl;
-    if (url == null || url.isEmpty) return const SizedBox.shrink();
-
-    final ext = p.extension(message.fileName ?? url).toLowerCase();
-    IconData iconData = Icons.insert_drive_file;
-    Color iconColor = Colors.blue;
-
-    // Icon based on file type
-    if (ext == '.pdf') {
-      iconData = Icons.picture_as_pdf;
-      iconColor = Colors.red;
-    } else if (['.doc', '.docx'].contains(ext)) {
-      iconData = Icons.description;
-      iconColor = Colors.blue[700]!;
-    } else if (['.xls', '.xlsx'].contains(ext)) {
-      iconData = Icons.table_chart;
-      iconColor = Colors.green[700]!;
-    } else if (['.ppt', '.pptx'].contains(ext)) {
-      iconData = Icons.slideshow;
-      iconColor = Colors.orange[700]!;
-    } else if (ext == '.txt') {
-      iconData = Icons.text_snippet;
-      iconColor = Colors.grey[700]!;
-    }
-
-    return FutureBuilder<FileInfo?>(
-      future: DefaultCacheManager().getFileFromCache(url),
-      builder: (context, snapshot) {
-        final isCached = snapshot.data != null;
-        final isDownloading =
-            _downloadProgress[message.id] != null &&
-            _downloadProgress[message.id]! < 1.0;
-
-        return GestureDetector(
-          onTap: () async {
-            if (isCached) {
-              await _openDocument(url, message.id, ext);
-            } else {
-              // Download first
-              try {
-                await _fetchAndCache(url, message.id);
-                if (mounted) {
-                  await _openDocument(url, message.id, ext);
-                }
-              } catch (e) {
-                showCustomSnackBar(
-                  context,
-                  'Download failed: $e',
-                  type: SnackBarType.error,
-                );
-              }
-            }
-          },
-          onLongPress: () => _showMediaOptions(message, url),
-          child: Container(
-            padding: const EdgeInsets.all(12),
-            constraints: const BoxConstraints(maxWidth: 250),
-            decoration: BoxDecoration(
-              color: message.isSentByMe
-                  ? Colors.white.withValues(alpha: 0.2)
-                  : Colors.grey[100],
-              borderRadius: BorderRadius.circular(8),
-              border: Border.all(
-                color: isCached
-                    ? iconColor
-                    : Colors.grey.withValues(alpha: 0.3),
-                width: 1.5,
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Document icon
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: isCached
-                        ? iconColor.withValues(alpha: 0.2)
-                        : Colors.grey[200],
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: Icon(
-                    iconData,
-                    size: 28,
-                    color: isCached ? iconColor : Colors.grey[600],
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // File info
-                Flexible(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        message.fileName ?? 'Document',
-                        style: TextStyle(
-                          color: message.isSentByMe
-                              ? Colors.white
-                              : Colors.black87,
-                          fontSize: 14,
-                          fontWeight: FontWeight.w500,
-                        ),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 2,
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        isDownloading
-                            ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
-                            : (isCached
-                                  ? ext.toUpperCase().replaceFirst('.', '')
-                                  : 'Tap to download'),
-                        style: TextStyle(
-                          color: message.isSentByMe
-                              ? Colors.white70
-                              : Colors.grey[600],
-                          fontSize: 11,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // Action indicator
-                if (isDownloading)
-                  SizedBox(
-                    width: 24,
-                    height: 24,
-                    child: CircularProgressIndicator(
-                      value: _downloadProgress[message.id],
-                      strokeWidth: 2,
-                      color: message.isSentByMe ? Colors.white : iconColor,
-                    ),
-                  )
-                else
-                  Icon(
-                    isCached ? Icons.open_in_new : Icons.download_rounded,
-                    size: 20,
-                    color: message.isSentByMe ? Colors.white : iconColor,
-                  ),
-              ],
-            ),
-          ),
-        );
-      },
-    );
-  }
-*/
-
   // Helper methods for opening media
 
   void _openImageViewer(String url, String messageId, {bool isLocal = false}) {
@@ -3379,23 +3078,6 @@ class _ChatScreenState extends State<ChatScreen>
     final m = reg.firstMatch(html);
     return m?.group(1);
   }
-  // DEBUGGING: Add this method to help identify the issue
-  // ============================================================================
-
-  void _debugReplyMessage(Message message) {
-    if (message.replyMessage != null) {
-      print('🔍 DEBUG Reply Info:');
-      print('  Current Message ID: ${message.id}');
-      print('  Current Message Text: ${_parseMessage(message.message)}');
-      print('  Reply To ID: ${message.replyTo}');
-      print('  Reply Message ID: ${message.replyMessage!.id}');
-      print(
-        '  Reply Message Text: ${_parseMessage(message.replyMessage!.message)}',
-      );
-      print('  Reply Sender Name: ${message.replyMessage!.sender.name}');
-      print('  Reply isSentByMe: ${message.replyMessage!.isSentByMe}');
-    }
-  }
 
   Widget _buildReplyMessage(Message replyMessage) {
     // Get the display name based on context
@@ -3481,12 +3163,8 @@ class _ChatScreenState extends State<ChatScreen>
     return out.trim();
   }
 
-  String _formatTime(DateTime dateTime) {
-    return '${dateTime.hour.toString().padLeft(2, '0')}:${dateTime.minute.toString().padLeft(2, '0')}';
-  }
-
   Widget _buildMessageInput() {
-    // ✅ CRITICAL: Wrap in BlocBuilder and set buildWhen to rebuild on block status changes
+    // Wrap in BlocBuilder and set buildWhen to rebuild on block status changes
     return BlocBuilder<ChatCubit, ChatState>(
       buildWhen: (previous, current) {
         // Rebuild when:
@@ -3519,20 +3197,9 @@ class _ChatScreenState extends State<ChatScreen>
             state is ChatLoaded &&
             state.groupData?.chatRequestStatus == 'declined';
 
-        // ✅ Add debug logging
-        if (state is ChatLoaded) {
-          print('📊 Block Status Debug:');
-          print('   - isIBlockedThem: ${state.isIBlockedThem}');
-          print('   - isTheyBlockedMe: ${state.isTheyBlockedMe}');
-          print(
-            '   - Chat Request Status: ${state.groupData?.chatRequestStatus}',
-          );
-          print('   - Should Show Blocked UI: $isBlocked');
-        }
-
         // Show different messages based on state
         if (isBlocked) {
-          final blockMessage = state is ChatLoaded && state.isIBlockedThem
+          final blockMessage = state.isIBlockedThem
               ? 'Messaging disabled – this user is blocked'
               : 'Messaging disabled – you are blocked by this user';
 
@@ -3550,7 +3217,6 @@ class _ChatScreenState extends State<ChatScreen>
 
         if (isPendingRequest) {
           final isRecipient =
-              state is ChatLoaded &&
               state.groupData?.chatRequestTo ==
                   SharedPreferencesHelper.getCurrentUserId().toString();
 
@@ -3772,201 +3438,10 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  /*
-  Widget _buildMessageInput() {
-    return BlocBuilder<ChatCubit, ChatState>(
-      builder: (context, state) {
-        final isBlocked =
-            state is ChatLoaded &&
-                (state.isIBlockedThem || state.isTheyBlockedMe);
-
-        if (isBlocked) {
-          return Container(
-            padding: const EdgeInsets.all(12),
-            color: Colors.white,
-            child: Center(
-              child: Text(
-                'Messaging disabled – this user is blocked',
-                style: TextStyle(color: Colors.grey[600]),
-              ),
-            ),
-          );
-        }
-
-        final cubit = context.read<ChatCubit>();
-        final replyingTo = cubit.replyingToMessage;
-        final editing = cubit.editingMessage;
-
-        return Container(
-          decoration: BoxDecoration(
-            color: Colors.white,
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withValues(alpha: 0.05),
-                blurRadius: 4,
-                offset: const Offset(0, -2),
-              ),
-            ],
-          ),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Reply/Edit indicator
-              if (replyingTo != null || editing != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    border: Border(
-                      bottom: BorderSide(color: Colors.grey[300]!),
-                    ),
-                  ),
-                  child: Row(
-                    children: [
-                      Icon(
-                        editing != null ? Icons.edit : Icons.reply,
-                        size: 20,
-                        color: AppClr.primaryColor,
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              editing != null ? 'Edit message' : 'Replying to ${replyingTo!.sender.name}',
-                              style: TextStyle(
-                                fontSize: 12,
-                                fontWeight: FontWeight.w600,
-                                color: AppClr.primaryColor,
-                              ),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              _parseMessage(editing?.message ?? replyingTo!.message),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 12,
-                                color: Colors.grey[600],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close, size: 20),
-                        onPressed: () {
-                          cubit.clearReplyEditMode();
-                          _messageController.clear();
-                        },
-                        padding: EdgeInsets.zero,
-                        constraints: const BoxConstraints(),
-                      ),
-                    ],
-                  ),
-                ),
-
-              // Message input area
-              SafeArea(
-                child: Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: Container(
-                          constraints: const BoxConstraints(maxHeight: 100),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(25),
-                          ),
-                          child: TextField(
-                            controller: _messageController,
-                            focusNode: _focusNode,
-                            onChanged: (value) => _onTyping(),
-                            decoration: InputDecoration(
-                              hintText: editing != null ? 'Edit message...' : 'Type a message...',
-                              hintStyle: TextStyle(color: Colors.grey[500]),
-                              border: InputBorder.none,
-                              contentPadding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 12,
-                              ),
-                            ),
-                            maxLines: null,
-                            textInputAction: TextInputAction.send,
-                            onSubmitted: (value) => _handleSendOrEdit(),
-                          ),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-
-                      // Show attach button only when not editing
-                      if (editing == null && _attachedFilePath == null) ...[
-                        IconButton(
-                          icon: const Icon(Icons.attach_file, color: Colors.grey),
-                          onPressed: _openFilePicker,
-                        ),
-                      ] else if (_attachedFilePath != null) ...[
-                        GestureDetector(
-                          onTap: () {
-                            setState(() {
-                              _attachedFilePath = null;
-                              _attachedFileType = null;
-                            });
-                          },
-                          child: Container(
-                            width: 44,
-                            height: 44,
-                            decoration: BoxDecoration(
-                              color: Colors.grey[200],
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Center(
-                              child: _attachedFileType == 1
-                                  ? const Icon(Icons.image, size: 20)
-                                  : (_attachedFileType == 2
-                                  ? const Icon(Icons.videocam, size: 20)
-                                  : const Icon(
-                                Icons.insert_drive_file,
-                                size: 20,
-                              )),
-                            ),
-                          ),
-                        ),
-                      ],
-
-                      const SizedBox(width: 8),
-                      Container(
-                        decoration: BoxDecoration(
-                          color: AppClr.primaryColor,
-                          shape: BoxShape.circle,
-                        ),
-                        child: IconButton(
-                          icon: Icon(
-                            editing != null ? Icons.check : Icons.send,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                          onPressed: _handleSendOrEdit,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-*/
   // attachment UI removed - only text messages supported
   Future<void> _handleSendOrEdit() async {
-    // ✅ Prevent double submission
+    // Prevent double submission
     if (_isSending) {
-      print('⏳ Already sending, ignoring duplicate call');
       return;
     }
 
@@ -3978,7 +3453,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     if (messageText.isEmpty && _attachedFilePath == null) return;
 
-    // ✅ Set flag to prevent double submission
+    //  Set flag to prevent double submission
     setState(() {
       _isSending = true;
     });
@@ -4046,7 +3521,7 @@ class _ChatScreenState extends State<ChatScreen>
       // NORMAL SEND MODE
       await _sendMessage();
     } finally {
-      // ✅ Always reset the flag
+      //  Always reset the flag
       setState(() {
         _isSending = false;
       });
@@ -4240,18 +3715,19 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         saved = await GalleryHelper.saveImage(pathStr) ?? false;
       }
-      if (saved)
+      if (saved) {
         showCustomSnackBar(
           context,
           'Saved to gallery',
           type: SnackBarType.success,
         );
-      else
+      } else {
         showCustomSnackBar(
           context,
           'Failed to save to gallery',
           type: SnackBarType.error,
         );
+      }
     } catch (e) {
       showCustomSnackBar(
         context,
@@ -4260,88 +3736,6 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
   }
-
-  // Open video dialog (downloads if necessary and plays cached file)
-  Future<void> _openVideoDialog(String url, String messageId) async {
-    try {
-      final file = await _fetchAndCache(url, messageId);
-      if (file == null) {
-        showCustomSnackBar(
-          context,
-          'Video not available',
-          type: SnackBarType.error,
-        );
-        return;
-      }
-
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) {
-            return Scaffold(
-              backgroundColor: Colors.black,
-              body: SafeArea(
-                child: Center(
-                  child: Hero(
-                    tag: 'media_$messageId',
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: VideoPlayerViewer(url: url, messageId: messageId),
-                    ),
-                  ),
-                ),
-              ),
-            );
-          },
-        ),
-      );
-    } catch (e) {
-      showCustomSnackBar(
-        context,
-        'Failed to open video: $e',
-        type: SnackBarType.error,
-      );
-    }
-  }
-
-  // Open PDF viewer using pdfx package (downloads file first)
-  Future<void> _openPdfViewer(String url, String messageId) async {
-    try {
-      final file = await _fetchAndCache(url, messageId);
-      if (file == null) {
-        showCustomSnackBar(
-          context,
-          'PDF not available',
-          type: SnackBarType.error,
-        );
-        return;
-      }
-      await Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) {
-            final controller = PdfController(
-              document: PdfDocument.openFile(file.path),
-            );
-            return Scaffold(
-              appBar: AppBar(title: const Text('Document')),
-              body: PdfView(controller: controller),
-            );
-          },
-        ),
-      );
-    } catch (e) {
-      showCustomSnackBar(
-        context,
-        'Failed to open PDF: $e',
-        type: SnackBarType.error,
-      );
-    }
-  }
-
-  // Minimal audio player widget: plays cached audio file using just_audio
-  Widget _audioPlayerWidget(Message message) {
-    return AudioPlayerInline(message: message, fetchAndCache: _fetchAndCache);
-  }
-
   // Show download / save / share options for a message (long-press)
   void _showMediaOptions(Message message, String url) {
     showModalBottomSheet(
@@ -4426,170 +3820,6 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  /*
-  // Show actions for a message (Delete for me / Delete for everyone)
-  void _showMessageActions(Message message) {
-    final isSender = message.isSentByMe;
-    showModalBottomSheet(
-      context: context,
-      builder: (ctx) {
-        return SafeArea(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isSender) ...[
-                ListTile(
-                  leading: const Icon(Icons.delete_outline),
-                  title: const Text('Delete for me'),
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Delete message'),
-                        content: const Text('Delete this message for you?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok != true) return;
-
-                    final prevId = _findPreviousMessageId(message.id);
-                    final cubit = context.read<ChatCubit>();
-                    final err = await cubit.deleteForMe(
-                      conversationId: message.id,
-                      previousMessageId: prevId ?? '',
-                      targetMessageId: message.id,
-                    );
-                    if (err == null) {
-                      showCustomSnackBar(
-                        context,
-                        'Message deleted',
-                        type: SnackBarType.success,
-                      );
-                    } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
-                    }
-                  },
-                ),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever),
-                  title: const Text('Delete for everyone'),
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Delete for everyone'),
-                        content: const Text(
-                          'This will remove the message for all participants. Continue?',
-                        ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok != true) return;
-                    final prevId = _findPreviousMessageId(message.id);
-                    final cubit = context.read<ChatCubit>();
-                    final err = await cubit.deleteForEveryone(
-                      conversationId: message.id,
-                      previousMessageId: prevId ?? '',
-                      targetMessageId: message.id,
-                    );
-                    if (err == null) {
-                      showCustomSnackBar(
-                        context,
-                        'Message deleted for everyone',
-                        type: SnackBarType.success,
-                      );
-                    } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
-                    }
-                  },
-                ),
-              ] else ...[
-                ListTile(
-                  leading: const Icon(Icons.delete_outline),
-                  title: const Text('Delete for me'),
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Delete message'),
-                        content: const Text('Delete this message for you?'),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok != true) return;
-                    final prevId = _findPreviousMessageId(message.id);
-                    final cubit = context.read<ChatCubit>();
-                    final err = await cubit.deleteForMe(
-                      conversationId: message.id,
-                      previousMessageId: prevId ?? '',
-                      targetMessageId: message.id,
-                    );
-                    if (err == null) {
-                      showCustomSnackBar(
-                        context,
-                        'Message deleted',
-                        type: SnackBarType.success,
-                      );
-                    } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
-                    }
-                  },
-                ),
-              ],
-              ListTile(
-                leading: const Icon(Icons.cancel),
-                title: const Text('Cancel'),
-                onTap: () => Navigator.of(ctx).pop(),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-*/
   void _showMessageActions(Message message) {
     final isSender = message.isSentByMe;
     showModalBottomSheet(
