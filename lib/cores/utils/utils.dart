@@ -1,8 +1,5 @@
-import 'dart:async';
 
-import 'package:flutter/material.dart';
-import 'package:flutter_svg/svg.dart';
-import 'package:intl/intl.dart';
+  import 'package:intl/intl.dart';
 
 class Utils {
   static String getInitials(String name) {
@@ -144,31 +141,6 @@ Chat Time: ${formatTimeOnly(utcTime)}
     }
   }
 
-  /// Convert DateTime or String to dd/MM/yyyy format
-  static String formatToDDMMYYYY(dynamic value) {
-    try {
-      if (value is DateTime) {
-        return DateFormat('dd/MM/yyyy').format(value);
-      } else if (value is String) {
-        DateTime parsed = DateTime.parse(value);
-        return DateFormat('dd/MM/yyyy').format(parsed);
-      } else {
-        return value.toString();
-      }
-    } catch (e) {
-      return value.toString(); // fallback if parsing fails
-    }
-  }
-
-  // Define the gradient as a constant
-  static LinearGradient commonGradient = LinearGradient(
-    begin: Alignment.topCenter,
-    end: Alignment.bottomCenter,
-    colors: [
-      Color.fromRGBO(255, 255, 255, 0.5),
-      Color.fromRGBO(255, 255, 255, 0.0),
-    ],
-  );
 
 
 
@@ -177,20 +149,6 @@ Chat Time: ${formatTimeOnly(utcTime)}
 
 
 
-  static Widget getSVG({
-    required String path,
-    double? height,
-    double? width,
-    Color? color,
-    BoxFit fit = BoxFit.contain,
-  }) {
-    return SvgPicture.asset(
-      path,
-      height: height,
-      width: width,
-      color: color,
-      fit: fit,
-    );
-  }
+
 
  }

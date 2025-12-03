@@ -8,6 +8,8 @@ import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
 import 'package:hsc_chat/routes/navigation_service.dart';
 import 'package:hsc_chat/routes/routes.dart';
 
+import '../../../cores/constants/image_paths.dart';
+
 class AuthScreen extends StatefulWidget {
   @override
   _AuthScreenState createState() => _AuthScreenState();
@@ -75,7 +77,7 @@ class _AuthScreenState extends State<AuthScreen> {
     return Center(
       child: Column(
         children: [
-          Image.asset('images/house_energy_kogo.png'),
+          Image.asset(AppImg.appLogo),
           SizedBox(height: 24),
           Text(
             'Welcome to HEC Chat',

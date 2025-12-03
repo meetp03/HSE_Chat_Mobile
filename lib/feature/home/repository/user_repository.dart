@@ -69,7 +69,7 @@ class UserRepository {
   Future<ApiResponse> deleteGroup(String groupId) async {
     try {
       final response = await _dio.delete(
-        '${ApiUrls.baseUrl}messages/groups/$groupId/remove',
+        '${ApiUrls.baseUrl}/api/messages/groups/$groupId/remove',
       );
 
       print('🗑️ Delete group API response status: ${response.statusCode}');
@@ -99,7 +99,7 @@ class UserRepository {
     required int memberId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId/make-admin';
+      final path = '${ApiUrls.baseUrl}/api/messages/groups/$groupId/members/$memberId/make-admin';
       final resp = await _dio.put(path);
       if (resp.statusCode == 200 || resp.statusCode == 201) {
         return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
@@ -116,7 +116,7 @@ class UserRepository {
     required int memberId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId/dismiss-as-admin';
+      final path = '${ApiUrls.baseUrl}/api/messages/groups/$groupId/members/$memberId/dismiss-as-admin';
       final resp = await _dio.put(path);
       if (resp.statusCode == 200 || resp.statusCode == 201) {
         return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
@@ -133,7 +133,7 @@ class UserRepository {
     required int memberId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/members/$memberId';
+      final path = '${ApiUrls.baseUrl}/api/messages/groups/$groupId/members/$memberId';
       final resp = await _dio.delete(path);
       if (resp.statusCode == 200 || resp.statusCode == 201) {
         return GroupActionResponse.fromJson(resp.data as Map<String, dynamic>);
@@ -152,7 +152,7 @@ class UserRepository {
     required File? photo,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/group-update/$groupId';
+      final path = '${ApiUrls.baseUrl}/api/messages/group-update/$groupId';
       final formData = FormData.fromMap({
         'name': name,
         'description': description,
@@ -174,7 +174,7 @@ class UserRepository {
     required List<int> memberIds,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/groups/$groupId/add-members';
+      final path = '${ApiUrls.baseUrl}/api/messages/groups/$groupId/add-members';
       final payload = {'members': memberIds};
       final resp = await _dio.put(path, data: payload);
       if (resp.statusCode == 200 || resp.statusCode == 201) {

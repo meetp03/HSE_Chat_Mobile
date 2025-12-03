@@ -1,24 +1,30 @@
 class ApiUrls {
+  // base url for login
   static const String baseUrlForLogin =
       'https://hecdev.sonomainfotech.in/api/login';
-  static const String baseUrl = 'https://hecdev-apichat.sonomainfotech.in/api/';
-
-  static const String conversations = '${baseUrl}messages/conversations-list';
+  // main base url
+  static const String baseUrl = 'https://hecdev-apichat.sonomainfotech.in';
+  // conversation URLs
+  static const String conversations =
+      '$baseUrl/api/messages/conversations-list';
   static const String unreadConversations =
-      '${baseUrl}messages/conversations-unread';
+      '$baseUrl/api/messages/conversations-unread';
 
   // Message Tab URLs
-  static const String myContacts = '${baseUrl}core/users/get-my-contacts';
-  static const String usersList = '${baseUrl}core/users/users-list';
-  static const String blockedUsers = '${baseUrl}core/users/blocked-users';
-  static const String createGroup = '${baseUrl}messages/group/create';
-  static const String commonGroup = '${baseUrl}messages/groups/common';
-  static const String groupBase = '${baseUrl}messages/groups';
-  static const String blockUnblockUsers = '${baseUrl}core/users';
-  static const String getNotification = '${baseUrl}notifications/get-notifications';
-  static const String markAllNotificationsRead = '${baseUrl}notifications/mark-all-read';
+  static const String myContacts = '$baseUrl/api/core/users/get-my-contacts';
+  static const String usersList = '$baseUrl/api/core/users/users-list';
+  static const String blockedUsers = '$baseUrl/api/core/users/blocked-users';
+  static const String createGroup = '$baseUrl/api/messages/group/create';
+  static const String commonGroup = '$baseUrl/api/messages/groups/common';
+  static const String groupBase = '$baseUrl/api/messages/groups';
+  static const String blockUnblockUsers = '$baseUrl/api/core/users';
+  static const String getNotification =
+      '$baseUrl/api/notifications/get-notifications';
+  static const String markAllNotificationsRead =
+      '$baseUrl/api/notifications/mark-all-read';
   // Chat URLs
-  static const String sendMessage = '${baseUrl}messages/send-message';
-  static const String readMessage = '${baseUrl}messages/read-message';
-  static const String sendChatRequest = '${baseUrl}messages/send-chat-request';
+  static const String sendMessage = '$baseUrl/api/messages/send-message';
+  static const String readMessage = '$baseUrl/api/messages/read-message';
+  static const String sendChatRequest =
+      '$baseUrl/api/messages/send-chat-request';
 }

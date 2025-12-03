@@ -98,7 +98,7 @@ class ChatRepository implements IChatRepository {
     required String newMessage,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/$messageId/update';
+      final path = '${ApiUrls.baseUrl}/api/messages/$messageId/update';
       final response = await _dio.post(path, data: {'message': newMessage});
 
       if (response.statusCode == 200) {
@@ -146,7 +146,7 @@ class ChatRepository implements IChatRepository {
     required bool isGroup,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/reply-message';
+      final path = '${ApiUrls.baseUrl}/api/messages/reply-message';
       final payload = {
         'conversation_id': conversationId,
         'message': message,
@@ -201,7 +201,7 @@ class ChatRepository implements IChatRepository {
   }) async {
     try {
       final response = await _dio.post(
-        '${ApiUrls.baseUrl}messages/$otherUserId/conversations',
+        '${ApiUrls.baseUrl}/api/messages/$otherUserId/conversations',
         queryParameters: {
           'user_id': userId,
           'is_group': isGroup ? 1 : 0,
@@ -502,7 +502,7 @@ class ChatRepository implements IChatRepository {
   }) async {
     try {
       final path =
-          '${ApiUrls.baseUrl}messages/conversations/message/$conversationId/delete';
+          '${ApiUrls.baseUrl}/api/messages/conversations/message/$conversationId/delete';
       final response = await _dio.post(
         path,
         data: {'previousMessageId': previousMessageId},
@@ -539,7 +539,7 @@ class ChatRepository implements IChatRepository {
   }) async {
     try {
       final path =
-          '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete-for-everyone';
+          '${ApiUrls.baseUrl}/api/messages/conversations/$conversationId/delete-for-everyone';
       final response = await _dio.post(
         path,
         data: {'previousMessageId': previousMessageId},

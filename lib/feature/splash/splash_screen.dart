@@ -3,6 +3,8 @@ import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/routes/navigation_service.dart';
 import 'package:hsc_chat/routes/routes.dart';
 
+import '../../cores/constants/image_paths.dart';
+
 class SplashScreen extends StatefulWidget {
   @override
   _SplashScreenState createState() => _SplashScreenState();
@@ -39,7 +41,7 @@ class _SplashScreenState extends State<SplashScreen> {
           children: [
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 24.0),
-              child: Image.asset('images/house_energy_kogo.png'),
+              child: Image.asset(AppImg.appLogo),
             ),
           ],
         ),

@@ -1,4 +1,4 @@
-// Save this as _audio_player_inline.dart (or update your existing file)
+// Save this as audio_player_inline.dart (or update your existing file)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
