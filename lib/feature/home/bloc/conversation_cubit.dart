@@ -8,6 +8,8 @@ import 'package:hsc_chat/feature/home/repository/conversation_repository.dart';
 import 'package:hsc_chat/feature/home/repository/message_repository.dart';
 import 'package:hsc_chat/cores/network/dio_client.dart';
 
+import '../../../cores/constants/api_urls.dart';
+
 class ConversationCubit extends Cubit<ConversationState> {
   final ConversationRepository _repo;
   final SocketService _socket = SocketService();
@@ -1398,7 +1400,7 @@ class ConversationCubit extends Cubit<ConversationState> {
         if (photoUrl != null &&
             photoUrl.isNotEmpty &&
             !photoUrl.startsWith('http')) {
-          photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
+          photoUrl = '${ApiUrls.baseUrl}/$photoUrl';
         }
 
         // Get system message
@@ -1557,7 +1559,7 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     // ✅ FIX: If photo_url is relative path, construct full URL
     if (photoUrl != null && !photoUrl.startsWith('http')) {
-      photoUrl = 'https://hecdev-apichat.sonomainfotech.in/$photoUrl';
+      photoUrl = '${ApiUrls.baseUrl}/$photoUrl';
     }
 
     print('✅ Extracted group data: name=${groupData['name']}, photo=$photoUrl');

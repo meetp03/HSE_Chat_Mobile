@@ -43,7 +43,7 @@ class ConversationRepository implements IConversationRepository {
     required String requestId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/accept-chat-request';
+      final path = '${ApiUrls.baseUrl}/api/messages/accept-chat-request';
       final response = await _dio.post(
         path,
         data: {'id': requestId},
@@ -79,7 +79,7 @@ class ConversationRepository implements IConversationRepository {
     required String requestId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/decline-chat-request';
+      final path = '${ApiUrls.baseUrl}/api/messages/decline-chat-request';
       final response = await _dio.post(
         path,
         data: {'id': requestId},
@@ -224,7 +224,7 @@ class ConversationRepository implements IConversationRepository {
     required String conversationId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}messages/conversations/$conversationId/delete';
+      final path = '${ApiUrls.baseUrl}/api/messages/conversations/$conversationId/delete';
       final response = await _dio.post(path);
 
       if (response.statusCode == 200 || response.statusCode == 201) {

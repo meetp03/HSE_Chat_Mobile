@@ -8,6 +8,8 @@ import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/notification/notification_repository.dart';
  import 'package:socket_io_client/socket_io_client.dart' as IO;
 
+import '../constants/api_urls.dart';
+
 class SocketService with WidgetsBindingObserver {
   static final SocketService _instance = SocketService._internal();
   factory SocketService() => _instance;
@@ -25,7 +27,7 @@ class SocketService with WidgetsBindingObserver {
   void initializeSocket(String token) {
     try {
       _socket = IO.io(
-        'https://hecdev-apichat.sonomainfotech.in',
+        ApiUrls.baseUrl,
         IO.OptionBuilder()
             .setTransports(['websocket'])
             .enableAutoConnect()
