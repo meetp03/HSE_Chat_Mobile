@@ -1,8 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/constants/app_strings.dart';
-import 'package:hsc_chat/cores/network/network_checker.dart';
+ import 'package:hsc_chat/cores/network/network_checker.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
 import 'package:hsc_chat/feature/auth/model/auth_model.dart';
@@ -29,7 +28,7 @@ class AuthSignInCubit extends Cubit<AuthSignInState> {
       return;
     }
     if (!await NetworkChecker.isConnected()) {
-      emit(AuthSignInError(AppStr.noInternetConnection));
+      emit(AuthSignInError('No internet connection'));
       return;
     }
 

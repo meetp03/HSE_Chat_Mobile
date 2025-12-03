@@ -1,45 +1,61 @@
-# Miscellaneous
-*.class
-*.log
-*.pyc
-*.swp
-.DS_Store
-.atom/
-.build/
-.buildlog/
-.history
-.svn/
-.swiftpm/
-migrate_working_dir/
-
-# IntelliJ related
-*.iml
-*.ipr
-*.iws
-.idea/
-
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
-
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# Flutter
 .dart_tool/
-.flutter-plugins-dependencies
+.packages
 .pub-cache/
 .pub/
-/build/
-/coverage/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.flutter-versions
+.idea/
+*.iml
+.vscode/
 
-# Symbolication related
-app.*.symbols
+# Android
+**/android/local.properties
+**/android/**/google-services.json
+**/android/**/app/google-services.json
+**/android/**/keystore.properties
+**/android/**/key.properties
+**/android/**/signing.properties
+**/android/**/keystore.jks
+**/android/**/*.keystore
 
-# Obfuscation related
-app.*.map.json
+# iOS
+**/ios/Flutter/Flutter.podspec
+**/ios/Pods/
+**/ios/Runner/GoogleService-Info.plist
+**/ios/Runner/Debug.xcconfig
+**/ios/Runner/Release.xcconfig
+**/ios/Runner/Generated.xcconfig
+**/ios/Runner/Info.plist
 
-# Android Studio will place build artifacts here
-/android/app/debug
-/android/app/profile
-/android/app/release
+# Env
+.env
+.env.*
+*.env
+
+# Sensitive
+secrets.json
+*.p12
+*.jks
+*.keystore
+
+# Logs
+*.log
+
+# Generated files
+**/android/app/build/
+**/ios/Flutter/Flutter.framework
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Others
+.idea/
+*.iml
+
+# exclude package lock files from distribution if you prefer
+# node_modules/
+

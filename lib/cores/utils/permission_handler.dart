@@ -1,5 +1,4 @@
 import 'package:permission_handler/permission_handler.dart';
-import '../constants/app_strings.dart';
 
 class PermissionHandler {
   // Check camera permission
@@ -111,17 +110,5 @@ class PermissionHandler {
     return false;
   }
 
-  // Get permission status message
-  static String getPermissionMessage(Permission permission) {
-    switch (permission) {
-      case Permission.camera:
-        return AppStr.cameraPermission;
-      case Permission.storage:
-        return AppStr.storagePermission;
-      case Permission.location:
-        return AppStr.locationPermission;
-      default:
-        return 'Permission required';
-    }
-  }
+
 }
