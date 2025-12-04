@@ -1117,7 +1117,204 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+  Widget _buildMessageBubble(Message message) {
+    final kind = message.kind();
 
+    // If it's a SYSTEM message render it as a standalone centered blue bubble
+    if (kind == MessageKind.SYSTEM) {
+      final maxWidth = MediaQuery.of(context).size.width * 0.85;
+      return Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 12),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: maxWidth),
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppClr.primaryColor.withValues(alpha: 0.15),
+                border: Border.all(
+                  color: AppClr.primaryColor.withValues(alpha: 0.3),
+                  width: 1,
+                ),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Text(
+                _parseMessage(message.message),
+                textAlign: TextAlign.center,
+                style: TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w600,
+                  color: AppClr.primaryColor,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    final showAvatar = !message.isSentByMe && widget.isGroup;
+
+    // Determine upload progress for temp messages
+    int? uploadPct;
+    final s = context.read<ChatCubit>().state;
+    if (s is ChatLoaded) uploadPct = s.uploadProgress[message.id];
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+      child: Row(
+        mainAxisAlignment: message.isSentByMe
+            ? MainAxisAlignment.end
+            : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          // Incoming message avatar
+          if (showAvatar) ...[
+            CircleAvatar(
+              radius: 12,
+              backgroundColor: AppClr.primaryColor.withAlpha((0.1 * 255).round()),
+              backgroundImage: message.sender.photoUrl != null
+                  ? CachedNetworkImageProvider(message.sender.photoUrl!)
+                  : null,
+              child: message.sender.photoUrl == null
+                  ? Text(
+                message.sender.name[0].toUpperCase(),
+                style: const TextStyle(fontSize: 10),
+              )
+                  : null,
+            ),
+            const SizedBox(width: 8),
+          ],
+
+          // Message bubble - wraps content tightly
+          Flexible(
+            child: IntrinsicWidth(
+              child: ConstrainedBox(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.72,
+                ),
+                child: GestureDetector(
+                  onLongPress: () {
+                    print('🔍 Long pressed message ${message.id}');
+                    _showMessageActions(message);
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
+                    decoration: BoxDecoration(
+                      color: message.isSentByMe
+                          ? AppClr.sentMessageColor
+                          : Colors.white,
+                      borderRadius: BorderRadius.only(
+                        topLeft: Radius.circular(18),
+                        topRight: Radius.circular(18),
+                        bottomLeft: message.isSentByMe
+                            ? Radius.circular(18)
+                            : Radius.circular(4),
+                        bottomRight: message.isSentByMe
+                            ? Radius.circular(4)
+                            : Radius.circular(18),
+                      ),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.05),
+                          blurRadius: 4,
+                          offset: const Offset(0, 2),
+                        ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: message.isSentByMe
+                          ? CrossAxisAlignment.end
+                          : CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        // Group sender name
+                        if (widget.isGroup && !message.isSentByMe) ...[
+                          Text(
+                            message.sender.name,
+                            style: TextStyle(
+                              color: AppClr.primaryColor,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+
+                        // Reply message
+                        if (message.replyMessage != null)
+                          _buildReplyMessage(message.replyMessage!),
+
+                        // Message content (media or text)
+                        if (kind != MessageKind.TEXT)
+                          _buildMessageContent(message),
+
+                        // Text messages with read more
+                        if (kind == MessageKind.TEXT) ...[
+                          ReadMoreHtml(
+                            htmlContent: message.message,
+                            maxLines: 6,
+                          ),
+                          const SizedBox(height: 4),
+                        ],
+
+                        // Timestamp and status
+                        Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Text(
+                              message.chatTime,
+                              style: TextStyle(
+                                color: message.isSentByMe
+                                    ? Colors.black54
+                                    : Colors.grey[600],
+                                fontSize: 11,
+                              ),
+                            ),
+                            if (uploadPct != null) ...[
+                              const SizedBox(width: 6),
+                              SizedBox(
+                                width: 60,
+                                child: LinearProgressIndicator(
+                                  value: (uploadPct / 100),
+                                  minHeight: 6,
+                                ),
+                              ),
+                            ],
+                            if (message.isSentByMe) ...[
+                              const SizedBox(width: 4),
+                              Icon(
+                                message.status == -1
+                                    ? Icons.error_outline
+                                    : (message.status == 1
+                                    ? Icons.done_all
+                                    : Icons.done),
+                                size: 14,
+                                color: message.status == -1
+                                    ? Colors.red
+                                    : (message.status == 1
+                                    ? Colors.blue[600]
+                                    : Colors.grey),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+/*
   Widget _buildMessageBubble(Message message) {
     final kind = message.kind();
     // If it's a SYSTEM message render it as a standalone centered blue bubble
@@ -1205,7 +1402,12 @@ class _ChatScreenState extends State<ChatScreen>
                     color: message.isSentByMe
                         ? AppClr.sentMessageColor
                         : Colors.white,
-                    borderRadius: BorderRadius.circular(12),
+                    borderRadius: BorderRadius.only(
+                      topLeft: Radius.circular(18),
+                      topRight: Radius.circular(18),
+                      bottomLeft: message.isSentByMe ? Radius.circular(18) : Radius.circular(4),
+                      bottomRight: message.isSentByMe ? Radius.circular(4) : Radius.circular(18),
+                    ),
                     boxShadow: [
                       BoxShadow(
                         color: Colors.black.withValues(alpha: 0.05),
@@ -1311,6 +1513,7 @@ class _ChatScreenState extends State<ChatScreen>
       ),
     );
   }
+*/
 
   Widget _buildMessageContent(Message message) {
     final kind = message.kind();
