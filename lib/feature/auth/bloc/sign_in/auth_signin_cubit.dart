@@ -1,13 +1,9 @@
-import 'package:flutter/foundation.dart';
-import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
- import 'package:hsc_chat/cores/network/network_checker.dart';
+import 'package:hsc_chat/cores/network/network_checker.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
 import 'package:hsc_chat/feature/auth/model/auth_model.dart';
 import 'package:hsc_chat/feature/auth/repository/auth_repository.dart';
-import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
-  import 'package:hsc_chat/routes/navigation_service.dart';
 
 class AuthSignInCubit extends Cubit<AuthSignInState> {
   final IAuthRepository _repository;
@@ -39,7 +35,7 @@ class AuthSignInCubit extends Cubit<AuthSignInState> {
     );
 
     if (response.success && response.data != null) {
-      await _saveUserData(response.data, email, password);
+      await _saveUserData(response.data);
       emit(AuthSignInSuccess(response.data ?? LoginResponse()));
     } else {
       String errorMessage = response.message ?? 'Login failed';
@@ -50,26 +46,8 @@ class AuthSignInCubit extends Cubit<AuthSignInState> {
     }
   }
 
-  Future<void> _saveUserData(
-    LoginResponse? response,
-    String? email,
-    String? password,
-  ) async {
+  Future<void> _saveUserData(LoginResponse? response) async {
     SharedPreferencesHelper.storeLoginResponse(response!);
-    // Initialize socket connection after successful login
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      try {
-        final conversationCubit = NavigationService.navigatorKey.currentContext
-            ?.read<ConversationCubit>();
-        if (conversationCubit != null) {
-          conversationCubit.initializeSocketConnection(response?.token ?? '');
-        }
-      } catch (e) {
-        if (kDebugMode) {
-          print('Failed to initialize socket: $e');
-        }
-      }
-    });
   }
 
   void clearError() {

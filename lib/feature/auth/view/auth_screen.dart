@@ -5,10 +5,8 @@ import 'package:hsc_chat/cores/utils/shared_preferences.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
 import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
 import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
-import 'package:hsc_chat/routes/navigation_service.dart';
-import 'package:hsc_chat/routes/routes.dart';
-
 import '../../../cores/constants/image_paths.dart';
+import '../../home/view/home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
   @override
@@ -34,7 +32,10 @@ class _AuthScreenState extends State<AuthScreen> {
 
     final conversationCubit = context.read<ConversationCubit>();
     conversationCubit.initializeSocketConnection(token);
-    NavigationService.pushReplacementNamed(RouteNames.home);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(builder: (_) => const HomeScreen()),
+    );
   }
 
   @override

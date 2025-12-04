@@ -1,9 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/routes/navigation_service.dart';
-import 'package:hsc_chat/routes/routes.dart';
-
 import '../../cores/constants/image_paths.dart';
+import '../auth/view/auth_screen.dart';
+import '../home/view/home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   @override
@@ -24,10 +23,16 @@ class _SplashScreenState extends State<SplashScreen> {
       // Check if user is authenticated and navigate accordingly
       if (SharedPreferencesHelper.isUserAuthenticated()) {
         // User is already logged in, navigate to home
-        NavigationService.pushReplacementNamed(RouteNames.home);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) => const HomeScreen()),
+        );
       } else {
         // User is not logged in, navigate to auth
-        NavigationService.pushReplacementNamed(RouteNames.auth);
+        Navigator.pushReplacement(
+          context,
+          MaterialPageRoute(builder: (_) =>   AuthScreen()),
+        );
       }
     }
   }

@@ -17,10 +17,9 @@ import 'package:hsc_chat/feature/home/view/chat_screen.dart';
 import 'package:hsc_chat/feature/home/view/notifications_screen.dart';
 import 'package:hsc_chat/feature/home/widgets/contacts_screen.dart';
 import 'package:hsc_chat/feature/home/widgets/user_selection_screen.dart';
-import 'package:hsc_chat/routes/navigation_service.dart';
-import 'package:hsc_chat/routes/routes.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import '../../auth/view/auth_screen.dart';
 import '../widgets/notificatiobn_bell.dart';
 
 class HomeScreen extends StatefulWidget {
@@ -161,7 +160,11 @@ class _HomeScreenState extends State<HomeScreen>
     await SharedPreferencesHelper.clear();
     SocketService().disconnect();
     if (!mounted) return;
-    NavigationService.pushNamedAndRemoveUntil(RouteNames.auth);
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) =>   AuthScreen()),
+          (route) => false,
+    );
   }
 
   @override

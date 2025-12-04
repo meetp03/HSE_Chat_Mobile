@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hsc_chat/routes/navigation_service.dart';
-import 'package:hsc_chat/routes/routes.dart';
+import 'package:flutter/material.dart';
+import '../../feature/auth/view/auth_screen.dart';
+import '../../main.dart';
 import '../constants/api_urls.dart';
 import '../utils/shared_preferences.dart';
 import 'network_exceptions.dart';
@@ -158,15 +159,20 @@ class DioClient {
   }
 
   void _handleUnauthorizedError() async {
-    // Clear user data
     await SharedPreferencesHelper.remove('auth_token');
     await SharedPreferencesHelper.remove('user_data');
 
-    // Navigate to login screen
-    NavigationService.pushReplacementNamed(
-      RouteNames.auth,
-      arguments: {'showUnauthorizedError': true},
-    );
+    final context = MyApp.navigatorKey.currentContext;
+    if (context != null && context.mounted) {
+      Navigator.pushAndRemoveUntil(
+        context,
+        MaterialPageRoute(
+          builder: (_) => AuthScreen(),
+          settings: const RouteSettings(arguments: {'showUnauthorizedError': true}),
+        ),
+            (route) => false,
+      );
+    }
   }
 
   // GET Request

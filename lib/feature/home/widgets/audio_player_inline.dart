@@ -1,9 +1,7 @@
-// Save this as audio_player_inline.dart (or update your existing file)
 
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:flutter_cache_manager/flutter_cache_manager.dart';
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 
 class AudioPlayerInline extends StatefulWidget {
@@ -11,10 +9,10 @@ class AudioPlayerInline extends StatefulWidget {
   final Future<File?> Function(String url, String messageId) fetchAndCache;
 
   const AudioPlayerInline({
-    Key? key,
+    super.key,
     required this.message,
     required this.fetchAndCache,
-  }) : super(key: key);
+  });
 
   @override
   State<AudioPlayerInline> createState() => _AudioPlayerInlineState();
@@ -325,7 +323,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                     ),
                   ),
                 );
-              }).toList(),
+              }),
             ],
           ),
         ],
