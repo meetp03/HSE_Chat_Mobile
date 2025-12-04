@@ -4,6 +4,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
+import 'package:flutter_html/flutter_html.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
@@ -16,7 +17,7 @@ import 'package:hsc_chat/feature/home/model/conversation_model.dart'
 import 'package:hsc_chat/feature/home/model/message_model.dart';
 import 'package:hsc_chat/feature/home/widgets/user_info_screen.dart';
 import 'package:open_file/open_file.dart';
- import 'package:file_picker/file_picker.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:path/path.dart' as p;
 import 'package:hsc_chat/cores/utils/file_validation.dart';
 import 'package:hsc_chat/cores/utils/snackbar.dart';
@@ -82,7 +83,6 @@ class _ChatScreenState extends State<ChatScreen>
   double? _scrollOffsetBeforeLoad;
   int? _messageCountBeforeLoad;
   bool _isSending = false;
-
 
   @override
   void initState() {
@@ -1252,13 +1252,45 @@ class _ChatScreenState extends State<ChatScreen>
                             print('🔍 Long pressed TEXT message ${message.id}');
                             _showMessageActions(message);
                           },
+                          child: Html(
+                            data: message.message,
+                            style: {
+                              "html": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.zero,                    // HtmlPaddings.zero → replaced
+                              ),
+                              "body": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.zero,
+                              ),
 
-                          child: Text(
-                            _parseMessage(message.message),
-                            style: const TextStyle(
-                              color: Colors.black87,
-                              fontSize: 16,
-                            ),
+                              // Remove all vertical spacing
+                              "p, div, h1, h2, h3, h4, h5, h6": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.zero,
+                              ),
+
+                              // BULLETS WILL SHOW – this is the key line
+                              "ul": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.only(left: 30),   // ← only this keeps bullets alive
+                                listStyleType: ListStyleType.disc,
+                              ),
+                              "ol": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.only(left: 20),
+                                listStyleType: ListStyleType.decimal,
+                              ),
+
+                              "li": Style(
+                                margin: Margins.zero,
+                                padding: HtmlPaddings.zero,
+                               ),
+
+                              "br": Style(height: Height(0)),
+
+                              "strong, b": Style(fontWeight: FontWeight.bold),
+                            },
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -1619,7 +1651,6 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-
   Widget _buildAudioContent(Message message) {
     final url = _buildMediaUrl(message);
     if (url == null || url.isEmpty) return const SizedBox.shrink();
@@ -1932,6 +1963,7 @@ class _ChatScreenState extends State<ChatScreen>
       },
     );
   }
+
   Widget _buildFileContent(Message message) {
     final url = message.fileUrl;
     if (url == null || url.isEmpty) return const SizedBox.shrink();
@@ -1963,7 +1995,7 @@ class _ChatScreenState extends State<ChatScreen>
         final isCached = snapshot.data != null;
         final isDownloading =
             _downloadProgress[message.id] != null &&
-                _downloadProgress[message.id]! < 1.0;
+            _downloadProgress[message.id]! < 1.0;
 
         return GestureDetector(
           // ✅ TAP: Auto download and open (same as before on long press)
@@ -2045,14 +2077,16 @@ class _ChatScreenState extends State<ChatScreen>
                         isDownloading
                             ? 'Downloading ${(_downloadProgress[message.id]! * 100).toInt()}%'
                             : (isCached
-                            ? ext.toUpperCase().replaceFirst('.', '')
-                            : 'Tap to download'),
+                                  ? ext.toUpperCase().replaceFirst('.', '')
+                                  : 'Tap to download'),
                         style: TextStyle(
                           color: isCached
                               ? iconColor // ✅ Show file type color when cached
                               : Colors.blueAccent,
                           fontSize: 11,
-                          fontWeight: isCached ? FontWeight.w600 : FontWeight.normal,
+                          fontWeight: isCached
+                              ? FontWeight.w600
+                              : FontWeight.normal,
                         ),
                       ),
                     ],
@@ -2072,8 +2106,10 @@ class _ChatScreenState extends State<ChatScreen>
                 else
                   Icon(
                     isCached
-                        ? Icons.file_present // ✅ Show "file present" icon when cached
-                        : Icons.download_rounded, // ✅ Show download icon when not cached
+                        ? Icons
+                              .file_present // ✅ Show "file present" icon when cached
+                        : Icons
+                              .download_rounded, // ✅ Show download icon when not cached
                     size: 20,
                     color: isCached ? iconColor : Colors.grey[600],
                   ),
@@ -2185,6 +2221,7 @@ class _ChatScreenState extends State<ChatScreen>
       ),
     );
   }
+
   void _showNoAppAvailableDialog(String filePath, String ext) {
     showDialog(
       context: context,
@@ -2192,8 +2229,8 @@ class _ChatScreenState extends State<ChatScreen>
         title: const Text('No App Available'),
         content: Text(
           'No app found to open ${ext.toUpperCase()} files.\n\n'
-              'Please install an appropriate app from the app store.\n\n'
-              'File saved at: ${p.basename(filePath)}',
+          'Please install an appropriate app from the app store.\n\n'
+          'File saved at: ${p.basename(filePath)}',
         ),
         actions: [
           TextButton(
@@ -2204,17 +2241,18 @@ class _ChatScreenState extends State<ChatScreen>
       ),
     );
   }
+
   Future<void> _openDocument(String url, String messageId, String ext) async {
     try {
       final file = await _fetchAndCache(url, messageId);
       if (file == null) {
-        showCustomSnackBar(context,
+        showCustomSnackBar(
+          context,
           'Document not available',
           type: SnackBarType.error,
         );
         return;
       }
-
 
       final result = await OpenFile.open(file.path);
 
@@ -2223,14 +2261,16 @@ class _ChatScreenState extends State<ChatScreen>
         if (result.type == ResultType.noAppToOpen) {
           _showNoAppAvailableDialog(file.path, ext);
         } else {
-          showCustomSnackBar(context,
+          showCustomSnackBar(
+            context,
             'Failed to open document: ${result.message}',
             type: SnackBarType.error,
           );
         }
       }
     } catch (e) {
-      showCustomSnackBar(context,
+      showCustomSnackBar(
+        context,
         'Failed to open document: $e',
         type: SnackBarType.error,
       );
@@ -2390,7 +2430,7 @@ class _ChatScreenState extends State<ChatScreen>
         if (isPendingRequest) {
           final isRecipient =
               state.groupData?.chatRequestTo ==
-                  SharedPreferencesHelper.getCurrentUserId().toString();
+              SharedPreferencesHelper.getCurrentUserId().toString();
 
           return Container(
             padding: const EdgeInsets.all(12),
@@ -2908,6 +2948,7 @@ class _ChatScreenState extends State<ChatScreen>
       );
     }
   }
+
   // Show download / save / share options for a message (long-press)
   void _showMediaOptions(Message message, String url) {
     showModalBottomSheet(
@@ -3121,4 +3162,3 @@ class _ChatScreenState extends State<ChatScreen>
     return msgs[idx - 1].id;
   }
 }
-
