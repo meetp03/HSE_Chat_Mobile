@@ -1,9 +1,9 @@
 class ApiUrls {
-  // base url for login
+  // base url for login - CHANGE THIS TO YOUR BACKEND URL
   static const String baseUrlForLogin =
-      'https://hecdev.sonomainfotech.in/api/login';
-  // main base url
-  static const String baseUrl = 'https://hecdev-apichat.sonomainfotech.in';
+      'https://mock-api.example.com/api/login'; // Mock login URL
+  // main base url - CHANGE THIS TO YOUR BACKEND URL
+  static const String baseUrl = 'https://mock-api.example.com'; // Mock base URL
   // conversation URLs
   static const String conversations =
       '$baseUrl/api/messages/conversations-list';

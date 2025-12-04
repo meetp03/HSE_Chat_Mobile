@@ -1,5 +1,5 @@
-name: hsc_chat
-description: "Chat App project."
+name: mock_chat_app
+description: "Separate Chat App project."
 publish_to: 'none'
 
 version: 1.0.0+1

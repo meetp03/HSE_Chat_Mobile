@@ -27,7 +27,7 @@ class SocketService with WidgetsBindingObserver {
   void initializeSocket(String token) {
     try {
       _socket = IO.io(
-        ApiUrls.baseUrl,
+        ApiUrls.baseUrl,  // CHANGE THIS IN api_urls.dart TO YOUR SOCKET URL
         IO.OptionBuilder()
             .setTransports(['websocket'])
             .enableAutoConnect()
