@@ -2,14 +2,14 @@
 import 'dart:convert';
 
 import 'package:dio/dio.dart';
-import 'package:hsc_chat/cores/constants/api_urls.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:hsc_chat/cores/network/network_exceptions.dart';
-import 'package:hsc_chat/feature/home/model/blocked_user_model.dart';
-import 'package:hsc_chat/feature/home/model/contact_model.dart';
-import 'package:hsc_chat/feature/home/model/group_model.dart';
-import 'package:hsc_chat/feature/home/model/user_model.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/cores/network/network_exceptions.dart';
+import 'package:hec_chat/feature/home/model/blocked_user_model.dart';
+import 'package:hec_chat/feature/home/model/contact_model.dart';
+import 'package:hec_chat/feature/home/model/group_model.dart';
+import 'package:hec_chat/feature/home/model/user_model.dart';
 
 abstract class IMessageRepository {
   Future<ApiResponse<ContactResponse>> getMyContacts({

@@ -3,8 +3,8 @@
 // connections and keeps unseenCount in one place.
 
 import 'package:flutter/widgets.dart';
-import 'package:hsc_chat/cores/network/socket_service.dart';
-import 'package:hsc_chat/feature/home/repository/notification_repository.dart';
+import 'package:hec_chat/cores/network/socket_service.dart';
+import 'package:hec_chat/feature/home/repository/notification_repository.dart';
 
 class NotificationBadgeService with WidgetsBindingObserver {
   // Singleton wrapper

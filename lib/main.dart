@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
-import 'package:hsc_chat/cores/utils/providers.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/utils/providers.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import 'feature/splash/splash_screen.dart';
 
 void main() async {

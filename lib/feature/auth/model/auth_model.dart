@@ -1,4 +1,4 @@
-import 'package:hsc_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
 
 class LoginRequest {
   final String email;

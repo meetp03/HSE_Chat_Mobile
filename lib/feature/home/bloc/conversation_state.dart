@@ -1,4 +1,4 @@
-import 'package:hsc_chat/feature/home/model/conversation_model.dart';
+import 'package:hec_chat/feature/home/model/conversation_model.dart';
 
 abstract class ConversationState {
   const ConversationState();

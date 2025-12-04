@@ -1,5 +1,5 @@
 // models/contact_model.dart
-import 'package:hsc_chat/feature/home/model/pagination_model.dart';
+import 'package:hec_chat/feature/home/model/pagination_model.dart';
 
 class ContactModel {
   final int id;

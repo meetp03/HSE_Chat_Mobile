@@ -1,9 +1,9 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/network/network_checker.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
-import 'package:hsc_chat/feature/auth/model/auth_model.dart';
-import 'package:hsc_chat/feature/auth/repository/auth_repository.dart';
+import 'package:hec_chat/cores/network/network_checker.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
+import 'package:hec_chat/feature/auth/model/auth_model.dart';
+import 'package:hec_chat/feature/auth/repository/auth_repository.dart';
 
 class AuthSignInCubit extends Cubit<AuthSignInState> {
   final IAuthRepository _repository;

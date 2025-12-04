@@ -1,6 +1,6 @@
 // chat_state.dart
-import 'package:hsc_chat/feature/home/model/message_model.dart'  ;
-import 'package:hsc_chat/feature/home/model/chat_models.dart';
+import 'package:hec_chat/feature/home/model/message_model.dart'  ;
+import 'package:hec_chat/feature/home/model/chat_models.dart';
 
 import '../model/conversation_model.dart' hide Message;
 

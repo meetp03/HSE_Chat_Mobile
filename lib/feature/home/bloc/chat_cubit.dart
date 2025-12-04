@@ -1,13 +1,13 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/network/socket_service.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/home/bloc/chat_state.dart';
-import 'package:hsc_chat/feature/home/model/conversation_model.dart' show Conversation;
-import 'package:hsc_chat/feature/home/model/message_model.dart';
-import 'package:hsc_chat/feature/home/model/chat_models.dart';
-import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
+import 'package:hec_chat/cores/network/socket_service.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/home/bloc/chat_state.dart';
+import 'package:hec_chat/feature/home/model/conversation_model.dart' show Conversation;
+import 'package:hec_chat/feature/home/model/message_model.dart';
+import 'package:hec_chat/feature/home/model/chat_models.dart';
+import 'package:hec_chat/feature/home/repository/chat_repository.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 

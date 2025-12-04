@@ -1,6 +1,6 @@
 // user_info_state.dart
 import 'package:equatable/equatable.dart';
- import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
+ import 'package:hec_chat/feature/home/model/common_groups_response.dart';
 
 abstract class UserInfoState extends Equatable {
   const UserInfoState();

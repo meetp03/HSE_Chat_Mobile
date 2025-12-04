@@ -2,11 +2,11 @@
 import 'dart:io';
 
 import 'package:dio/dio.dart';
-import 'package:hsc_chat/cores/constants/api_urls.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
-import 'package:hsc_chat/feature/home/model/group_action.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/feature/home/model/common_groups_response.dart';
+import 'package:hec_chat/feature/home/model/group_action.dart';
 
 class UserRepository {
   final DioClient _dio = DioClient();

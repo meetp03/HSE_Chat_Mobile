@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:hsc_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
 import '../../../cores/network/socket_service.dart';
 import '../../../cores/network/notification_badge_service.dart';
 import '../../../cores/utils/shared_preferences.dart';

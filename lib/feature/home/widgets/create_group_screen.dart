@@ -4,9 +4,9 @@ import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
-import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
-import 'package:hsc_chat/cores/utils/snackbar.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/feature/home/bloc/group_cubit.dart';
+import 'package:hec_chat/cores/utils/snackbar.dart';
 
 import '../../../cores/utils/shared_preferences.dart';
 

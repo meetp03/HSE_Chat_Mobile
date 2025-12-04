@@ -1,12 +1,12 @@
 // cubit/message_cubit.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/feature/home/bloc/contacts_state.dart';
-import 'package:hsc_chat/feature/home/model/blocked_user_model.dart';
-import 'package:hsc_chat/feature/home/model/contact_model.dart';
-import 'package:hsc_chat/feature/home/model/pagination_model.dart';
-import 'package:hsc_chat/feature/home/model/user_model.dart';
-import 'package:hsc_chat/feature/home/repository/message_repository.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/feature/home/bloc/contacts_state.dart';
+import 'package:hec_chat/feature/home/model/blocked_user_model.dart';
+import 'package:hec_chat/feature/home/model/contact_model.dart';
+import 'package:hec_chat/feature/home/model/pagination_model.dart';
+import 'package:hec_chat/feature/home/model/user_model.dart';
+import 'package:hec_chat/feature/home/repository/message_repository.dart';
 
 import '../../../cores/utils/shared_preferences.dart';
 

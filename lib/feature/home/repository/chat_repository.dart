@@ -1,12 +1,12 @@
 // chat_repository.dart
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
-import 'package:hsc_chat/cores/constants/api_urls.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:hsc_chat/cores/network/network_exceptions.dart';
-import 'package:hsc_chat/feature/home/model/chat_response_model.dart';
-import 'package:hsc_chat/cores/utils/file_validation.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/cores/network/network_exceptions.dart';
+import 'package:hec_chat/feature/home/model/chat_response_model.dart';
+import 'package:hec_chat/cores/utils/file_validation.dart';
 import 'dart:io';
 import 'package:path/path.dart' as p;
 

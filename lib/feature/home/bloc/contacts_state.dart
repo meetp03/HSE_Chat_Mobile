@@ -1,8 +1,8 @@
 // cubit/contacts_state.dart
-import 'package:hsc_chat/feature/home/model/blocked_user_model.dart';
-import 'package:hsc_chat/feature/home/model/contact_model.dart';
-import 'package:hsc_chat/feature/home/model/pagination_model.dart';
-import 'package:hsc_chat/feature/home/model/user_model.dart';
+import 'package:hec_chat/feature/home/model/blocked_user_model.dart';
+import 'package:hec_chat/feature/home/model/contact_model.dart';
+import 'package:hec_chat/feature/home/model/pagination_model.dart';
+import 'package:hec_chat/feature/home/model/user_model.dart';
 
 abstract class MessageState {
   const MessageState();

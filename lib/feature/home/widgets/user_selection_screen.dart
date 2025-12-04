@@ -2,9 +2,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
-import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
-import 'package:hsc_chat/feature/home/widgets/create_group_screen.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/feature/home/bloc/group_cubit.dart';
+import 'package:hec_chat/feature/home/widgets/create_group_screen.dart';
 
 class UserSelectionScreen extends StatefulWidget {
   const UserSelectionScreen({Key? key}) : super(key: key);

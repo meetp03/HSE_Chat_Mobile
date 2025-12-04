@@ -3,9 +3,9 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/widgets.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/home/model/message_model.dart';
-import 'package:hsc_chat/feature/notification/notification_repository.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/home/model/message_model.dart';
+import 'package:hec_chat/feature/notification/notification_repository.dart';
  import 'package:socket_io_client/socket_io_client.dart' as IO;
 
 import '../constants/api_urls.dart';

@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import '../../cores/constants/image_paths.dart';
 import '../auth/view/auth_screen.dart';
 import '../home/view/home_screen.dart';

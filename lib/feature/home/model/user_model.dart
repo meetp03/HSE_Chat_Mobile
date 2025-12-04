@@ -1,6 +1,6 @@
 /*
 // models/user_model.dart
-import 'package:hsc_chat/feature/home/model/pagination_model.dart';
+import 'package:hec_chat/feature/home/model/pagination_model.dart';
 
 class UserModel {
   final int id;

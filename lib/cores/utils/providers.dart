@@ -1,18 +1,18 @@
 // providers.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:hsc_chat/cores/network/socket_service.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/auth/bloc/auth_session/auth_session_cubit.dart';
-import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
-import 'package:hsc_chat/feature/auth/repository/auth_repository.dart';
-import 'package:hsc_chat/feature/home/bloc/chat_cubit.dart';
-import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
- import 'package:hsc_chat/feature/home/bloc/group_cubit.dart';
-import 'package:hsc_chat/feature/home/bloc/contacts_cubit.dart';
-import 'package:hsc_chat/feature/home/repository/chat_repository.dart';
-import 'package:hsc_chat/feature/home/repository/conversation_repository.dart';
-import 'package:hsc_chat/feature/home/repository/message_repository.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/cores/network/socket_service.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/auth/bloc/auth_session/auth_session_cubit.dart';
+import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
+import 'package:hec_chat/feature/auth/repository/auth_repository.dart';
+import 'package:hec_chat/feature/home/bloc/chat_cubit.dart';
+import 'package:hec_chat/feature/home/bloc/conversation_cubit.dart';
+ import 'package:hec_chat/feature/home/bloc/group_cubit.dart';
+import 'package:hec_chat/feature/home/bloc/contacts_cubit.dart';
+import 'package:hec_chat/feature/home/repository/chat_repository.dart';
+import 'package:hec_chat/feature/home/repository/conversation_repository.dart';
+import 'package:hec_chat/feature/home/repository/message_repository.dart';
 
 class Providers {
   // Singletons

@@ -2,11 +2,11 @@
 import 'dart:io';
 
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/feature/home/model/common_groups_response.dart';
-import 'package:hsc_chat/feature/home/model/chat_models.dart';
+import 'package:hec_chat/feature/home/model/common_groups_response.dart';
+import 'package:hec_chat/feature/home/model/chat_models.dart';
 import 'user_info_state.dart';
-import 'package:hsc_chat/feature/home/repository/user_repository.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/home/repository/user_repository.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
 
 class UserInfoCubit extends Cubit<UserInfoState> {
   final UserRepository _repo;

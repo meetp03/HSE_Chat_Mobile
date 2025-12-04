@@ -1,12 +1,12 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/cores/network/socket_service.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/home/bloc/conversation_state.dart';
-import 'package:hsc_chat/feature/home/model/conversation_model.dart';
-import 'package:hsc_chat/feature/home/repository/conversation_repository.dart';
-import 'package:hsc_chat/feature/home/repository/message_repository.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/cores/network/socket_service.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/home/bloc/conversation_state.dart';
+import 'package:hec_chat/feature/home/model/conversation_model.dart';
+import 'package:hec_chat/feature/home/repository/conversation_repository.dart';
+import 'package:hec_chat/feature/home/repository/message_repository.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
 
 import '../../../cores/constants/api_urls.dart';
 

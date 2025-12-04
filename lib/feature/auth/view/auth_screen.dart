@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
-import 'package:hsc_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
-import 'package:hsc_chat/feature/home/bloc/conversation_cubit.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
+import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
+import 'package:hec_chat/feature/home/bloc/conversation_cubit.dart';
 import '../../../cores/constants/image_paths.dart';
 import '../../home/view/home_screen.dart';
 

@@ -1,7 +1,7 @@
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
-import 'package:hsc_chat/feature/auth/bloc/auth_session/auth_session_state.dart';
- import 'package:hsc_chat/feature/auth/repository/auth_repository.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/feature/auth/bloc/auth_session/auth_session_state.dart';
+ import 'package:hec_chat/feature/auth/repository/auth_repository.dart';
 
 class AuthSessionCubit extends Cubit<AuthSessionState> {
   final IAuthRepository _repository;

@@ -1,8 +1,8 @@
 import 'package:dio/dio.dart';
-import 'package:hsc_chat/cores/constants/api_urls.dart';
-import 'package:hsc_chat/cores/network/api_response.dart';
-import 'package:hsc_chat/cores/network/dio_client.dart';
-import 'package:hsc_chat/cores/network/network_exceptions.dart';
+import 'package:hec_chat/cores/constants/api_urls.dart';
+import 'package:hec_chat/cores/network/api_response.dart';
+import 'package:hec_chat/cores/network/dio_client.dart';
+import 'package:hec_chat/cores/network/network_exceptions.dart';
 import '../model/auth_model.dart';
 
 abstract class IAuthRepository {

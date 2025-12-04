@@ -2,7 +2,7 @@
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import 'package:hsc_chat/feature/home/model/message_model.dart';
+import 'package:hec_chat/feature/home/model/message_model.dart';
 
 class AudioPlayerInline extends StatefulWidget {
   final Message message;

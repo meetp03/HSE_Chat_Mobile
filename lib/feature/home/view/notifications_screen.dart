@@ -1,11 +1,11 @@
 // notifications_screen.dart
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:hsc_chat/feature/home/bloc/notification_cubit.dart';
-import 'package:hsc_chat/feature/home/repository/notification_repository.dart';
-import 'package:hsc_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/feature/home/bloc/notification_cubit.dart';
+import 'package:hec_chat/feature/home/repository/notification_repository.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
 import 'package:intl/intl.dart';
-import 'package:hsc_chat/cores/utils/shared_preferences.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
 
 import '../../../cores/network/notification_badge_service.dart';
 import '../../../cores/network/socket_service.dart';
