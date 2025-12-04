@@ -94,10 +94,10 @@ class Conversation {
   final DateTime? lastReadAt;
 
   //   Chat Request Fields
-  final String? chatRequestStatus;  // "pending" | "accepted" | "declined" | null
-  final String? chatRequestFrom;    // User ID of requester
-  final String? chatRequestTo;      // User ID of recipient
-  final String? chatRequestId;      // Server ID for the request
+  final String? chatRequestStatus; // "pending" | "accepted" | "declined" | null
+  final String? chatRequestFrom; // User ID of requester
+  final String? chatRequestTo; // User ID of recipient
+  final String? chatRequestId; // Server ID for the request
 
   // Online and Active status for direct chats
   final bool isOnline;
@@ -135,9 +135,9 @@ class Conversation {
     final String convId = isGroup
         ? (json['group_id']?.toString() ?? '')
         : (user?['id']?.toString() ??
-        json['to_id']?.toString() ??
-        json['from_id']?.toString() ??
-        '');
+              json['to_id']?.toString() ??
+              json['from_id']?.toString() ??
+              '');
 
     // ---- Title -------------------------------------------------
     final String title = isGroup
@@ -170,7 +170,9 @@ class Conversation {
     List<Participant> participants = [];
     final rawParticipants = json['participants'] as List<dynamic>?;
     if (rawParticipants != null && rawParticipants.isNotEmpty) {
-      participants = rawParticipants.map((p) => Participant.fromJson(p as Map<String, dynamic>)).toList();
+      participants = rawParticipants
+          .map((p) => Participant.fromJson(p as Map<String, dynamic>))
+          .toList();
     } else if (group != null) {
       final groupUsers = group['users'] as List<dynamic>?;
       if (groupUsers != null && groupUsers.isNotEmpty) {
@@ -180,11 +182,51 @@ class Conversation {
         }).toList();
       }
     }
+    // ---- Smart last message preview (handles images, empty content, etc.) ----
+    String getSmartLastMessage(String? rawHtml) {
+      if (rawHtml == null || rawHtml.trim().isEmpty) {
+        return 'No messages';
+      }
 
-    // ---- sanitize last message: strip HTML tags and decode common entities
-    String rawMsg = json['message']?.toString() ?? '';
-    String cleanedMsg = rawMsg.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-    cleanedMsg = _decodeHtmlEntities(cleanedMsg);
+      String html = rawHtml.trim();
+
+      // Clean empty content
+      html = html
+          .replaceAll(RegExp(r'<p>\s*&nbsp;\s*</p>', caseSensitive: false), '')
+          .replaceAll(RegExp(r'<p>\s*</p>', caseSensitive: false), '')
+          .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '')
+          .trim();
+
+      if (html.isEmpty) return 'No messages';
+
+      // Detect image - simple and bulletproof
+      final bool hasImage =
+          html.contains('<img') ||
+          html.toLowerCase().contains('class="image"') ||
+          html.toLowerCase().contains("class='image'");
+
+      // Extract text only
+      final String plainText = html
+          .replaceAll(RegExp(r'<[^>]*>'), '')
+          .replaceAll('&nbsp;', ' ')
+          .replaceAll(RegExp(r'\s+'), ' ')
+          .trim();
+
+      final bool hasText = plainText.isNotEmpty;
+
+      if (hasImage && !hasText) {
+        return '📷 Photo';
+      }
+      if (hasImage && hasText) {
+        return '📷 Photo';
+      }
+
+      final cleaned = _decodeHtmlEntities(plainText);
+      return cleaned.isEmpty ? 'Message' : cleaned;
+    } // ---- sanitize last message: strip HTML tags and decode common entities
+    // String rawMsg = json['message']?.toString() ?? '';
+    // String cleanedMsg = rawMsg.replaceAll(RegExp(r'<[^>]*>'), '').trim();
+    // cleanedMsg = _decodeHtmlEntities(cleanedMsg);
 
     // ---- Email extraction (robust) ----------------------------
     String extractEmail() {
@@ -195,24 +237,33 @@ class Conversation {
 
       // 2) user object
       if (user != null) {
-        final uemail = (user['email'] ?? user['user_email'] ?? user['email_address']);
-        if (uemail != null && uemail.toString().trim().isNotEmpty) return uemail.toString().trim();
+        final uemail =
+            (user['email'] ?? user['user_email'] ?? user['email_address']);
+        if (uemail != null && uemail.toString().trim().isNotEmpty)
+          return uemail.toString().trim();
       }
 
       // 3) group object (sometimes group owner or first member email is provided)
       if (group != null) {
-        if (group['email'] != null && group['email'].toString().trim().isNotEmpty) return group['email'].toString().trim();
+        if (group['email'] != null &&
+            group['email'].toString().trim().isNotEmpty)
+          return group['email'].toString().trim();
         // try members array first user email
         final members = group['users'] as List<dynamic>?;
         if (members != null && members.isNotEmpty) {
           final first = members.first as Map<String, dynamic>?;
-          final memEmail = first != null ? (first['email'] ?? first['user_email']) : null;
-          if (memEmail != null && memEmail.toString().trim().isNotEmpty) return memEmail.toString().trim();
+          final memEmail = first != null
+              ? (first['email'] ?? first['user_email'])
+              : null;
+          if (memEmail != null && memEmail.toString().trim().isNotEmpty)
+            return memEmail.toString().trim();
         }
       }
 
       // 4) fallback fields sometimes used by backend
-      if (json['user_email'] != null && json['user_email'].toString().trim().isNotEmpty) return json['user_email'].toString().trim();
+      if (json['user_email'] != null &&
+          json['user_email'].toString().trim().isNotEmpty)
+        return json['user_email'].toString().trim();
 
       return 'Unknown';
     }
@@ -224,7 +275,7 @@ class Conversation {
       groupId: json['group_id']?.toString(),
       title: title,
       email: email,
-      lastMessage: cleanedMsg,
+      lastMessage: getSmartLastMessage(json['message']),
       timestamp: timestamp,
       unreadCount: unread,
       avatarUrl: avatar,
@@ -239,8 +290,12 @@ class Conversation {
       chatRequestFrom: json['chat_request_from']?.toString(),
       chatRequestTo: json['chat_request_to']?.toString(),
       chatRequestId: json['chat_request_id']?.toString(),
-      isOnline: isGroup ? false : (user?['is_online'] == 1 || user?['is_online'] == true),
-      isActive: isGroup ? false : (user?['is_active'] == 1 || user?['is_active'] == true),
+      isOnline: isGroup
+          ? false
+          : (user?['is_online'] == 1 || user?['is_online'] == true),
+      isActive: isGroup
+          ? false
+          : (user?['is_active'] == 1 || user?['is_active'] == true),
     );
   }
 
@@ -279,7 +334,6 @@ class Conversation {
     String? chatRequestId,
     bool? isOnline,
     bool? isActive,
-
   }) {
     return Conversation(
       id: id ?? this.id,
@@ -335,6 +389,7 @@ class Conversation {
   String get formattedTime {
     return Utils.formatConversationTime(timestamp!);
   }
+
   // ---- Get last message preview ----
   String get lastMessagePreview {
     if (lastMessage.length > 50) {
@@ -399,10 +454,12 @@ class Message {
       conversationId: json['conversation_id']?.toString() ?? '',
       senderId: json['from_id']?.toString() ?? '',
       content: json['message']?.toString() ?? '',
-      timestamp: DateTime.parse(json['created_at'] ?? DateTime.now().toIso8601String()),
+      timestamp: DateTime.parse(
+        json['created_at'] ?? DateTime.now().toIso8601String(),
+      ),
       type: MessageType.values[json['message_type'] ?? 0],
       status: MessageStatus.values[json['status'] ?? 0],
-       replyTo: reply != null ? Message.fromJson(reply) : null,
+      replyTo: reply != null ? Message.fromJson(reply) : null,
       reactions: (json['reactions'] as List<dynamic>? ?? [])
           .map((r) => MessageReaction.fromJson(r))
           .toList(),

@@ -70,7 +70,7 @@ class DioClient {
               if (path.contains('/api/messages/') && path.contains('/conversations')) {
                 // Print full pretty JSON for conversation endpoints so developer
                 // can inspect all messages returned by the server (debug only).
-                try {
+              /*  try {
                   final encoder = const JsonEncoder.withIndent('  ');
                   final pretty = encoder.convert(response.data);
                   debugPrint('--- FULL RESPONSE for ${response.requestOptions.uri} ---', wrapWidth: 1200);
@@ -83,7 +83,7 @@ class DioClient {
                 } catch (e) {
                   debugPrint('⚠️ Failed to pretty-print conversations response: $e', wrapWidth: 1200);
                   debugPrint(response.data.toString(), wrapWidth: 1200);
-                }
+                }*/
               } else {
                 // For other endpoints print a concise summary
                 debugPrint('📦 Response data type: ${response.data.runtimeType}', wrapWidth: 1200);
@@ -112,7 +112,7 @@ class DioClient {
           handler.next(response);
         },
         onError: (error, handler) {
-          if (kDebugMode) {
+       /*   if (kDebugMode) {
             debugPrint(
               '❌  ❌  ❌ ERROR[${error.response?.statusCode}] => PATH: ${error.requestOptions.path}',
               wrapWidth: 1200,
@@ -146,7 +146,7 @@ class DioClient {
             } catch (e) {
               debugPrint('⚠️ Error while logging error response: $e', wrapWidth: 1200);
             }
-          }
+          }*/
 
           // Handle 401 errors from onError as well
           if (error.response?.statusCode == 401) {

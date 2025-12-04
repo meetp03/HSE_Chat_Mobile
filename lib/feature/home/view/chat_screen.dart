@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
-import 'package:flutter_html/flutter_html.dart';
 import 'package:hsc_chat/cores/constants/api_urls.dart';
 import 'package:hsc_chat/cores/constants/app_colors.dart';
 import 'package:hsc_chat/cores/utils/shared_preferences.dart';
@@ -28,6 +27,7 @@ import 'package:hsc_chat/cores/network/dio_client.dart';
 import 'package:permission_handler/permission_handler.dart';
 import 'package:hsc_chat/cores/utils/gallery_helper.dart';
 import 'package:hsc_chat/feature/home/widgets/audio_player_inline.dart';
+import '../../../cores/utils/read_more_widget.dart';
 import '../widgets/audio_player_inline_local.dart';
 import '../widgets/video_player.dart';
 import '../widgets/video_player_local.dart';
@@ -1252,45 +1252,9 @@ class _ChatScreenState extends State<ChatScreen>
                             print('🔍 Long pressed TEXT message ${message.id}');
                             _showMessageActions(message);
                           },
-                          child: Html(
-                            data: message.message,
-                            style: {
-                              "html": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.zero,                    // HtmlPaddings.zero → replaced
-                              ),
-                              "body": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.zero,
-                              ),
-
-                              // Remove all vertical spacing
-                              "p, div, h1, h2, h3, h4, h5, h6": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.zero,
-                              ),
-
-                              // BULLETS WILL SHOW – this is the key line
-                              "ul": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.only(left: 30),   // ← only this keeps bullets alive
-                                listStyleType: ListStyleType.disc,
-                              ),
-                              "ol": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.only(left: 20),
-                                listStyleType: ListStyleType.decimal,
-                              ),
-
-                              "li": Style(
-                                margin: Margins.zero,
-                                padding: HtmlPaddings.zero,
-                               ),
-
-                              "br": Style(height: Height(0)),
-
-                              "strong, b": Style(fontWeight: FontWeight.bold),
-                            },
+                          child: ReadMoreHtml(
+                            htmlContent: message.message,
+                            maxLines: 6,
                           ),
                         ),
                         const SizedBox(height: 4),
@@ -2339,7 +2303,7 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  String _parseMessage(String message) {
+  /* String _parseMessage(String message) {
     if (message.isEmpty) return '';
 
     // Remove HTML tags
@@ -2373,6 +2337,69 @@ class _ChatScreenState extends State<ChatScreen>
     });
 
     return out.trim();
+  }*/
+  String _parseMessage(String message) {
+    if (message.isEmpty) return '';
+
+    // Work on a trimmed copy
+    String html = message.trim();
+
+    // Remove useless empty paragraphs and &nbsp;
+    html = html
+        .replaceAll(RegExp(r'<p>\s*&nbsp;\s*</p>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<p>\s*</p>', caseSensitive: false), '')
+        .replaceAll(RegExp(r'<br\s*/?>', caseSensitive: false), '')
+        .trim();
+
+    if (html.isEmpty) return '';
+
+    // Detect if message contains an image
+    final bool hasImage =
+        html.contains('<img') ||
+        html.toLowerCase().contains('class="image"') ||
+        html.toLowerCase().contains("class='image'");
+
+    // Extract plain text (strip all HTML tags)
+    String plainText = html
+        .replaceAll(RegExp(r'<[^>]*>'), '')
+        .replaceAll('&nbsp;', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ')
+        .trim();
+
+    // Decode HTML entities (your existing logic – keep it!)
+    plainText = plainText
+        .replaceAll('&amp;', '&')
+        .replaceAll('&lt;', '<')
+        .replaceAll('&gt;', '>')
+        .replaceAll('&quot;', '"')
+        .replaceAll('&#39;', "'");
+
+    plainText = plainText.replaceAllMapped(RegExp(r'&#(\d+);'), (m) {
+      try {
+        return String.fromCharCode(int.parse(m[1]!));
+      } catch (_) {
+        return '';
+      }
+    });
+    plainText = plainText.replaceAllMapped(RegExp(r'&#x([0-9A-Fa-f]+);'), (m) {
+      try {
+        return String.fromCharCode(int.parse(m[1]!, radix: 16));
+      } catch (_) {
+        return '';
+      }
+    });
+
+    plainText = plainText.trim();
+
+    // Final decision
+    if (hasImage && plainText.isEmpty) {
+      return '📷 Photo'; // Only image
+    }
+    if (hasImage && plainText.isNotEmpty) {
+      return '📷 Photo'; //
+    }
+
+    return plainText.isEmpty ? 'Message' : plainText;
   }
 
   Widget _buildMessageInput() {
@@ -3028,22 +3055,25 @@ class _ChatScreenState extends State<ChatScreen>
 
               // Additional options only for sender (my messages)
               if (isSender) ...[
-                // Only allow editing text messages (not files/media)
                 if (message.messageType == 0 &&
-                    message.message.isNotEmpty &&
-                    (message.fileUrl == null || message.fileUrl!.isEmpty)) ...[
+                    !message.message.trim().toLowerCase().contains(
+                      'this message was deleted',
+                    ) &&
+                    !message.message.trim().toLowerCase().contains(
+                      'message deleted',
+                    ) &&
+                    message.message.isNotEmpty)
                   ListTile(
                     leading: const Icon(Icons.edit),
                     title: const Text('Edit'),
                     onTap: () {
                       Navigator.of(ctx).pop();
-                      // Set the message to edit and populate text field
                       context.read<ChatCubit>().setEditingMessage(message);
                       _messageController.text = _parseMessage(message.message);
                       _focusNode.requestFocus();
                     },
                   ),
-                ],
+
                 ListTile(
                   leading: const Icon(Icons.delete_outline),
                   title: const Text('Delete for me'),
@@ -3090,54 +3120,62 @@ class _ChatScreenState extends State<ChatScreen>
                     }
                   },
                 ),
-                ListTile(
-                  leading: const Icon(Icons.delete_forever),
-                  title: const Text('Delete for everyone'),
-                  onTap: () async {
-                    Navigator.of(ctx).pop();
-                    final ok = await showDialog<bool>(
-                      context: context,
-                      builder: (dctx) => AlertDialog(
-                        title: const Text('Delete for everyone'),
-                        content: const Text(
-                          'This will remove the message for all participants. Continue?',
+                if (message.messageType == 0 &&
+                    !message.message.trim().toLowerCase().contains(
+                      'this message was deleted',
+                    ) &&
+                    !message.message.trim().toLowerCase().contains(
+                      'message deleted',
+                    ) &&
+                    message.message.isNotEmpty)
+                  ListTile(
+                    leading: const Icon(Icons.delete_forever),
+                    title: const Text('Delete for everyone'),
+                    onTap: () async {
+                      Navigator.of(ctx).pop();
+                      final ok = await showDialog<bool>(
+                        context: context,
+                        builder: (dctx) => AlertDialog(
+                          title: const Text('Delete for everyone'),
+                          content: const Text(
+                            'This will remove the message for all participants. Continue?',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.of(dctx).pop(false),
+                              child: const Text('Cancel'),
+                            ),
+                            TextButton(
+                              onPressed: () => Navigator.of(dctx).pop(true),
+                              child: const Text('Delete'),
+                            ),
+                          ],
                         ),
-                        actions: [
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(false),
-                            child: const Text('Cancel'),
-                          ),
-                          TextButton(
-                            onPressed: () => Navigator.of(dctx).pop(true),
-                            child: const Text('Delete'),
-                          ),
-                        ],
-                      ),
-                    );
-                    if (ok != true) return;
+                      );
+                      if (ok != true) return;
 
-                    final prevId = _findPreviousMessageId(message.id);
-                    final cubit = context.read<ChatCubit>();
-                    final err = await cubit.deleteForEveryone(
-                      conversationId: message.id,
-                      previousMessageId: prevId ?? '',
-                      targetMessageId: message.id,
-                    );
-                    if (err == null) {
-                      showCustomSnackBar(
-                        context,
-                        'Message deleted for everyone',
-                        type: SnackBarType.success,
+                      final prevId = _findPreviousMessageId(message.id);
+                      final cubit = context.read<ChatCubit>();
+                      final err = await cubit.deleteForEveryone(
+                        conversationId: message.id,
+                        previousMessageId: prevId ?? '',
+                        targetMessageId: message.id,
                       );
-                    } else {
-                      showCustomSnackBar(
-                        context,
-                        err,
-                        type: SnackBarType.error,
-                      );
-                    }
-                  },
-                ),
+                      if (err == null) {
+                        showCustomSnackBar(
+                          context,
+                          'Message deleted for everyone',
+                          type: SnackBarType.success,
+                        );
+                      } else {
+                        showCustomSnackBar(
+                          context,
+                          err,
+                          type: SnackBarType.error,
+                        );
+                      }
+                    },
+                  ),
               ],
 
               // Cancel option - shown for everyone
