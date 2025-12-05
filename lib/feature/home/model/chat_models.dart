@@ -1,5 +1,3 @@
-// chat_models.dart
-// Typed models for chat API user/group payloads used in info screens and cubits.
 
 class ChatUser {
   final int? id;
@@ -45,7 +43,7 @@ class ChatMember {
   final String name;
   final String? email;
   final String? photoUrl;
-  final int role; // pivot.role
+  final int role;
 
   ChatMember({
     this.id,

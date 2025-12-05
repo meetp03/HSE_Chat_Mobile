@@ -4,14 +4,11 @@ import 'package:hec_chat/feature/auth/bloc/auth_session/auth_session_state.dart'
  import 'package:hec_chat/feature/auth/repository/auth_repository.dart';
 
 class AuthSessionCubit extends Cubit<AuthSessionState> {
-  final IAuthRepository _repository;
 
-  AuthSessionCubit(this._repository) : super(AuthUnauthenticated()) {
+  AuthSessionCubit() : super(AuthUnauthenticated()) {
     // Initialize auth status when cubit is created
     checkAuthStatus();
   }
-
-// In auth_session_cubit.dart
 
   Future<void> checkAuthStatus() async {
     final token = SharedPreferencesHelper.getCurrentUserToken();

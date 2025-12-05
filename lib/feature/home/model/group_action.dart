@@ -1,4 +1,3 @@
-// filepath: lib/feature/home/model/group_action.dart
 
 class GroupActionData {
   final int? id;

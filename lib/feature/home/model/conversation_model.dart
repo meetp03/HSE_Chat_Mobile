@@ -1,5 +1,4 @@
 import 'package:intl/intl.dart';
-
 import '../../../cores/utils/utils.dart';
 
 class ConversationResponse {
@@ -131,7 +130,7 @@ class Conversation {
     final group = json['group'] as Map<String, dynamic>?;
     final user = json['user'] as Map<String, dynamic>?;
 
-    // ---- ID FIX: Use other user ID for direct, group_id for group ----
+    // ID FIX: Use other user ID for direct, group_id for group
     final String convId = isGroup
         ? (json['group_id']?.toString() ?? '')
         : (user?['id']?.toString() ??
@@ -139,31 +138,31 @@ class Conversation {
               json['from_id']?.toString() ??
               '');
 
-    // ---- Title -------------------------------------------------
+    // Title
     final String title = isGroup
         ? (group?['name'] ?? 'Unknown Group')
         : (user?['name'] ?? 'Unknown User');
-    // ---- Title -------------------------------------------------
+
     // (email extracted below using robust extractor)
 
     final String? avatar = isGroup
         ? (group?['photo_url'] as String?)
         : (user?['photo_url'] as String?);
-    // ---- Timestamp ---------------------------------------------
+    //  Timestamp
     final DateTime timestamp = DateTime.parse(
       json['created_at'] ?? DateTime.now().toIso8601String(),
     );
 
-    // ---- Unread ------------------------------------------------
+    //  Unread
     final int unread =
         int.tryParse(json['unread_count']?.toString() ?? '0') ?? 0;
 
-    // ---- Messages ----------------------------------------------
+    //  Messages
     final List<Message> messages = (json['messages'] as List<dynamic>? ?? [])
         .map((messageJson) => Message.fromJson(messageJson))
         .toList();
 
-    // ---- Participants ------------------------------------------
+    //  Participants
     // Some backend responses include participants under `participants`,
     // others embed them inside `group['users']`. Prefer `participants` if
     // present; otherwise fall back to `group['users']`.
@@ -182,7 +181,7 @@ class Conversation {
         }).toList();
       }
     }
-    // ---- Smart last message preview (handles images, empty content, etc.) ----
+    //  Smart last message preview (handles images, empty content, etc.)
     String getSmartLastMessage(String? rawHtml) {
       if (rawHtml == null || rawHtml.trim().isEmpty) {
         return 'No messages';
@@ -223,31 +222,29 @@ class Conversation {
 
       final cleaned = _decodeHtmlEntities(plainText);
       return cleaned.isEmpty ? 'Message' : cleaned;
-    } // ---- sanitize last message: strip HTML tags and decode common entities
-    // String rawMsg = json['message']?.toString() ?? '';
-    // String cleanedMsg = rawMsg.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-    // cleanedMsg = _decodeHtmlEntities(cleanedMsg);
-
-    // ---- Email extraction (robust) ----------------------------
+    }
+    //  Email extraction (robust)
     String extractEmail() {
-      // 1) top-level email
+      //  top-level email
       if (json['email'] != null && json['email'].toString().trim().isNotEmpty) {
         return json['email'].toString().trim();
       }
 
-      // 2) user object
+      // user object
       if (user != null) {
         final uemail =
             (user['email'] ?? user['user_email'] ?? user['email_address']);
-        if (uemail != null && uemail.toString().trim().isNotEmpty)
+        if (uemail != null && uemail.toString().trim().isNotEmpty) {
           return uemail.toString().trim();
+        }
       }
 
-      // 3) group object (sometimes group owner or first member email is provided)
+      //  group object (sometimes group owner or first member email is provided)
       if (group != null) {
         if (group['email'] != null &&
-            group['email'].toString().trim().isNotEmpty)
+            group['email'].toString().trim().isNotEmpty) {
           return group['email'].toString().trim();
+        }
         // try members array first user email
         final members = group['users'] as List<dynamic>?;
         if (members != null && members.isNotEmpty) {
@@ -255,15 +252,17 @@ class Conversation {
           final memEmail = first != null
               ? (first['email'] ?? first['user_email'])
               : null;
-          if (memEmail != null && memEmail.toString().trim().isNotEmpty)
+          if (memEmail != null && memEmail.toString().trim().isNotEmpty) {
             return memEmail.toString().trim();
+          }
         }
       }
 
-      // 4) fallback fields sometimes used by backend
+      //  fallback fields sometimes used by backend
       if (json['user_email'] != null &&
-          json['user_email'].toString().trim().isNotEmpty)
+          json['user_email'].toString().trim().isNotEmpty) {
         return json['user_email'].toString().trim();
+      }
 
       return 'Unknown';
     }
@@ -311,7 +310,7 @@ class Conversation {
         .replaceAll(RegExp(r'&[#0-9a-zA-Z]+;'), '');
   }
 
-  // ---- Copy with method for updates ----
+  //  Copy with method for updates
   Conversation copyWith({
     String? id,
     String? groupId,
@@ -361,7 +360,7 @@ class Conversation {
     );
   }
 
-  // ---- Update with new message ----
+  //  Update with new message
   Conversation updateWithNewMessage(Message newMessage) {
     return copyWith(
       lastMessage: newMessage.content,
@@ -372,7 +371,7 @@ class Conversation {
     );
   }
 
-  // ---- Mark as read ----
+  //  Mark as read
   Conversation markAsRead() {
     return copyWith(
       unreadCount: 0,
@@ -381,7 +380,7 @@ class Conversation {
     );
   }
 
-  // ---- Update typing status ----
+  //  Update typing status
   Conversation updateTypingStatus(bool typing, {String? user}) {
     return copyWith(isTyping: typing, typingUser: user);
   }
@@ -390,7 +389,7 @@ class Conversation {
     return Utils.formatConversationTime(timestamp!);
   }
 
-  // ---- Get last message preview ----
+  //  Get last message preview
   String get lastMessagePreview {
     if (lastMessage.length > 50) {
       return '${lastMessage.substring(0, 50)}...';
@@ -398,13 +397,13 @@ class Conversation {
     return lastMessage;
   }
 
-  // ---- Check if user is participant ----
+  //  Check if user is participant
   bool isParticipant(String userId) {
     return participants?.any((participant) => participant.id == userId) ??
         false;
   }
 
-  // ---- Get other participants (for 1-on-1 chats) ----
+  //  Get other participants (for 1-on-1 chats)
   List<Participant> getOtherParticipants(String currentUserId) {
     return participants
             ?.where((participant) => participant.id != currentUserId)
@@ -624,76 +623,4 @@ enum MessageType { text, image, video, audio, file, location, system }
 
 enum MessageStatus { sending, sent, delivered, read, failed }
 
-// Socket Event Models
-class SocketMessageEvent {
-  final String event;
-  final dynamic data;
-  final String conversationId;
-  SocketMessageEvent({
-    required this.event,
-    required this.data,
-    required this.conversationId,
-  });
-  factory SocketMessageEvent.fromJson(Map<String, dynamic> json) {
-    return SocketMessageEvent(
-      event: json['event'] ?? '',
-      data: json['data'],
-      conversationId: json['conversation_id'] ?? '',
-    );
-  }
-}
 
-class TypingEvent {
-  final String conversationId;
-  final String userId;
-  final bool isTyping;
-  final String? userName;
-  TypingEvent({
-    required this.conversationId,
-    required this.userId,
-    required this.isTyping,
-    this.userName,
-  });
-  factory TypingEvent.fromJson(Map<String, dynamic> json) {
-    return TypingEvent(
-      conversationId: json['conversation_id'] ?? '',
-      userId: json['user_id'] ?? '',
-      isTyping: json['is_typing'] ?? false,
-      userName: json['user_name'],
-    );
-  }
-  Map<String, dynamic> toJson() {
-    return {
-      'conversation_id': conversationId,
-      'user_id': userId,
-      'is_typing': isTyping,
-      'user_name': userName,
-    };
-  }
-}
-
-class MessageStatusEvent {
-  final String messageId;
-  final String conversationId;
-  final MessageStatus status;
-  final DateTime timestamp;
-  MessageStatusEvent({
-    required this.messageId,
-    required this.conversationId,
-    required this.status,
-    required this.timestamp,
-  });
-  factory MessageStatusEvent.fromJson(Map<String, dynamic> json) {
-    return MessageStatusEvent(
-      messageId: json['message_id'] ?? '',
-      conversationId: json['conversation_id'] ?? '',
-      status: MessageStatus.values.firstWhere(
-        (e) => e.name == json['status'],
-        orElse: () => MessageStatus.sent,
-      ),
-      timestamp: DateTime.parse(
-        json['timestamp'] ?? DateTime.now().toIso8601String(),
-      ),
-    );
-  }
-}

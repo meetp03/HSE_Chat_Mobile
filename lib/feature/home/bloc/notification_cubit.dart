@@ -1,9 +1,7 @@
-// notification_cubit.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/network/api_response.dart';
 import 'package:hec_chat/feature/home/model/notification_model.dart';
 import 'package:hec_chat/feature/home/repository/notification_repository.dart';
-
 part 'notification_state.dart';
 
 class NotificationCubit extends Cubit<NotificationState> {

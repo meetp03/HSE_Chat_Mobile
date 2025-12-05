@@ -1,4 +1,3 @@
-// chat_repository.dart
 import 'package:dio/dio.dart';
 import 'package:flutter/foundation.dart';
 import 'package:hec_chat/cores/constants/api_urls.dart';
@@ -30,7 +29,7 @@ abstract class IChatRepository {
     int isMyContact = 1,
   });
 
-  /// Multipart file upload helper for sending files with a message.
+  // Multipart file upload helper for sending files with a message.
   Future<ApiResponse<MessageResponse>> sendFileMultipart({
     required String toId,
     required bool isGroup,
@@ -48,36 +47,25 @@ abstract class IChatRepository {
     required bool isGroup,
   });
 
-  /// Delete a single message from the current user's view.
-  /// Endpoint: POST /messages/conversations/message/{conversationId}/delete
+  // Delete a single message from the current user's view.
   Future<ApiResponse<dynamic>> deleteMessageForMe({
     required String conversationId,
     required String previousMessageId,
   });
 
-  /// Delete a message for everyone in the conversation.
-  /// Endpoint: POST /messages/conversations/{conversationId}/delete-for-everyone
+  // Delete a message for everyone in the conversation.
   Future<ApiResponse<dynamic>> deleteMessageForEveryone({
     required String conversationId,
     required String previousMessageId,
   });
 
-  /// Convenience wrappers with shorter names used in some callers.
-  Future<ApiResponse<dynamic>> deleteForMe({
-    required String conversationId,
-    required String previousMessageId,
-  });
-
-  Future<ApiResponse<dynamic>> deleteForEveryone({
-    required String conversationId,
-    required String previousMessageId,
-  });
+  // Edit an existing message
   Future<ApiResponse<MessageResponse>> editMessage({
     required String messageId,
     required String newMessage,
   });
 
-  /// Reply to a message
+  //Reply to a message
   Future<ApiResponse<MessageResponse>> replyToMessage({
     required String conversationId,
     required String message,
@@ -89,7 +77,6 @@ abstract class IChatRepository {
 
 class ChatRepository implements IChatRepository {
   final DioClient _dio;
-
   const ChatRepository(this._dio);
 
   @override
@@ -160,7 +147,7 @@ class ChatRepository implements IChatRepository {
       print('   Payload: $payload');
       if (response.statusCode == 200) {
         final respData = response.data;
-        // 🐛 DEBUG: Log raw response
+        //  Log raw response
         print('🌐 API RAW RESPONSE:');
         print('   ${response.data}');
         if (respData is Map<String, dynamic>) {
@@ -319,8 +306,8 @@ class ChatRepository implements IChatRepository {
     }
   }
 
-  /// Send a file together with message fields to the send-message endpoint
-  /// using multipart upload. This posts the file under key 'file'.
+  // using multipart upload. This posts the file under key 'file'.
+  @override
   Future<ApiResponse<MessageResponse>> sendFileMultipart({
     required String toId,
     required bool isGroup,
@@ -337,8 +324,7 @@ class ChatRepository implements IChatRepository {
         return ApiResponse<MessageResponse>.error('Selected file not found.');
       }
 
-      // Extra safeguard: validate file on repository level so any caller
-      // that invokes this method cannot bypass client-side rules.
+      // Extra safeguard: validate file on repository level so any caller that invokes this method cannot bypass client-side rules.
       final ext = p.extension(file.path).toLowerCase();
       FileCategory category = FileCategory.GENERIC;
       if ([
@@ -350,9 +336,16 @@ class ChatRepository implements IChatRepository {
         '.bmp',
         '.heic',
         '.heif',
-      ].contains(ext))
+      ].contains(ext)) {
         category = FileCategory.IMAGE;
-      else if (['.mp4', '.mov', '.mkv', '.webm', '.avi', '.3gp'].contains(ext))
+      } else if ([
+        '.mp4',
+        '.mov',
+        '.mkv',
+        '.webm',
+        '.avi',
+        '.3gp',
+      ].contains(ext))
         category = FileCategory.VIDEO;
       else if (ValidationRules.audioExt.contains(ext))
         category = FileCategory.AUDIO;
@@ -361,24 +354,25 @@ class ChatRepository implements IChatRepository {
 
       final validation = await validateFileByCategory(file, category);
       if (!validation.isValid) {
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
-            '⚠️ Repository validation failed for $filePath: ${validation.message}',
+            'Repository validation failed for $filePath: ${validation.message}',
           );
+        }
         return ApiResponse<MessageResponse>.error(validation.message);
       }
-      if (kDebugMode)
+      if (kDebugMode) {
         print(
-          '✅ Repository validation passed for $filePath (size=${validation.sizeBytes}, mime=${validation.mime})',
+          'Repository validation passed for $filePath (size=${validation.sizeBytes}, mime=${validation.mime})',
         );
+      }
 
       // Ensure server receives a non-empty message string
       final inferredMessage = (message != null && message.trim().isNotEmpty)
           ? message.trim()
           : p.basename(filePath);
 
-      // Build simple map of text fields; the DioClient.uploadFile helper
-      // will attach the file for us and handle MIME/filename correctly.
+      // Build simple map of text fields; the DioClient.uploadFile helper will attach the file for us and handle MIME/filename correctly.
       final formMap = <String, dynamic>{
         'to_id': toId,
         'is_group': isGroup ? 1 : 0,
@@ -389,10 +383,11 @@ class ChatRepository implements IChatRepository {
         if (replyTo != null) 'reply_to': replyTo,
       };
 
-      if (kDebugMode)
+      if (kDebugMode) {
         print(
           '📤 Repository: starting upload to ${ApiUrls.sendMessage} for file: $filePath',
         );
+      }
       // Upload using DioClient.uploadFile which builds FormData and sends
       final response = await _dio.uploadFile(
         ApiUrls.sendMessage,
@@ -400,10 +395,11 @@ class ChatRepository implements IChatRepository {
         data: formMap,
         onSendProgress: onSendProgress,
       );
-      if (kDebugMode)
+      if (kDebugMode) {
         print(
-          '📦 Repository: upload completed for file: $filePath status=${response.statusCode}',
+          'Repository: upload completed for file: $filePath status=${response.statusCode}',
         );
+      }
 
       if (response.statusCode == 200) {
         final respData = response.data;
@@ -568,26 +564,5 @@ class ChatRepository implements IChatRepository {
     } catch (e) {
       return ApiResponse.error('Unexpected error: $e');
     }
-  }
-
-  // Public wrapper methods to avoid static analyzer confusion in other files.
-  Future<ApiResponse<dynamic>> deleteForMe({
-    required String conversationId,
-    required String previousMessageId,
-  }) async {
-    return deleteMessageForMe(
-      conversationId: conversationId,
-      previousMessageId: previousMessageId,
-    );
-  }
-
-  Future<ApiResponse<dynamic>> deleteForEveryone({
-    required String conversationId,
-    required String previousMessageId,
-  }) async {
-    return deleteMessageForEveryone(
-      conversationId: conversationId,
-      previousMessageId: previousMessageId,
-    );
   }
 }

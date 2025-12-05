@@ -1,16 +1,19 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 enum SnackBarType { info, success, error }
 
 void showCustomSnackBar(
-    BuildContext context,
-    String message, {
-      SnackBarType type = SnackBarType.info,
-      Duration? duration,
-    }) {
-  // ✅ Check if context is still valid before showing dialog
+  BuildContext context,
+  String message, {
+  SnackBarType type = SnackBarType.info,
+  Duration? duration,
+}) {
+  // Check if context is still valid before showing dialog
   if (!context.mounted) {
-    print('⚠️ Cannot show snackbar: context is not mounted');
+    if (kDebugMode) {
+      print('Cannot show snackbar: context is not mounted');
+    }
     return;
   }
 
@@ -30,7 +33,7 @@ void showCustomSnackBar(
     context: context,
     barrierDismissible: true,
     builder: (dialogContext) {
-      // ✅ Auto-dismiss with proper context checking
+      // Auto-dismiss with proper context checking
       Future.delayed(duration ?? const Duration(seconds: 3), () {
         // Use dialogContext (from builder) instead of outer context
         // This context is tied to the dialog's lifecycle
@@ -54,19 +57,15 @@ void showCustomSnackBar(
             boxShadow: [
               BoxShadow(
                 blurRadius: 20,
-                color: Colors.black.withOpacity(0.1),
-              )
+                color: Colors.black.withValues(alpha: 0.1),
+              ),
             ],
           ),
           child: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                Icon(
-                  icon,
-                  color: color,
-                  size: 48,
-                ),
+                Icon(icon, color: color, size: 48),
                 const SizedBox(height: 16),
                 Text(
                   message,

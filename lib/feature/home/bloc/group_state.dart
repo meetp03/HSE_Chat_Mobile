@@ -1,4 +1,3 @@
-// cubit/group_state.dart
 part of 'group_cubit.dart';
 
 abstract class GroupState {
@@ -9,6 +8,7 @@ class GroupInitial extends GroupState {}
 
 // User selection states with pagination & search
 class GroupUsersLoading extends GroupState {}
+
 class GroupUsersLoaded extends GroupState {
   final List<ContactModel> users;
   final bool hasMore;
@@ -36,6 +36,7 @@ class GroupUsersLoaded extends GroupState {
     );
   }
 }
+
 class GroupUsersError extends GroupState {
   final String message;
   const GroupUsersError(this.message);
@@ -43,10 +44,12 @@ class GroupUsersError extends GroupState {
 
 // Group creation states
 class GroupCreating extends GroupState {}
+
 class GroupCreated extends GroupState {
   final Group group;
   const GroupCreated({required this.group});
 }
+
 class GroupError extends GroupState {
   final String message;
   const GroupError(this.message);

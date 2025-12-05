@@ -10,11 +10,11 @@ class ReadMoreHtml extends StatefulWidget {
   final TextStyle? readMoreStyle;
 
   const ReadMoreHtml({
-    Key? key,
+    super.key,
     required this.htmlContent,
     this.maxLines = 6,
     this.readMoreStyle,
-  }) : super(key: key);
+  });
 
   @override
   State<ReadMoreHtml> createState() => _ReadMoreHtmlState();
@@ -78,9 +78,9 @@ class _ReadMoreHtmlState extends State<ReadMoreHtml> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(Icons.error, color: Colors.white70, size: 48),
+              Icon(Icons.error, color: AppClr.white, size: 48),
               SizedBox(height: 8),
-              Text("Failed to load image", style: TextStyle(color: Colors.white70)),
+              Text("Failed to load image", style: TextStyle(color: AppClr.white)),
             ],
           ),
         );
@@ -111,7 +111,7 @@ class _ReadMoreHtmlState extends State<ReadMoreHtml> {
             top: 40,
             right: 16,
             child: IconButton(
-              icon: const Icon(Icons.close, color: Colors.white, size: 34),
+              icon: const Icon(Icons.close, color: AppClr.white, size: 34),
               onPressed: () => Navigator.pop(context),
             ),
           ),

@@ -1,7 +1,8 @@
- import 'package:flutter/material.dart';
+import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
-import '../model/message_model.dart';
-
+import 'package:hec_chat/feature/home/model/message_model.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 
 class AudioPlayerInlineLocal extends StatefulWidget {
   final Message message;
@@ -51,7 +52,7 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
       setState(() => _isLoading = false);
     } catch (e) {
       setState(() {
-        _error = 'Error loading audio: $e';
+        _error = '${AppStrings.errorLoadingAudio}: $e';
         _isLoading = false;
       });
     }
@@ -100,13 +101,13 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.green.withValues(alpha: 0.1),
+                  color: AppClr.localAudioIconBackground,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.audiotrack,
                   size: 32,
-                  color: Colors.green,
+                  color: AppClr.localAudioIconColor,
                 ),
               ),
               const SizedBox(width: 16),
@@ -115,7 +116,7 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.message.fileName ?? 'Audio',
+                      widget.message.fileName ?? AppStrings.audio,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -124,9 +125,12 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 4),
-                    const Text(
-                      'Playing from local file',
-                      style: TextStyle(fontSize: 12, color: Colors.green),
+                    Text(
+                      AppStrings.playingFromLocalFile,
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: AppClr.localAudioText,
+                      ),
                     ),
                   ],
                 ),
@@ -143,7 +147,7 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
             onChanged: (val) {
               _player?.seek(Duration(milliseconds: val.toInt()));
             },
-            activeColor: Colors.green,
+            activeColor: AppClr.localAudioSlider,
           ),
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -164,13 +168,13 @@ class _AudioPlayerInlineLocalState extends State<AudioPlayerInlineLocal> {
           const SizedBox(height: 16),
           Container(
             decoration: BoxDecoration(
-              color: Colors.green,
+              color: AppClr.localAudioPlayButton,
               shape: BoxShape.circle,
             ),
             child: IconButton(
               icon: Icon(
                 _isPlaying ? Icons.pause : Icons.play_arrow,
-                color: Colors.white,
+                color: AppClr.white,
               ),
               iconSize: 40,
               onPressed: () {

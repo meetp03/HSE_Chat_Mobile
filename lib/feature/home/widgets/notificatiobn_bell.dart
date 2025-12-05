@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:hec_chat/cores/constants/api_urls.dart';
-import '../../../cores/network/socket_service.dart';
-import '../../../cores/network/notification_badge_service.dart';
-import '../../../cores/utils/shared_preferences.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/network/socket_service.dart';
+import 'package:hec_chat/cores/network/notification_badge_service.dart';
+import 'package:hec_chat/cores/utils/shared_preferences.dart';
 
 class NotificationBell extends StatefulWidget {
   final VoidCallback? onTap;
@@ -31,8 +32,7 @@ class _NotificationBellState extends State<NotificationBell> {
         if (socketSvc.isConnected == false) {
           socketSvc.initializeSocket(token);
         }
-      } catch (_) {
-      }
+      } catch (_) {}
     }
 
     // Fetch initial count from API
@@ -70,7 +70,7 @@ class _NotificationBellState extends State<NotificationBell> {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: Colors.red,
+                      color: AppClr.notificationBadge,
                       borderRadius: BorderRadius.circular(12),
                     ),
                     constraints: const BoxConstraints(
@@ -80,7 +80,7 @@ class _NotificationBellState extends State<NotificationBell> {
                     child: Text(
                       display,
                       style: const TextStyle(
-                        color: Colors.white,
+                        color: AppClr.white,
                         fontSize: 10,
                         fontWeight: FontWeight.bold,
                       ),
@@ -93,4 +93,5 @@ class _NotificationBellState extends State<NotificationBell> {
         );
       },
     );
-  }}
+  }
+}

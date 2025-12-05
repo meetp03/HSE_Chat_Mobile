@@ -1,7 +1,9 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import 'package:hec_chat/cores/utils/snackbar.dart';
 import 'package:hec_chat/cores/utils/utils.dart';
@@ -16,7 +18,6 @@ import 'package:hec_chat/feature/home/repository/user_repository.dart';
 import 'package:hec_chat/feature/home/repository/message_repository.dart';
 import 'package:image_picker/image_picker.dart';
 import 'dart:io';
-
 import '../../../cores/network/dio_client.dart';
 
 class UserInfoScreen extends StatefulWidget {
@@ -73,9 +74,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('About'),
+        title: const Text(AppStrings.about),
         backgroundColor: AppClr.primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: AppClr.white,
         elevation: 0,
         actions:
             widget.isGroup &&
@@ -116,7 +117,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
         elevation: 1,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
-          side: BorderSide(color: AppClr.primaryColor.withValues(alpha: 0.2)),
+          side: BorderSide(color: AppClr.primaryColor.withOpacity(0.2)),
         ),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -124,7 +125,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             children: [
               CircleAvatar(
                 radius: 50,
-                backgroundColor: AppClr.primaryColor.withValues(alpha: 0.1),
+                backgroundColor: AppClr.primaryColor.withOpacity(0.1),
                 backgroundImage: widget.userAvatar != null
                     ? CachedNetworkImageProvider(widget.userAvatar!)
                     : null,
@@ -170,7 +171,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           } else if (state is UserInfoError) {
             body = Padding(
               padding: const EdgeInsets.symmetric(vertical: 16),
-              child: Text('Error: ${state.message}'),
+              child: Text('${AppStrings.error}: ${state.message}'),
             );
           } else if (state is UserInfoLoaded) {
             _commonGroups = state.groups;
@@ -178,9 +179,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               body = const Padding(
                 padding: EdgeInsets.symmetric(vertical: 16),
                 child: Text(
-                  'No common groups',
+                  AppStrings.noCommonGroups,
                   style: TextStyle(
-                    color: Colors.grey,
+                    color: AppClr.grey,
                     fontStyle: FontStyle.italic,
                   ),
                 ),
@@ -200,9 +201,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             elevation: 1,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
-              side: BorderSide(
-                color: AppClr.primaryColor.withValues(alpha: 0.2),
-              ),
+              side: BorderSide(color: AppClr.primaryColor.withOpacity(0.2)),
             ),
             child: Padding(
               padding: const EdgeInsets.all(16),
@@ -210,7 +209,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
                   Text(
-                    'Common Groups',
+                    AppStrings.commonGroups,
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
@@ -232,7 +231,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     return ListTile(
       leading: CircleAvatar(
         radius: 20,
-        backgroundColor: AppClr.primaryColor.withValues(alpha: 0.1),
+        backgroundColor: AppClr.primaryColor.withOpacity(0.1),
         child: group.image != null && group.image!.isNotEmpty
             ? ClipOval(
                 child: CachedNetworkImage(
@@ -266,7 +265,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           fontWeight: FontWeight.w500,
         ),
       ),
-      subtitle: Text('${group.members} members'),
+      subtitle: Text('${group.members} ${AppStrings.members}'),
       onTap: () {},
     );
   }
@@ -287,7 +286,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Channel Information',
+              AppStrings.channelInformation,
               style: TextStyle(
                 fontSize: 18,
                 fontWeight: FontWeight.bold,
@@ -300,7 +299,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             Row(
               children: [
                 Text(
-                  'Members (${members.length})',
+                  '${AppStrings.members} (${members.length})',
                   style: TextStyle(
                     color: AppClr.primaryColor,
                     fontWeight: FontWeight.w600,
@@ -310,7 +309,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 if (_isCurrentUserAdmin(grp)) ...[
                   const Spacer(),
                   IconButton(
-                    icon: const Icon(Icons.add, color: Colors.green),
+                    icon: const Icon(Icons.add, color: AppClr.successGreen),
                     onPressed: _showAddMembersDialog,
                   ),
                 ],
@@ -357,13 +356,13 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         vertical: 4,
                       ),
                       decoration: BoxDecoration(
-                        color: isAdmin ? Colors.orange : Colors.grey,
+                        color: isAdmin ? AppClr.adminBadge : AppClr.memberBadge,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
-                        isAdmin ? 'Admin' : 'Member',
+                        isAdmin ? AppStrings.admin : AppStrings.member,
                         style: const TextStyle(
-                          color: Colors.white,
+                          color: AppClr.white,
                           fontSize: 10,
                           fontWeight: FontWeight.bold,
                         ),
@@ -393,10 +392,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                     Icon(
                                       Icons.admin_panel_settings_outlined,
                                       size: 20,
-                                      color: Colors.orange,
+                                      color: AppClr.adminDismissIcon,
                                     ),
                                     const SizedBox(width: 8),
-                                    Text('Dismiss as Admin'),
+                                    Text(AppStrings.dismissAsAdmin),
                                   ],
                                 ),
                               ),
@@ -407,12 +406,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                     Icon(
                                       Icons.person_remove,
                                       size: 20,
-                                      color: Colors.red,
+                                      color: AppClr.errorRed,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Remove Member',
-                                      style: TextStyle(color: Colors.red),
+                                      AppStrings.removeMember,
+                                      style: TextStyle(color: AppClr.errorRed),
                                     ),
                                   ],
                                 ),
@@ -428,10 +427,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                     Icon(
                                       Icons.admin_panel_settings,
                                       size: 20,
-                                      color: Colors.green,
+                                      color: AppClr.makeAdminIcon,
                                     ),
                                     const SizedBox(width: 8),
-                                    Text('Make Admin'),
+                                    Text(AppStrings.makeAdmin),
                                   ],
                                 ),
                               ),
@@ -442,12 +441,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                                     Icon(
                                       Icons.person_remove,
                                       size: 20,
-                                      color: Colors.red,
+                                      color: AppClr.errorRed,
                                     ),
                                     const SizedBox(width: 8),
                                     Text(
-                                      'Remove Member',
-                                      style: TextStyle(color: Colors.red),
+                                      AppStrings.removeMember,
+                                      style: TextStyle(color: AppClr.errorRed),
                                     ),
                                   ],
                                 ),
@@ -473,20 +472,20 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         final confirm = await showDialog<bool>(
                           context: context,
                           builder: (ctx) => AlertDialog(
-                            title: const Text('Delete Channel'),
+                            title: const Text(AppStrings.deleteChannel),
                             content: const Text(
-                              'Are you sure you want to delete this channel? This action cannot be undone.',
+                              AppStrings.deleteChannelConfirm,
                             ),
                             actions: [
                               TextButton(
                                 onPressed: () => Navigator.of(ctx).pop(false),
-                                child: const Text('Cancel'),
+                                child: const Text(AppStrings.cancel),
                               ),
                               TextButton(
                                 onPressed: () => Navigator.of(ctx).pop(true),
                                 child: const Text(
-                                  'Delete',
-                                  style: TextStyle(color: Colors.red),
+                                  AppStrings.delete,
+                                  style: TextStyle(color: AppClr.errorRed),
                                 ),
                               ),
                             ],
@@ -498,8 +497,8 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         if (groupId.isEmpty) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             const SnackBar(
-                              content: Text('Invalid group id'),
-                              backgroundColor: Colors.red,
+                              content: Text(AppStrings.invalidGroupId),
+                              backgroundColor: AppClr.errorRed,
                             ),
                           );
                           return;
@@ -526,7 +525,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                             if (mounted) {
                               showCustomSnackBar(
                                 context,
-                                'Channel deleted successfully',
+                                AppStrings.channelDeletedSuccessfully,
                                 type: SnackBarType.success,
                               );
                             }
@@ -537,21 +536,25 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                               ).popUntil((route) => route.isFirst);
                             }
                           } else {
-                            print('❌ Channel deletion returned false');
+                            if (kDebugMode) {
+                              print('Channel deletion returned false');
+                            }
                             if (mounted) {
                               showCustomSnackBar(
                                 context,
-                                'Failed to delete channel',
+                                AppStrings.failedToDeleteChannel,
                                 type: SnackBarType.error,
                               );
                             }
                           }
                         } catch (e) {
-                          print('❌ Error in delete channel: $e');
+                          if (kDebugMode) {
+                            print('Error in delete channel: $e');
+                          }
                           if (mounted) {
                             showCustomSnackBar(
                               context,
-                              'Failed to delete channel',
+                              AppStrings.failedToDeleteChannel,
                               type: SnackBarType.error,
                             );
                           }
@@ -564,10 +567,10 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                         }
                       },
                 icon: const Icon(Icons.delete_outline),
-                label: const Text('Delete Channel'),
+                label: const Text(AppStrings.deleteChannel),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.red,
-                  foregroundColor: Colors.white,
+                  backgroundColor: AppClr.errorRed,
+                  foregroundColor: AppClr.white,
                 ),
               ),
             ),
@@ -580,39 +583,36 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
   Widget _buildBlockSection() {
     return Column(
       children: [
-        // Card 1: Warning when they blocked you (conditionally shown)
+        // Warning when they blocked you (conditionally shown)
         if (_isTheyBlockedMe) ...[
           Card(
             elevation: 2,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(12),
             ),
-            color: Colors.red.withAlpha((0.05 * 255).round()),
+            color: AppClr.blockedWarningBackground,
             child: Padding(
               padding: const EdgeInsets.all(16),
               child: Row(
                 children: [
-                  Icon(Icons.block, color: Colors.red, size: 24),
+                  Icon(Icons.block, color: AppClr.errorRed, size: 24),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'You are blocked',
+                          AppStrings.youAreBlocked,
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.bold,
-                            color: Colors.red,
+                            color: AppClr.errorRed,
                           ),
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'This user has blocked you. You cannot send messages to them.',
-                          style: TextStyle(
-                            color: Colors.grey[600],
-                            fontSize: 13,
-                          ),
+                          AppStrings.blockedUserMessage,
+                          style: TextStyle(color: AppClr.grey600, fontSize: 13),
                         ),
                       ],
                     ),
@@ -624,20 +624,20 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           const SizedBox(height: 16),
         ],
 
-        // Card 2: Block/Unblock toggle (always shown)
+        // Block/Unblock toggle (always shown)
         Card(
           elevation: 2,
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(12),
           ),
-          color: AppClr.primaryColor.withValues(alpha: 0.05),
+          color: AppClr.blockSectionBackground,
           child: Padding(
             padding: const EdgeInsets.all(16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Block User',
+                  AppStrings.blockUser,
                   style: TextStyle(
                     fontSize: 18,
                     fontWeight: FontWeight.bold,
@@ -646,19 +646,21 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Block this user to stop receiving messages from them.',
-                  style: TextStyle(color: Colors.grey[600]),
+                  AppStrings.blockUserDescription,
+                  style: TextStyle(color: AppClr.grey600),
                 ),
                 const SizedBox(height: 16),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      _isIBlockedThem ? 'Blocked' : 'Not Blocked',
+                      _isIBlockedThem
+                          ? AppStrings.blocked
+                          : AppStrings.notBlocked,
                       style: TextStyle(
                         fontWeight: FontWeight.w500,
                         color: _isIBlockedThem
-                            ? Colors.red
+                            ? AppClr.errorRed
                             : AppClr.primaryColor,
                       ),
                     ),
@@ -688,7 +690,9 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           if (mounted) {
                             showCustomSnackBar(
                               context,
-                              value ? 'User blocked' : 'User unblocked',
+                              value
+                                  ? AppStrings.userBlocked
+                                  : AppStrings.userUnblocked,
                               type: SnackBarType.success,
                             );
                           }
@@ -696,20 +700,16 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           if (mounted) {
                             showCustomSnackBar(
                               context,
-                              'Failed to ${value ? 'block' : 'unblock'} user',
+                              '${AppStrings.failedTo} ${value ? AppStrings.block : AppStrings.unblock} ${AppStrings.user}',
                               type: SnackBarType.error,
                             );
                           }
                         }
                       },
-                      activeThumbColor: Colors.red,
-                      activeTrackColor: Colors.red.withAlpha(
-                        (0.5 * 255).round(),
-                      ),
+                      activeThumbColor: AppClr.errorRed,
+                      activeTrackColor: AppClr.switchActiveTrack,
                       inactiveThumbColor: AppClr.primaryColor,
-                      inactiveTrackColor: AppClr.primaryColor.withValues(
-                        alpha: 0.4,
-                      ),
+                      inactiveTrackColor: AppClr.switchInactiveTrack,
                     ),
                   ],
                 ),
@@ -729,12 +729,6 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       orElse: () => ChatMember(id: 0, name: '', role: 0),
     );
     return currentMember.role == 1;
-  }
-
-  // Check if the member is the current user
-  bool _isCurrentUser(ChatMember member) {
-    final currentUserId = SharedPreferencesHelper.getCurrentUserId();
-    return member.id == currentUserId;
   }
 
   // Handle member menu actions
@@ -760,21 +754,23 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Make Admin'),
-        content: Text('Are you sure you want to make ${member.name} an admin?'),
+        title: const Text(AppStrings.makeAdmin),
+        content: Text(
+          '${AppStrings.makeAdminConfirm} ${member.name} ${AppStrings.anAdminQuestion}',
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _makeAdmin(member, group);
             },
-            child: const Text(
-              'Make Admin',
-              style: TextStyle(color: Colors.green),
+            child: Text(
+              AppStrings.makeAdmin,
+              style: const TextStyle(color: AppClr.successGreen),
             ),
           ),
         ],
@@ -786,23 +782,23 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Dismiss as Admin'),
+        title: const Text(AppStrings.dismissAsAdmin),
         content: Text(
-          'Are you sure you want to dismiss ${member.name} as admin?',
+          '${AppStrings.dismissAsAdminConfirm} ${member.name} ${AppStrings.asAdminQuestion}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _dismissAsAdmin(member, group);
             },
-            child: const Text(
-              'Dismiss',
-              style: TextStyle(color: Colors.orange),
+            child: Text(
+              AppStrings.dismiss,
+              style: const TextStyle(color: AppClr.adminDismissIcon),
             ),
           ),
         ],
@@ -814,21 +810,24 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Remove Member'),
+        title: const Text(AppStrings.removeMember),
         content: Text(
-          'Are you sure you want to remove ${member.name} from this channel?',
+          '${AppStrings.removeMemberConfirm} ${member.name} ${AppStrings.fromThisChannelQuestion}',
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.of(ctx).pop();
               _removeMember(member, group);
             },
-            child: const Text('Remove', style: TextStyle(color: Colors.red)),
+            child: Text(
+              AppStrings.remove,
+              style: const TextStyle(color: AppClr.errorRed),
+            ),
           ),
         ],
       ),
@@ -864,20 +863,24 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             });
             showCustomSnackBar(
               context,
-              '${member.name} is now an admin',
+              '${member.name} ${AppStrings.isNowAnAdmin}',
               type: SnackBarType.success,
             );
           } else {
             showCustomSnackBar(
               context,
-              'Failed to make ${member.name} admin',
+              '${AppStrings.failedToMake} ${member.name} ${AppStrings.adminLowercase}',
               type: SnackBarType.error,
             );
           }
         })
         .catchError((e) {
           Navigator.of(context).pop();
-          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+          showCustomSnackBar(
+            context,
+            '${AppStrings.error}: $e',
+            type: SnackBarType.error,
+          );
         });
   }
 
@@ -896,7 +899,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           if (ok) {
             setState(() {
               final idx = group.members.indexWhere((m) => m.id == member.id);
-              if (idx >= 0)
+              if (idx >= 0) {
                 group.members[idx] = ChatMember(
                   id: member.id,
                   name: member.name,
@@ -904,23 +907,28 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   photoUrl: member.photoUrl,
                   role: 0,
                 );
+              }
             });
             showCustomSnackBar(
               context,
-              '${member.name} dismissed as admin',
+              '${member.name} ${AppStrings.dismissedAsAdmin}',
               type: SnackBarType.success,
             );
           } else {
             showCustomSnackBar(
               context,
-              'Failed to dismiss ${member.name}',
+              '${AppStrings.failedToDismiss} ${member.name}',
               type: SnackBarType.error,
             );
           }
         })
         .catchError((e) {
           Navigator.of(context).pop();
-          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+          showCustomSnackBar(
+            context,
+            '${AppStrings.error}: $e',
+            type: SnackBarType.error,
+          );
         });
   }
 
@@ -944,7 +952,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
             showCustomSnackBar(
               context,
-              '${member.name} removed from channel',
+              '${member.name} ${AppStrings.removedFromChannel}',
               type: SnackBarType.success,
             );
 
@@ -954,10 +962,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
               await conversationCubit.refresh();
               await conversationCubit.refreshUnread();
             } catch (e) {
-              // ignore errors here but log if needed
-              print(
-                '⚠️ Failed to refresh conversations after removeMember: $e',
-              );
+              if (kDebugMode) {
+                print(
+                  '⚠️ Failed to refresh conversations after removeMember: $e',
+                );
+              }
             }
 
             // Navigate back to home (first route)
@@ -967,14 +976,18 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           } else {
             showCustomSnackBar(
               context,
-              'Failed to remove ${member.name}',
+              '${AppStrings.failedToRemove} ${member.name}',
               type: SnackBarType.error,
             );
           }
         })
         .catchError((e) {
           Navigator.of(context).pop();
-          showCustomSnackBar(context, 'Error: $e', type: SnackBarType.error);
+          showCustomSnackBar(
+            context,
+            '${AppStrings.error}: $e',
+            type: SnackBarType.error,
+          );
         });
   }
 
@@ -992,7 +1005,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setState) => AlertDialog(
-          title: const Text('Edit Group'),
+          title: const Text(AppStrings.editGroup),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
@@ -1012,7 +1025,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   },
                   child: CircleAvatar(
                     radius: 40,
-                    backgroundColor: AppClr.primaryColor.withValues(alpha: 0.1),
+                    backgroundColor: AppClr.primaryColor.withOpacity(0.1),
                     backgroundImage: selectedImage != null
                         ? FileImage(selectedImage!)
                         : (group.photoUrl != null && group.photoUrl!.isNotEmpty
@@ -1029,7 +1042,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 TextField(
                   controller: nameController,
                   decoration: const InputDecoration(
-                    labelText: 'Group Name',
+                    labelText: AppStrings.groupName,
                     border: OutlineInputBorder(),
                   ),
                 ),
@@ -1037,7 +1050,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 TextField(
                   controller: descriptionController,
                   decoration: const InputDecoration(
-                    labelText: 'Group Description',
+                    labelText: AppStrings.groupDescription,
                     border: OutlineInputBorder(),
                   ),
                   maxLines: 3,
@@ -1048,7 +1061,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.of(ctx).pop(),
-              child: const Text('Cancel'),
+              child: const Text(AppStrings.cancel),
             ),
             TextButton(
               onPressed: () async {
@@ -1058,7 +1071,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                 if (name.isEmpty) {
                   showCustomSnackBar(
                     context,
-                    'Group name cannot be empty',
+                    AppStrings.groupNameCannotBeEmpty,
                     type: SnackBarType.error,
                   );
                   return;
@@ -1086,7 +1099,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   if (updatedGroup != null) {
                     showCustomSnackBar(
                       context,
-                      'Group updated successfully',
+                      AppStrings.groupUpdatedSuccessfully,
                       type: SnackBarType.success,
                     );
                     // Update local group data with server response
@@ -1103,12 +1116,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                       await conversationCubit.refresh();
                       await conversationCubit.refreshUnread();
                     } catch (e) {
-                      print('Failed to refresh conversations: $e');
+                      if (kDebugMode) {
+                        print('Failed to refresh conversations: $e');
+                      }
                     }
                   } else {
                     showCustomSnackBar(
                       context,
-                      'Failed to update group',
+                      AppStrings.failedToUpdateGroup,
                       type: SnackBarType.error,
                     );
                   }
@@ -1117,12 +1132,12 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                   Navigator.of(ctx).pop(); // Close dialog
                   showCustomSnackBar(
                     context,
-                    'Error updating group: $e',
+                    '${AppStrings.errorUpdatingGroup}: $e',
                     type: SnackBarType.error,
                   );
                 }
               },
-              child: const Text('Save Changes'),
+              child: const Text(AppStrings.saveChanges),
             ),
           ],
         ),
@@ -1145,7 +1160,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
         child: StatefulBuilder(
           builder: (context, setState) => AlertDialog(
-            title: const Text('Add Members'),
+            title: const Text(AppStrings.addMembers),
             content: SizedBox(
               width: double.maxFinite,
               height: 400,
@@ -1156,7 +1171,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                     padding: const EdgeInsets.only(bottom: 16),
                     child: TextField(
                       decoration: InputDecoration(
-                        hintText: 'Search contacts...',
+                        hintText: AppStrings.searchContacts,
                         prefixIcon: const Icon(Icons.search),
                         border: OutlineInputBorder(
                           borderRadius: BorderRadius.circular(12),
@@ -1176,7 +1191,11 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                             child: CircularProgressIndicator(),
                           );
                         } else if (state is MyContactsError) {
-                          return Center(child: Text('Error: ${state.message}'));
+                          return Center(
+                            child: Text(
+                              '${AppStrings.error}: ${state.message}',
+                            ),
+                          );
                         } else if (state is MyContactsLoaded) {
                           final contacts = state.contacts.where((contact) {
                             // Exclude members already in the group
@@ -1187,7 +1206,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
 
                           if (contacts.isEmpty) {
                             return const Center(
-                              child: Text('No contacts available to add'),
+                              child: Text(AppStrings.noContactsAvailableToAdd),
                             );
                           }
 
@@ -1243,7 +1262,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
             actions: [
               TextButton(
                 onPressed: () => Navigator.of(ctx).pop(),
-                child: const Text('Cancel'),
+                child: const Text(AppStrings.cancel),
               ),
               ElevatedButton(
                 onPressed: selectedMembers.isEmpty
@@ -1269,7 +1288,7 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           if (success) {
                             showCustomSnackBar(
                               context,
-                              'Members added successfully',
+                              AppStrings.membersAddedSuccessfully,
                               type: SnackBarType.success,
                             );
                             Navigator.of(context).pop();
@@ -1282,12 +1301,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                               await conversationCubit.refresh();
                               await conversationCubit.refreshUnread();
                             } catch (e) {
-                              print('Failed to refresh conversations: $e');
+                              if (kDebugMode) {
+                                print('Failed to refresh conversations: $e');
+                              }
                             }
                           } else {
                             showCustomSnackBar(
                               context,
-                              'Failed to add members',
+                              AppStrings.failedToAddMembers,
                               type: SnackBarType.error,
                             );
                           }
@@ -1296,12 +1317,14 @@ class _UserInfoScreenState extends State<UserInfoScreen> {
                           Navigator.of(ctx).pop(); // Close dialog
                           showCustomSnackBar(
                             context,
-                            'Error adding members: $e',
+                            '${AppStrings.errorAddingMembers}: $e',
                             type: SnackBarType.error,
                           );
                         }
                       },
-                child: Text('Add Selected Members (${selectedMembers.length})'),
+                child: Text(
+                  '${AppStrings.addSelectedMembers} (${selectedMembers.length})',
+                ),
               ),
             ],
           ),

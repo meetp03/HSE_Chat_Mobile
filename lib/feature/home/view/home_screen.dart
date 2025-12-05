@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/cores/network/dio_client.dart';
 import 'package:hec_chat/cores/network/socket_service.dart';
 import 'package:hec_chat/cores/utils/shared_preferences.dart';
@@ -136,19 +138,22 @@ class _HomeScreenState extends State<HomeScreen>
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Logout'),
-        content: const Text('Are you sure you want to logout?'),
+        title: const Text(AppStrings.logoutTitle),
+        content: const Text(AppStrings.logoutConfirmMessage),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(ctx);
               _performLogout();
             },
-            child: const Text('Logout', style: TextStyle(color: Colors.red)),
+            child: const Text(
+              AppStrings.logout,
+              style: TextStyle(color: Colors.red),
+            ),
           ),
         ],
       ),
@@ -162,15 +167,15 @@ class _HomeScreenState extends State<HomeScreen>
     if (!mounted) return;
     Navigator.pushAndRemoveUntil(
       context,
-      MaterialPageRoute(builder: (_) =>   AuthScreen()),
-          (route) => false,
+      MaterialPageRoute(builder: (_) => const AuthScreen()),
+      (route) => false,
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: AppClr.white,
       body: CustomScrollView(
         slivers: [
           SliverAppBar(
@@ -181,14 +186,14 @@ class _HomeScreenState extends State<HomeScreen>
             title: Row(
               children: [
                 const Text(
-                  'Conversations',
+                  AppStrings.conversations,
                   style: TextStyle(
-                    color: Colors.white,
+                    color: AppClr.white,
                     fontSize: 20,
                     fontWeight: FontWeight.w600,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 16.0),
               ],
             ),
             actions: [
@@ -206,7 +211,7 @@ class _HomeScreenState extends State<HomeScreen>
 
               // Plus Icon Button
               IconButton(
-                icon: const Icon(Icons.group_add_outlined, color: Colors.white),
+                icon: const Icon(Icons.group_add_outlined, color: AppClr.white),
                 onPressed: () {
                   Navigator.push(
                     context,
@@ -225,20 +230,20 @@ class _HomeScreenState extends State<HomeScreen>
               ),
               // Existing Popup Menu Button
               PopupMenuButton<String>(
-                icon: const Icon(Icons.more_vert, color: Colors.white),
+                icon: const Icon(Icons.more_vert, color: AppClr.white),
                 onSelected: (value) {
-                  if (value == 'logout') {
+                  if (value == AppStrings.logout) {
                     _showLogoutDialog();
                   }
                 },
                 itemBuilder: (context) => [
                   const PopupMenuItem(
-                    value: 'logout',
+                    value: AppStrings.logout,
                     child: Row(
                       children: [
                         Icon(Icons.logout, color: Colors.red),
-                        SizedBox(width: 8),
-                        Text('Logout'),
+                        SizedBox(width: 16.0),
+                        Text(AppStrings.logout),
                       ],
                     ),
                   ),
@@ -247,7 +252,7 @@ class _HomeScreenState extends State<HomeScreen>
             ],
           ),
 
-          SliverToBoxAdapter(child: SizedBox(height: 16)),
+          SliverToBoxAdapter(child: SizedBox(height: 16.0)),
           SliverToBoxAdapter(child: _buildSearchBar()),
 
           SliverToBoxAdapter(
@@ -278,16 +283,16 @@ class _HomeScreenState extends State<HomeScreen>
                     : context.read<ConversationCubit>().unreadQuery.isNotEmpty;
 
                 return Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  padding: const EdgeInsets.symmetric(horizontal: 16.0),
                   child: Row(
                     children: [
                       const Spacer(),
                       if (isSearching)
                         Text(
-                          '$count results',
+                          '${AppStrings.results}: $count',
                           style: const TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey,
+                            fontSize: 12.0,
+                            color: AppClr.grey,
                           ),
                         )
                       else if (activeTab == 1 &&
@@ -296,18 +301,17 @@ class _HomeScreenState extends State<HomeScreen>
                               .unreadChats
                               .isNotEmpty)
                         Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 2,
-                          ),
-                          decoration: BoxDecoration(
+                          width: 24,
+                          height: 24,
+                          alignment: Alignment.center,
+                          decoration: const BoxDecoration(
                             color: AppClr.primaryColor,
-                            borderRadius: BorderRadius.circular(12),
+                            shape: BoxShape.circle,
                           ),
                           child: Text(
                             '${context.read<ConversationCubit>().unreadChats.length}',
                             style: const TextStyle(
-                              color: Colors.white,
+                              color: AppClr.white,
                               fontSize: 12,
                               fontWeight: FontWeight.w500,
                             ),
@@ -324,21 +328,21 @@ class _HomeScreenState extends State<HomeScreen>
             pinned: true,
             delegate: _StickyTabBarDelegate(
               child: Container(
-                color: Colors.white,
+                color: AppClr.white,
                 padding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 8,
+                  horizontal: 16.0,
+                  vertical: 4.0,
                 ),
                 child: TabBar(
                   controller: _tabController,
-                  labelColor: Colors.white,
-                  unselectedLabelColor: Colors.grey[600],
+                  labelColor: AppClr.white,
+                  unselectedLabelColor: AppClr.grey600,
                   labelStyle: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 14.0,
                     fontWeight: FontWeight.w600,
                   ),
                   unselectedLabelStyle: const TextStyle(
-                    fontSize: 14,
+                    fontSize: 14.0,
                     fontWeight: FontWeight.w500,
                   ),
                   indicator: BoxDecoration(
@@ -348,8 +352,8 @@ class _HomeScreenState extends State<HomeScreen>
                   indicatorSize: TabBarIndicatorSize.tab,
                   dividerColor: Colors.transparent,
                   tabs: const [
-                    Tab(text: 'All Chats'),
-                    Tab(text: 'Unread Chats'),
+                    Tab(text: AppStrings.allChats),
+                    Tab(text: AppStrings.unreadChats),
                   ],
                 ),
               ),
@@ -365,7 +369,9 @@ class _HomeScreenState extends State<HomeScreen>
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (state is ConversationError) {
-                    return Center(child: Text('Error: ${state.message}'));
+                    return Center(
+                      child: Text('${AppStrings.error}: ${state.message}'),
+                    );
                   }
 
                   final isSearching = cubit.currentQuery.isNotEmpty;
@@ -386,7 +392,9 @@ class _HomeScreenState extends State<HomeScreen>
                     return const Center(child: CircularProgressIndicator());
                   }
                   if (state is ConversationError) {
-                    return Center(child: Text('Error: ${(state).message}'));
+                    return Center(
+                      child: Text('${AppStrings.error}: ${(state).message}'),
+                    );
                   }
 
                   final isSearching = cubit.unreadQuery.isNotEmpty;
@@ -414,7 +422,7 @@ class _HomeScreenState extends State<HomeScreen>
 
       floatingActionButton: FloatingActionButton(
         backgroundColor: AppClr.primaryColor,
-        child: const Icon(Icons.chat, color: Colors.white),
+        child: const Icon(Icons.chat, color: AppClr.white),
         onPressed: () {
           Navigator.push(
             context,
@@ -429,30 +437,28 @@ class _HomeScreenState extends State<HomeScreen>
     final currentController = _currentSearchController;
 
     return Container(
-      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
-      color: Colors.white,
+      padding: const EdgeInsets.fromLTRB(16.0, 4.0, 16.0, 16.0),
+      color: AppClr.white,
       child: Container(
         height: 45,
         decoration: BoxDecoration(
-          color: Colors.grey[100],
+          color: AppClr.grey100,
           borderRadius: BorderRadius.circular(25),
         ),
         child: TextField(
           controller: currentController,
           focusNode: _searchFocusNode,
           decoration: InputDecoration(
-            prefixIcon: const Icon(Icons.search, color: Colors.grey, size: 20),
-
+            prefixIcon: const Icon(Icons.search, color: AppClr.grey, size: 20),
             // Show close icon ONLY when there's text in the current controller
             suffixIcon: currentController.text.isNotEmpty
                 ? IconButton(
-                    icon: const Icon(Icons.close, color: Colors.black),
+                    icon: const Icon(Icons.close, color: AppClr.black),
                     onPressed: _clearSearch,
                   )
                 : null,
-
-            hintText: 'Search conversations...',
-            hintStyle: TextStyle(color: Colors.grey[400], fontSize: 14),
+            hintText: AppStrings.searchConversations,
+            hintStyle: const TextStyle(color: AppClr.grey400, fontSize: 12.0),
             border: InputBorder.none,
           ),
           onChanged: (value) {
@@ -478,11 +484,11 @@ class _HomeScreenState extends State<HomeScreen>
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.search_off, size: 64, color: Colors.grey[400]),
-              const SizedBox(height: 16),
+              Icon(Icons.search_off, size: 64, color: AppClr.grey400),
+              const SizedBox(height: 16.0),
               const Text(
-                'No results found',
-                style: TextStyle(color: Colors.grey, fontSize: 16),
+                AppStrings.noResultsFound,
+                style: TextStyle(color: AppClr.grey, fontSize: 16.0),
               ),
             ],
           ),
@@ -498,11 +504,13 @@ class _HomeScreenState extends State<HomeScreen>
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(Icons.chat_bubble_outline, size: 64, color: Colors.grey[400]),
-            const SizedBox(height: 16),
+            Icon(Icons.chat_bubble_outline, size: 64, color: AppClr.grey400),
+            const SizedBox(height: 16.0),
             Text(
-              isSearching ? 'No results found' : 'No conversations yet',
-              style: const TextStyle(color: Colors.grey, fontSize: 16),
+              isSearching
+                  ? AppStrings.noResultsFound
+                  : AppStrings.noConversationsYet,
+              style: const TextStyle(color: AppClr.grey, fontSize: 16.0),
             ),
           ],
         ),
@@ -550,26 +558,26 @@ class _HomeScreenState extends State<HomeScreen>
         primary: false,
         physics: const ClampingScrollPhysics(),
         keyboardDismissBehavior: ScrollViewKeyboardDismissBehavior.onDrag,
+
         // Always include a footer row when we have items so we can show either
-        // a loading spinner (if loading more) or a 'No more conversations' note
-        // when pagination finished.
+        // a loading spinner (if loading more) or a 'No more conversations' note  when pagination finished.
         itemCount: chats.length + 1,
         itemBuilder: (context, index) {
           if (index == chats.length) {
             // Footer
             if (isLoadingMore || hasMore) {
               return const Padding(
-                padding: EdgeInsets.all(16),
+                padding: EdgeInsets.all(16.0),
                 child: Center(child: CircularProgressIndicator()),
               );
             }
 
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 12),
+              padding: const EdgeInsets.symmetric(vertical: 8.0),
               child: Center(
                 child: Text(
-                  'No more conversations',
-                  style: TextStyle(color: Colors.grey[500], fontSize: 13),
+                  AppStrings.noMoreConversations,
+                  style: TextStyle(color: AppClr.grey500, fontSize: 12.0),
                 ),
               ),
             );
@@ -586,12 +594,6 @@ class _HomeScreenState extends State<HomeScreen>
         await _showDeleteDialog(conv);
       },
       onTap: () {
-        print('🎯 Opening chat: ${conv.title}');
-        print('📋 Conversation ID: ${conv.id}');
-        print('👥 Is Group: ${conv.isGroup}');
-        print('🆔 Group ID: ${conv.groupId}');
-        print('👤 User ID: ${conv.id}');
-
         //  Tell socket service this conversation is now active
         SocketService().setSelectedConversation(
           id: conv.isGroup ? (conv.groupId ?? conv.id) : conv.id,
@@ -625,13 +627,15 @@ class _HomeScreenState extends State<HomeScreen>
             try {
               context.read<ConversationCubit>().processRawMessage(result);
             } catch (e) {
-              print('⚠️ Failed to process returned message: $e');
+              if (kDebugMode) {
+                print('Failed to process returned message: $e');
+              }
             }
           }
         });
       },
       child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
         leading: Stack(
           children: [
             CircleAvatar(
@@ -642,13 +646,13 @@ class _HomeScreenState extends State<HomeScreen>
                   : null,
               child: conv.avatarUrl == null
                   ? Text(
-                Utils.getInitials(conv.title),
-                style: TextStyle(
-                  color: AppClr.primaryColor,
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
-              )
+                      Utils.getInitials(conv.title),
+                      style: TextStyle(
+                        color: AppClr.primaryColor,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 18,
+                      ),
+                    )
                   : null,
             ),
             if (!conv.isGroup && conv.isOnline)
@@ -659,9 +663,9 @@ class _HomeScreenState extends State<HomeScreen>
                   width: 12,
                   height: 12,
                   decoration: BoxDecoration(
-                    color: Colors.green,
+                    color: AppClr.onlineGreen,
                     shape: BoxShape.circle,
-                    border: Border.all(color: Colors.white, width: 2),
+                    border: Border.all(color: AppClr.white, width: 2),
                   ),
                 ),
               ),
@@ -674,53 +678,34 @@ class _HomeScreenState extends State<HomeScreen>
                 conv.title,
                 style: TextStyle(
                   fontWeight: conv.isUnread ? FontWeight.w600 : FontWeight.w500,
-                  fontSize: 16,
+                  fontSize: 16.0,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
             ),
-         /*   // Show "Request" badge if pending
-            if (conv.chatRequestStatus != 'pending' &&
-                (conv.chatRequestTo ==
-                    SharedPreferencesHelper.getCurrentUserId().toString()))
-              Container(
-                margin: const EdgeInsets.only(left: 6),
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: Colors.orange.shade100,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.orange.shade300),
-                ),
-                child: Text(
-                  'Request',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: Colors.orange.shade800,
-                  ),
-                ),
-              ),*/
-             Row(
+            Row(
               children: [
                 Text(
                   conv.formattedTime,
-                  style: const TextStyle(color: Colors.grey, fontSize: 12),
+                  style: TextStyle(color: AppClr.gray500, fontSize: 12.0),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 4),
               ],
             ),
             if (conv.unreadCount > 0 && conv.chatRequestStatus != 'pending')
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
+                width: 24,
+                height: 24,
+                alignment: Alignment.center,
+                decoration: const BoxDecoration(
                   color: AppClr.primaryColor,
-                  borderRadius: BorderRadius.circular(10),
+                  shape: BoxShape.circle,
                 ),
                 child: Text(
                   conv.unreadCount.toString(),
                   style: const TextStyle(
-                    color: Colors.white,
+                    color: AppClr.white,
                     fontSize: 12,
                     fontWeight: FontWeight.w500,
                   ),
@@ -733,16 +718,17 @@ class _HomeScreenState extends State<HomeScreen>
           children: [
             const SizedBox(height: 4),
             Text(
-              conv.lastMessage.isNotEmpty ? conv.lastMessage : 'No messages',
+              conv.lastMessage.isNotEmpty
+                  ? conv.lastMessage
+                  : AppStrings.noMessages,
               style: TextStyle(
-                color: conv.isUnread ? Colors.black87 : Colors.grey[600],
+                color: conv.isUnread ? AppClr.black : AppClr.gray600,
                 fontWeight: conv.isUnread ? FontWeight.w500 : FontWeight.normal,
-                fontSize: 14,
+                fontSize: 14.0,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
-
           ],
         ),
         // Remove the trailing PopupMenuButton
@@ -754,19 +740,17 @@ class _HomeScreenState extends State<HomeScreen>
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Conversation'),
-        content: const Text(
-          'Are you sure you want to delete this conversation?',
-        ),
+        title: const Text(AppStrings.deleteConversation),
+        content: const Text(AppStrings.deleteConversationConfirm),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
-            child: const Text('Cancel'),
+            child: const Text(AppStrings.cancel),
           ),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
             child: const Text(
-              'Delete',
+              AppStrings.delete,
               style: TextStyle(color: Colors.red),
             ),
           ),
@@ -776,25 +760,26 @@ class _HomeScreenState extends State<HomeScreen>
 
     if (confirmed == true && mounted) {
       final convId = conv.isGroup ? (conv.groupId ?? '') : conv.id;
-      final ok = await context
-          .read<ConversationCubit>()
-          .deleteConversation(convId);
+      final ok = await context.read<ConversationCubit>().deleteConversation(
+        convId,
+      );
       if (ok) {
         showCustomSnackBar(
           context,
-          'Conversation deleted',
+          AppStrings.conversationDeleted,
           type: SnackBarType.success,
         );
       } else {
         showCustomSnackBar(
           context,
-          'Failed to delete conversation',
+          AppStrings.conversationDeleteFailed,
           type: SnackBarType.error,
         );
       }
     }
   }
 }
+
 class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
   final Widget child;
 
@@ -811,7 +796,7 @@ class _StickyTabBarDelegate extends SliverPersistentHeaderDelegate {
     double shrinkOffset,
     bool overlapsContent,
   ) {
-    return Container(color: Colors.white, child: child);
+    return Container(color: AppClr.white, child: child);
   }
 
   @override

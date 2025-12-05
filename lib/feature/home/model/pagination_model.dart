@@ -1,4 +1,3 @@
-// models/pagination_model.dart
 class Pagination {
   final int? currentPage;
   final int? totalPages;

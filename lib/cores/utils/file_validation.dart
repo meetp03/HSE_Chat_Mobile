@@ -1,5 +1,3 @@
-// Lightweight file validation helpers
-// Place in: lib/cores/utils/file_validation.dart
 
 import 'dart:io';
 import 'dart:typed_data';
@@ -12,8 +10,8 @@ enum FileCategory { IMAGE, VIDEO, AUDIO, DOCUMENT, GENERIC }
 
 class FileValidationResult {
   final bool isValid;
-  final String message; // human readable
-  final File? file; // original or processed file
+  final String message;
+  final File? file;
   final String? mime;
   final int? sizeBytes;
   final int? width;
@@ -34,7 +32,7 @@ class FileValidationResult {
   });
 }
 
-/// Default rule sets (tweakable)
+//Default rule sets (tweakable)
 class ValidationRules {
   // Images
   static const imageExt = ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.heic', '.heif', '.bmp'];
@@ -60,7 +58,7 @@ class ValidationRules {
 
 String _formatMb(int bytes) => '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
 
-/// Utility: sniff mime with headerBytes if possible (more reliable than extension)
+//Utility: sniff mime with headerBytes if possible (more reliable than extension)
 Future<String?> _lookupMimeType(File file, {Uint8List? headerBytes}) async {
   try {
     if (headerBytes != null) {
@@ -74,7 +72,7 @@ Future<String?> _lookupMimeType(File file, {Uint8List? headerBytes}) async {
   }
 }
 
-/// Image validation (dimensions + size + mime)
+// Image validation (dimensions + size + mime)
 Future<FileValidationResult> validateImageFile(
   File file, {
   int? maxBytes,
@@ -162,16 +160,9 @@ Future<FileValidationResult> validateImageFile(
   }
 }
 
-/// Image compression stub: returns null if compression not available.
-/// To enable compression add `flutter_image_compress` and implement this.
-Future<File?> compressImageFile(File sourceFile, {int quality = 85}) async {
-  // Compression not implemented by default. Add flutter_image_compress
-  // and implement compressAndGetFile to return a smaller file.
-  // Returning null signals no compression performed.
-  return null;
-}
 
-/// Video validation: size + mime (duration check is optional; see notes)
+
+// Video validation: size + mime (duration check is optional; see notes)
 Future<FileValidationResult> validateVideoFile(
   File file, {
   int? maxBytes,
@@ -202,9 +193,6 @@ Future<FileValidationResult> validateVideoFile(
     );
   }
 
-  // NOTE: duration check requires video_player or metadata package.
-  // We skip duration here to avoid adding heavy deps; consider using
-  // `video_player` to initialize controller and read duration.
 
   return FileValidationResult(
     isValid: true,
@@ -215,7 +203,7 @@ Future<FileValidationResult> validateVideoFile(
   );
 }
 
-/// Audio validation: size + mime
+// Audio validation: size + mime
 Future<FileValidationResult> validateAudioFile(
   File file, {
   int? maxBytes,
@@ -253,7 +241,7 @@ Future<FileValidationResult> validateAudioFile(
   );
 }
 
-/// Document / generic file validation
+//Document / generic file validation
 Future<FileValidationResult> validateDocumentFile(
   File file, {
   int? maxBytes,
@@ -293,7 +281,7 @@ Future<FileValidationResult> validateDocumentFile(
   );
 }
 
-/// Generic router
+//Generic router
 Future<FileValidationResult> validateFileByCategory(File file, FileCategory cat) async {
   switch (cat) {
     case FileCategory.IMAGE:

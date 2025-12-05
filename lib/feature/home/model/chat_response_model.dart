@@ -1,4 +1,3 @@
-// chat_response_model.dart
 
 class ChatConversationResponse {
   final bool success;
@@ -81,7 +80,6 @@ class ChatMeta {
   }
 }
 
-// Make sure your MessageResponse looks like this:
 
 class MessageResponse {
   final bool success;
@@ -104,7 +102,6 @@ class MessageResponse {
 }
 
 class MessageData {
-  // ✅ Keep this as Map, not Message object
   final Map<String, dynamic> message;
 
   MessageData({
@@ -113,7 +110,6 @@ class MessageData {
 
   factory MessageData.fromJson(Map<String, dynamic> json) {
     return MessageData(
-      // ✅ Store as Map, convert to Message in cubit
       message: json['message'] as Map<String, dynamic>? ?? {},
     );
   }

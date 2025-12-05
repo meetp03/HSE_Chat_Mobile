@@ -1,4 +1,3 @@
-// common_groups_response.dart
 class CommonGroupsResponse {
   final bool success;
   final String message;
@@ -26,7 +25,10 @@ class CommonGroupsResponse {
     'message': message,
     'groups': List<dynamic>.from(groups.map((x) => x.toJson())),
   };
-}// group_model.dart
+}
+
+// group_model.dart
+
 class GroupModel {
   final String id;
   final String name;
@@ -82,7 +84,9 @@ class GroupModel {
     'created_at': createdAt?.toIso8601String(),
     'updated_at': updatedAt?.toIso8601String(),
   };
-}// base_response.dart
+}
+
+// base_response.dart
 class BaseResponse {
   final bool success;
   final String message;

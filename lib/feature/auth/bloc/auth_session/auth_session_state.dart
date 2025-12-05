@@ -1,4 +1,4 @@
-import '../../model/auth_model.dart';
+import 'package:hec_chat/feature/auth/model/auth_model.dart';
 
 abstract class AuthSessionState {}
 

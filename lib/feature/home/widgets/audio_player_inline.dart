@@ -1,8 +1,9 @@
-
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:just_audio/just_audio.dart';
 import 'package:hec_chat/feature/home/model/message_model.dart';
+import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 
 class AudioPlayerInline extends StatefulWidget {
   final Message message;
@@ -37,7 +38,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
       final url = widget.message.fileUrl;
       if (url == null || url.isEmpty) {
         setState(() {
-          _error = 'Invalid audio URL';
+          _error = AppStrings.invalidAudioUrl;
           _isLoading = false;
         });
         return;
@@ -47,7 +48,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
       final file = await widget.fetchAndCache(url, widget.message.id);
       if (file == null) {
         setState(() {
-          _error = 'Failed to load audio';
+          _error = AppStrings.failedToLoadAudio;
           _isLoading = false;
         });
         return;
@@ -96,7 +97,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
       });
     } catch (e) {
       setState(() {
-        _error = 'Error loading audio: $e';
+        _error = '${AppStrings.errorLoadingAudio}: $e';
         _isLoading = false;
       });
     }
@@ -148,12 +149,12 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.error_outline, size: 48, color: Colors.red),
+              const Icon(Icons.error_outline, size: 48, color: AppClr.errorRed),
               const SizedBox(height: 16),
               Text(
                 _error!,
                 textAlign: TextAlign.center,
-                style: const TextStyle(color: Colors.red),
+                style: const TextStyle(color: AppClr.errorRed),
               ),
             ],
           ),
@@ -172,13 +173,13 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.blue.withValues(alpha: 0.1),
+                  color: AppClr.audioIconBackground,
                   shape: BoxShape.circle,
                 ),
-                child: const Icon(
+                child: Icon(
                   Icons.audiotrack,
                   size: 32,
-                  color: Colors.blue,
+                  color: AppClr.audioIconColor,
                 ),
               ),
               const SizedBox(width: 16),
@@ -187,7 +188,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      widget.message.fileName ?? 'Audio',
+                      widget.message.fileName ?? AppStrings.audio,
                       style: const TextStyle(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
@@ -198,10 +199,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                     const SizedBox(height: 4),
                     Text(
                       widget.message.sender.name,
-                      style: TextStyle(
-                        fontSize: 13,
-                        color: Colors.grey[600],
-                      ),
+                      style: TextStyle(fontSize: 13, color: Colors.grey[600]),
                     ),
                   ],
                 ),
@@ -212,10 +210,13 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
           // Progress slider
           Slider(
             value: _position.inMilliseconds.toDouble(),
-            max: _duration.inMilliseconds.toDouble().clamp(1.0, double.infinity),
+            max: _duration.inMilliseconds.toDouble().clamp(
+              1.0,
+              double.infinity,
+            ),
             onChanged: _seek,
-            activeColor: Colors.blue,
-            inactiveColor: Colors.grey[300],
+            activeColor: AppClr.audioSliderActive,
+            inactiveColor: AppClr.audioSliderInactive,
           ),
           // Time labels
           Padding(
@@ -225,11 +226,11 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
               children: [
                 Text(
                   _formatDuration(_position),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: AppClr.audioTimeText),
                 ),
                 Text(
                   _formatDuration(_duration),
-                  style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                  style: TextStyle(fontSize: 12, color: AppClr.audioTimeText),
                 ),
               ],
             ),
@@ -245,18 +246,20 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                 iconSize: 32,
                 onPressed: () {
                   final newPos = _position - const Duration(seconds: 10);
-                  _player?.seek(newPos < Duration.zero ? Duration.zero : newPos);
+                  _player?.seek(
+                    newPos < Duration.zero ? Duration.zero : newPos,
+                  );
                 },
               ),
               const SizedBox(width: 24),
               // Play/Pause button
               Container(
                 decoration: BoxDecoration(
-                  color: Colors.blue,
+                  color: AppClr.audioPlayButton,
                   shape: BoxShape.circle,
                   boxShadow: [
                     BoxShadow(
-                      color: Colors.blue.withValues(alpha: 0.3),
+                      color: AppClr.audioPlayButtonShadow,
                       blurRadius: 8,
                       offset: const Offset(0, 4),
                     ),
@@ -265,7 +268,7 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                 child: IconButton(
                   icon: Icon(
                     _isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.white,
+                    color: AppClr.white,
                   ),
                   iconSize: 40,
                   onPressed: _togglePlayPause,
@@ -289,10 +292,10 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
               Text(
-                'Speed: ',
-                style: TextStyle(fontSize: 12, color: Colors.grey[600]),
+                AppStrings.speed,
+                style: TextStyle(fontSize: 12, color: AppClr.audioTimeText),
               ),
-              ...[ 0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) {
+              ...[0.5, 0.75, 1.0, 1.25, 1.5, 2.0].map((speed) {
                 return Padding(
                   padding: const EdgeInsets.symmetric(horizontal: 4),
                   child: InkWell(
@@ -307,8 +310,8 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                       ),
                       decoration: BoxDecoration(
                         color: (_player?.speed ?? 1.0) == speed
-                            ? Colors.blue
-                            : Colors.grey[200],
+                            ? AppClr.audioSpeedSelected
+                            : AppClr.audioSpeedUnselected,
                         borderRadius: BorderRadius.circular(12),
                       ),
                       child: Text(
@@ -316,8 +319,8 @@ class _AudioPlayerInlineState extends State<AudioPlayerInline> {
                         style: TextStyle(
                           fontSize: 11,
                           color: (_player?.speed ?? 1.0) == speed
-                              ? Colors.white
-                              : Colors.black87,
+                              ? AppClr.white
+                              : AppClr.black87,
                         ),
                       ),
                     ),

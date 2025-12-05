@@ -12,7 +12,7 @@ class ConversationError extends ConversationState {
   const ConversationError(this.message);
 }
 
-/* ---------------- All Conversations states ---------------- */
+//  All Conversations states
 class AllConversationsLoading extends ConversationState {}
 
 class AllConversationsLoaded extends ConversationState {
@@ -37,7 +37,7 @@ class AllConversationsError extends ConversationError {
   const AllConversationsError(super.message);
 }
 
-/* ---------------- Unread Conversations states ---------------- */
+// Unread Conversations states
 class UnreadConversationsLoading extends ConversationState {}
 
 class UnreadConversationsLoaded extends ConversationState {

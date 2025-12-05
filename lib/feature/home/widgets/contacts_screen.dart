@@ -1,7 +1,9 @@
 import 'dart:async';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/feature/home/bloc/contacts_state.dart';
 import 'package:hec_chat/feature/home/bloc/contacts_cubit.dart';
 import 'package:hec_chat/feature/home/view/chat_screen.dart';
@@ -29,9 +31,11 @@ class _MessageScreenState extends State<MessageScreen>
   final ScrollController _usersScrollController = ScrollController();
   final ScrollController _blockedUsersScrollController = ScrollController();
 
-  final TextEditingController _contactsSearchController = TextEditingController();
+  final TextEditingController _contactsSearchController =
+      TextEditingController();
   final TextEditingController _usersSearchController = TextEditingController();
-  final TextEditingController _blockedUsersSearchController = TextEditingController();
+  final TextEditingController _blockedUsersSearchController =
+      TextEditingController();
 
   final FocusNode _contactsSearchFocus = FocusNode();
   final FocusNode _usersSearchFocus = FocusNode();
@@ -84,7 +88,6 @@ class _MessageScreenState extends State<MessageScreen>
     _contactsDebounce = Timer(const Duration(milliseconds: 500), () {
       //  Only search if query actually changed
       if (query != _lastContactsQuery) {
-        print('🔎 Contacts search: "$_lastContactsQuery" → "$query"');
         _lastContactsQuery = query;
 
         if (query.isEmpty) {
@@ -127,12 +130,12 @@ class _MessageScreenState extends State<MessageScreen>
   }
 
   void _setupScrollController(
-      ScrollController controller,
-      VoidCallback onLoadMore,
-      ) {
+    ScrollController controller,
+    VoidCallback onLoadMore,
+  ) {
     controller.addListener(() {
       if (controller.position.pixels >=
-          controller.position.maxScrollExtent - 100 &&
+              controller.position.maxScrollExtent - 100 &&
           controller.position.maxScrollExtent > 0) {
         onLoadMore();
       }
@@ -175,18 +178,18 @@ class _MessageScreenState extends State<MessageScreen>
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Start New Conversation'),
+        title: const Text(AppStrings.startNewConversation),
         backgroundColor: AppClr.primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: AppClr.white,
         bottom: TabBar(
           controller: _tabController,
-          indicatorColor: Colors.white,
-          labelColor: Colors.white,
-          unselectedLabelColor: Colors.white70,
+          indicatorColor: AppClr.white,
+          labelColor: AppClr.white,
+          unselectedLabelColor: AppClr.white70,
           tabs: const [
-            Tab(text: 'My Contacts'),
-            Tab(text: 'New Conversation'),
-            Tab(text: 'Blocked Users'),
+            Tab(text: AppStrings.myContacts),
+            Tab(text: AppStrings.newConversation),
+            Tab(text: AppStrings.blockedUsers),
           ],
         ),
       ),
@@ -207,7 +210,7 @@ class _MessageScreenState extends State<MessageScreen>
         _buildSearchBar(
           controller: _contactsSearchController,
           focusNode: _contactsSearchFocus,
-          hintText: 'Search contacts...',
+          hintText: AppStrings.searchContacts,
           onClear: () {
             _contactsSearchController.clear();
             // Listener will handle the search automatically
@@ -216,7 +219,6 @@ class _MessageScreenState extends State<MessageScreen>
         Expanded(
           child: BlocBuilder<MessageCubit, MessageState>(
             builder: (context, state) {
-
               if (state is MyContactsLoading) {
                 return const Center(child: CircularProgressIndicator());
               }
@@ -232,7 +234,7 @@ class _MessageScreenState extends State<MessageScreen>
                         onPressed: () => context
                             .read<MessageCubit>()
                             .loadMyContacts(refresh: true),
-                        child: const Text('Retry'),
+                        child: const Text(AppStrings.retry),
                       ),
                     ],
                   ),
@@ -248,18 +250,25 @@ class _MessageScreenState extends State<MessageScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.search_off, size: 64, color: Colors.grey),
+                        const Icon(
+                          Icons.search_off,
+                          size: 64,
+                          color: AppClr.grey,
+                        ),
                         const SizedBox(height: 16),
                         Text(
-                          'No contacts found for "$query"',
-                          style: const TextStyle(fontSize: 16, color: Colors.grey),
+                          '${AppStrings.noContactsFoundFor} "$query"',
+                          style: const TextStyle(
+                            fontSize: 16,
+                            color: AppClr.grey,
+                          ),
                         ),
                         const SizedBox(height: 16),
                         ElevatedButton(
                           onPressed: () {
                             _contactsSearchController.clear();
                           },
-                          child: const Text('Clear Search'),
+                          child: const Text(AppStrings.clearSearch),
                         ),
                       ],
                     ),
@@ -271,11 +280,11 @@ class _MessageScreenState extends State<MessageScreen>
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.contacts, size: 64, color: Colors.grey),
+                        Icon(Icons.contacts, size: 64, color: AppClr.grey),
                         SizedBox(height: 16),
                         Text(
-                          'No contacts yet',
-                          style: TextStyle(fontSize: 16, color: Colors.grey),
+                          AppStrings.noContactsYet,
+                          style: TextStyle(fontSize: 16, color: AppClr.grey),
                         ),
                       ],
                     ),
@@ -304,22 +313,26 @@ class _MessageScreenState extends State<MessageScreen>
                             : null,
                         child: contact.photoUrl == null
                             ? Text(
-                          contact.name.isNotEmpty ? contact.name[0].toUpperCase() : '?',
-                          style: const TextStyle(fontWeight: FontWeight.bold),
-                        )
+                                contact.name.isNotEmpty
+                                    ? contact.name[0].toUpperCase()
+                                    : AppStrings.questionMark,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              )
                             : null,
                       ),
                       title: Text(contact.name),
                       subtitle: Text(contact.email),
                       trailing: contact.isOnline
                           ? Container(
-                        width: 10,
-                        height: 10,
-                        decoration: const BoxDecoration(
-                          color: Colors.green,
-                          shape: BoxShape.circle,
-                        ),
-                      )
+                              width: 10,
+                              height: 10,
+                              decoration: const BoxDecoration(
+                                color: AppClr.onlineGreen,
+                                shape: BoxShape.circle,
+                              ),
+                            )
                           : null,
                       onTap: () => _startConversation(
                         contact.id,
@@ -347,7 +360,7 @@ class _MessageScreenState extends State<MessageScreen>
         _buildSearchBar(
           controller: _usersSearchController,
           focusNode: _usersSearchFocus,
-          hintText: 'Search users...',
+          hintText: AppStrings.searchUsers,
           onClear: () {
             _usersSearchController.clear();
           },
@@ -362,13 +375,13 @@ class _MessageScreenState extends State<MessageScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Error: ${state.message}'),
+                      Text('${AppStrings.error}: ${state.message}'),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () => context
                             .read<MessageCubit>()
                             .loadUsersList(refresh: true),
-                        child: const Text('Retry'),
+                        child: const Text(AppStrings.retry),
                       ),
                     ],
                   ),
@@ -376,7 +389,7 @@ class _MessageScreenState extends State<MessageScreen>
               } else if (state is UsersListLoaded) {
                 return _buildUsersList(state);
               }
-              return const Center(child: Text('No users found'));
+              return const Center(child: Text(AppStrings.noUsersFound));
             },
           ),
         ),
@@ -390,7 +403,7 @@ class _MessageScreenState extends State<MessageScreen>
         _buildSearchBar(
           controller: _blockedUsersSearchController,
           focusNode: _blockedUsersSearchFocus,
-          hintText: 'Search blocked users...',
+          hintText: AppStrings.searchBlockedUsers,
           onClear: () {
             _blockedUsersSearchController.clear();
           },
@@ -405,13 +418,13 @@ class _MessageScreenState extends State<MessageScreen>
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text('Error: ${state.message}'),
+                      Text('${AppStrings.error}: ${state.message}'),
                       const SizedBox(height: 16),
                       ElevatedButton(
                         onPressed: () => context
                             .read<MessageCubit>()
                             .loadBlockedUsers(refresh: true),
-                        child: const Text('Retry'),
+                        child: const Text(AppStrings.retry),
                       ),
                     ],
                   ),
@@ -419,7 +432,7 @@ class _MessageScreenState extends State<MessageScreen>
               } else if (state is BlockedUsersLoaded) {
                 return _buildBlockedUsersList(state);
               }
-              return const Center(child: Text('No blocked users found'));
+              return const Center(child: Text(AppStrings.noBlockedUsersFound));
             },
           ),
         ),
@@ -446,14 +459,16 @@ class _MessageScreenState extends State<MessageScreen>
               prefixIcon: const Icon(Icons.search),
               suffixIcon: value.text.isNotEmpty
                   ? IconButton(
-                icon: const Icon(Icons.clear),
-                onPressed: onClear,
-              )
+                      icon: const Icon(Icons.clear),
+                      onPressed: onClear,
+                    )
                   : null,
-              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+              ),
               enabledBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
-                borderSide: const BorderSide(color: Colors.grey, width: 1.5),
+                borderSide: const BorderSide(color: AppClr.grey, width: 1.5),
               ),
               focusedBorder: OutlineInputBorder(
                 borderRadius: BorderRadius.circular(12),
@@ -474,16 +489,18 @@ class _MessageScreenState extends State<MessageScreen>
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Icon(
-              state.currentQuery.isNotEmpty ? Icons.search_off : Icons.person_add,
+              state.currentQuery.isNotEmpty
+                  ? Icons.search_off
+                  : Icons.person_add,
               size: 64,
-              color: Colors.grey,
+              color: AppClr.grey,
             ),
             const SizedBox(height: 16),
             Text(
               state.currentQuery.isNotEmpty
-                  ? 'No users found for "${state.currentQuery}"'
-                  : 'No users found',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ? '${AppStrings.noUsersFoundFor} "${state.currentQuery}"'
+                  : AppStrings.noUsersFound,
+              style: const TextStyle(fontSize: 18, color: AppClr.grey),
             ),
           ],
         ),
@@ -506,9 +523,11 @@ class _MessageScreenState extends State<MessageScreen>
         final user = state.users[index];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: Colors.green.shade100,
+            backgroundColor: AppClr.usersAvatarBackground,
             child: Text(
-              user.name.isNotEmpty ? user.name[0].toUpperCase() : '?',
+              user.name.isNotEmpty
+                  ? user.name[0].toUpperCase()
+                  : AppStrings.questionMark,
               style: const TextStyle(fontWeight: FontWeight.bold),
             ),
           ),
@@ -534,14 +553,14 @@ class _MessageScreenState extends State<MessageScreen>
             Icon(
               state.currentQuery.isNotEmpty ? Icons.search_off : Icons.block,
               size: 64,
-              color: Colors.grey,
+              color: AppClr.grey,
             ),
             const SizedBox(height: 16),
             Text(
               state.currentQuery.isNotEmpty
-                  ? 'No blocked users found for "${state.currentQuery}"'
-                  : 'No blocked users found',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ? '${AppStrings.noBlockedUsersFoundFor} "${state.currentQuery}"'
+                  : AppStrings.noBlockedUsersFound,
+              style: const TextStyle(fontSize: 18, color: AppClr.grey),
             ),
           ],
         ),
@@ -564,12 +583,12 @@ class _MessageScreenState extends State<MessageScreen>
         final user = state.blockedUsers[index];
         return ListTile(
           leading: CircleAvatar(
-            backgroundColor: Colors.red.shade100,
+            backgroundColor: AppClr.blockedUsersAvatarBackground,
             backgroundImage: user.photoUrl != null
                 ? CachedNetworkImageProvider(user.photoUrl!)
                 : null,
             child: user.photoUrl == null
-                ? const Icon(Icons.block, color: Colors.red)
+                ? const Icon(Icons.block, color: AppClr.errorRed)
                 : null,
           ),
           title: Text(user.name),
@@ -578,23 +597,23 @@ class _MessageScreenState extends State<MessageScreen>
             onPressed: () {
               _showUnblockDialog(user.name, user.id);
             },
-            child: const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
+            child: Text(
+              AppStrings.unblock,
+              style: const TextStyle(color: AppClr.unblockText),
+            ),
           ),
         );
       },
     );
   }
 
-
   Future<void> _startConversation(
-      int? userId,
-      String userName,
-      String? photoUrl,
-      String email,
-      bool isGroup,
-      ) async {
-    print('Starting conversation with $userName (ID: $userId)');
-
+    int? userId,
+    String userName,
+    String? photoUrl,
+    String email,
+    bool isGroup,
+  ) async {
     final messageCubit = context.read<MessageCubit>();
 
     try {
@@ -605,55 +624,61 @@ class _MessageScreenState extends State<MessageScreen>
 
       if (resp.success) {
         // Check if existing conversation was found
-        final isExistingConversation = resp.message?.toLowerCase().contains('existing conversation') ?? false;
+        final isExistingConversation =
+            resp.message?.toLowerCase().contains('existing conversation') ??
+            false;
 
         if (isExistingConversation) {
           // Navigate to chat screen for existing conversation
           showCustomSnackBar(
             context,
-            'Opening existing conversation...',
+            AppStrings.openingExistingConversation,
             type: SnackBarType.info,
           );
 
           // Navigate to chat screen
-          Navigator.of(context).pushReplacement(
-            MaterialPageRoute(
-              builder: (context) => BlocProvider(
-                create: (context) => ChatCubit(
-                  chatRepository: ChatRepository(DioClient()),
-                  socketService: SocketService(),
+          Navigator.of(context)
+              .pushReplacement(
+                MaterialPageRoute(
+                  builder: (context) => BlocProvider(
+                    create: (context) => ChatCubit(
+                      chatRepository: ChatRepository(DioClient()),
+                      socketService: SocketService(),
+                    ),
+                    child: ChatScreen(
+                      userId: userId.toString(),
+                      userName: userName,
+                      userEmail: email,
+                      userAvatar: photoUrl,
+                      isGroup: isGroup,
+                      groupData: null,
+                      isOnline: false,
+                    ),
+                  ),
                 ),
-                child: ChatScreen(
-                  userId: userId.toString(),
-                  userName: userName,
-                  userEmail: email,
-                  userAvatar: photoUrl,
-                  isGroup: isGroup,
-                  groupData: null,
-                  isOnline: false,
-                ),
-              ),
-            ),
-          ).then((_) {
-            // Refresh conversations when returning
-            try {
-              context.read<ConversationCubit>().refresh();
-            } catch (e) {
-              print('Failed to refresh conversations: $e');
-            }
-          });
+              )
+              .then((_) {
+                // Refresh conversations when returning
+                try {
+                  context.read<ConversationCubit>().refresh();
+                } catch (e) {
+                  if (kDebugMode) {
+                    print('Failed to refresh conversations: $e');
+                  }
+                }
+              });
         } else {
           // New chat request sent
           showCustomSnackBar(
             context,
-            resp.message ?? 'Chat request sent',
+            resp.message ?? AppStrings.chatRequestSent,
             type: SnackBarType.success,
           );
         }
       } else {
         showCustomSnackBar(
           context,
-          resp.message ?? 'Failed to send chat request',
+          resp.message ?? AppStrings.failedToSendChatRequest,
           type: SnackBarType.error,
         );
       }
@@ -662,11 +687,12 @@ class _MessageScreenState extends State<MessageScreen>
       ScaffoldMessenger.of(context).hideCurrentSnackBar();
       showCustomSnackBar(
         context,
-        'Failed to send chat request: $e',
+        '${AppStrings.failedToSendChatRequest}: $e',
         type: SnackBarType.error,
       );
     }
   }
+
   void _showUnblockDialog(String username, int userId) {
     showDialog(
       context: context,
@@ -675,60 +701,67 @@ class _MessageScreenState extends State<MessageScreen>
         return StatefulBuilder(
           builder: (context, setState) {
             return AlertDialog(
-              title: const Text('Unblock User'),
-              content: Text('Are you sure you want to unblock $username?'),
+              title: const Text(AppStrings.unblockUser),
+              content: Text('${AppStrings.unblockUserConfirm} $username?'),
               actions: [
                 TextButton(
                   onPressed: isLoading ? null : () => Navigator.pop(context),
-                  child: const Text('CANCEL'),
+                  child: const Text(AppStrings.cancel),
                 ),
                 TextButton(
                   onPressed: isLoading
                       ? null
                       : () async {
-                    setState(() => isLoading = true);
-                    try {
-                      final currentUserId = context.read<MessageCubit>().userId;
-                      final repo = UserRepository();
-                      final success = await repo.blockUnblock(
-                        currentUserId: currentUserId,
-                        userId: userId,
-                        isBlocked: false,
-                      );
-                      if (mounted) Navigator.pop(context);
-                      if (success) {
-                        showCustomSnackBar(
-                          context,
-                          '$username has been unblocked',
-                          type: SnackBarType.success,
-                        );
+                          setState(() => isLoading = true);
+                          try {
+                            final currentUserId = context
+                                .read<MessageCubit>()
+                                .userId;
+                            final repo = UserRepository();
+                            final success = await repo.blockUnblock(
+                              currentUserId: currentUserId,
+                              userId: userId,
+                              isBlocked: false,
+                            );
+                            if (mounted) Navigator.pop(context);
+                            if (success) {
+                              showCustomSnackBar(
+                                context,
+                                '$username ${AppStrings.hasBeenUnblocked}',
+                                type: SnackBarType.success,
+                              );
 
-                        try {
-                          context.read<MessageCubit>().loadBlockedUsers(refresh: true);
-                        } catch (_) {}
-                      } else {
-                        showCustomSnackBar(
-                          context,
-                          'Failed to unblock $username. Please try again.',
-                          type: SnackBarType.error,
-                        );
-                      }
-                    } catch (e) {
-                      if (mounted) Navigator.pop(context);
-                      showCustomSnackBar(
-                        context,
-                        'Error while unblocking: ${e.toString()}',
-                        type: SnackBarType.error,
-                      );
-                    }
-                  },
+                              try {
+                                context.read<MessageCubit>().loadBlockedUsers(
+                                  refresh: true,
+                                );
+                              } catch (_) {}
+                            } else {
+                              showCustomSnackBar(
+                                context,
+                                '${AppStrings.failedToUnblock} $username. ${AppStrings.pleaseTryAgain}.',
+                                type: SnackBarType.error,
+                              );
+                            }
+                          } catch (e) {
+                            if (mounted) Navigator.pop(context);
+                            showCustomSnackBar(
+                              context,
+                              '${AppStrings.errorWhileUnblocking}: ${e.toString()}',
+                              type: SnackBarType.error,
+                            );
+                          }
+                        },
                   child: isLoading
                       ? const SizedBox(
-                    width: 20,
-                    height: 20,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                      : const Text('UNBLOCK', style: TextStyle(color: Colors.blue)),
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : Text(
+                          AppStrings.unblock,
+                          style: const TextStyle(color: AppClr.unblockText),
+                        ),
                 ),
               ],
             );

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_cubit.dart';
 import 'package:hec_chat/feature/auth/bloc/sign_in/auth_signin_state.dart';
@@ -9,6 +10,8 @@ import '../../../cores/constants/image_paths.dart';
 import '../../home/view/home_screen.dart';
 
 class AuthScreen extends StatefulWidget {
+  const AuthScreen({super.key});
+
   @override
   _AuthScreenState createState() => _AuthScreenState();
 }
@@ -41,6 +44,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: AppClr.scaffoldBackground,
       body: SafeArea(
         child: BlocListener<AuthSignInCubit, AuthSignInState>(
           listener: (context, state) {
@@ -51,19 +55,19 @@ class _AuthScreenState extends State<AuthScreen> {
             }
           },
           child: SingleChildScrollView(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: Form(
               key: _formKey,
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  SizedBox(height: 60),
+                  const SizedBox(height: 60),
                   _buildHeader(),
-                  SizedBox(height: 48),
+                  const SizedBox(height: 48),
                   _buildEmailField(),
-                  SizedBox(height: 16),
+                  const SizedBox(height: 16),
                   _buildPasswordField(),
-                  SizedBox(height: 32),
+                  const SizedBox(height: 32),
                   _buildLoginButton(context),
                 ],
               ),
@@ -79,19 +83,22 @@ class _AuthScreenState extends State<AuthScreen> {
       child: Column(
         children: [
           Image.asset(AppImg.appLogo),
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
           Text(
-            'Welcome to HEC Chat',
+            AppStrings.welcomeToHecChat,
             style: TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
               color: AppClr.primaryColor,
             ),
           ),
-          SizedBox(height: 8),
+          const SizedBox(height: 8),
           Text(
-            'Sign in to continue',
-            style: TextStyle(fontSize: 16, color: Colors.grey[600]),
+            AppStrings.signInToContinue,
+            style: TextStyle(
+              fontSize: 16,
+              color: AppClr.gray600,
+            ),
           ),
         ],
       ),
@@ -102,25 +109,31 @@ class _AuthScreenState extends State<AuthScreen> {
     return TextFormField(
       controller: _emailController,
       decoration: InputDecoration(
-        labelText: 'Email',
-        prefixIcon: Icon(Icons.email),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        labelText: AppStrings.email,
+        hintText: AppStrings.enterEmail,
+        prefixIcon: const Icon(Icons.email, color: AppClr.gray500),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppClr.borderColor),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey, width: 1.5),
+          borderSide: const BorderSide(color: AppClr.borderColor, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
+          borderSide: const BorderSide(color: AppClr.focusedBorderColor, width: 2.0),
         ),
+        labelStyle: const TextStyle(color: AppClr.gray600),
+        floatingLabelStyle: const TextStyle(color: AppClr.primaryColor),
       ),
       keyboardType: TextInputType.emailAddress,
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Please enter your email';
+          return AppStrings.pleaseEnterYourEmail;
         }
         if (!value.contains('@')) {
-          return 'Please enter a valid email address';
+          return AppStrings.pleaseEnterValidEmail;
         }
         return null;
       },
@@ -132,11 +145,13 @@ class _AuthScreenState extends State<AuthScreen> {
     return TextFormField(
       controller: _passwordController,
       decoration: InputDecoration(
-        labelText: 'Password',
-        prefixIcon: Icon(Icons.lock),
+        labelText: AppStrings.password,
+        hintText: AppStrings.enterPassword,
+        prefixIcon: const Icon(Icons.lock, color: AppClr.gray500),
         suffixIcon: IconButton(
           icon: Icon(
             _obscurePassword ? Icons.visibility : Icons.visibility_off,
+            color: AppClr.gray500,
           ),
           onPressed: () {
             setState(() {
@@ -144,23 +159,28 @@ class _AuthScreenState extends State<AuthScreen> {
             });
           },
         ),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+        border: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: AppClr.borderColor),
+        ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: Colors.grey, width: 1.5),
+          borderSide: const BorderSide(color: AppClr.borderColor, width: 1.5),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: BorderSide(color: AppClr.primaryColor, width: 2.0),
+          borderSide: const BorderSide(color: AppClr.focusedBorderColor, width: 2.0),
         ),
+        labelStyle: const TextStyle(color: AppClr.gray600),
+        floatingLabelStyle: const TextStyle(color: AppClr.primaryColor),
       ),
       obscureText: _obscurePassword,
       validator: (value) {
         if (value == null || value.isEmpty) {
-          return 'Please enter your password';
+          return AppStrings.pleaseEnterYourPassword;
         }
         if (value.length < 6) {
-          return 'Password must be at least 6 characters';
+          return AppStrings.passwordMinLength;
         }
         return null;
       },
@@ -168,22 +188,6 @@ class _AuthScreenState extends State<AuthScreen> {
     );
   }
 
-  Widget _buildRememberMeCheckbox() {
-    return Row(
-      children: [
-        Checkbox(
-          value: _rememberMe,
-          onChanged: (value) {
-            setState(() {
-              _rememberMe = value ?? false;
-            });
-          },
-          activeColor: AppClr.primaryColor,
-        ),
-        Text('Remember me'),
-      ],
-    );
-  }
 
   Widget _buildLoginButton(BuildContext context) {
     return BlocBuilder<AuthSignInCubit, AuthSignInState>(
@@ -197,46 +201,35 @@ class _AuthScreenState extends State<AuthScreen> {
                 : () => _login(context),
             style: ElevatedButton.styleFrom(
               backgroundColor: AppClr.primaryColor,
+              disabledBackgroundColor: AppClr.gray400,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
               ),
+              elevation: 2,
             ),
             child: state is AuthSignInLoading
-                ? SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                      strokeWidth: 2,
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
-                    ),
-                  )
+                ? const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                valueColor: AlwaysStoppedAnimation<Color>(AppClr.white),
+              ),
+            )
                 : Text(
-                    'Sign In',
-                    style: TextStyle(fontSize: 16, color: Colors.white),
-                  ),
+              AppStrings.signIn,
+              style: const TextStyle(
+                fontSize: 16,
+                color: AppClr.white,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         );
       },
     );
   }
 
-  Widget _buildSignUpOption(BuildContext context) {
-    return Center(
-      child: GestureDetector(
-        onTap: () {
-          // Navigate to sign up screen
-          // Navigator.pushNamed(context, '/signup');
-        },
-        child: Text(
-          "Don't have an account? Sign Up",
-          style: TextStyle(
-            color: AppClr.primaryColor,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-      ),
-    );
-  }
 
   void _login(BuildContext context) {
     if (_formKey.currentState!.validate()) {
@@ -255,14 +248,24 @@ class _AuthScreenState extends State<AuthScreen> {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text('Login Error'),
+        title: Text(
+          AppStrings.loginError,
+          style: const TextStyle(color: AppClr.error),
+        ),
         content: Text(message),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('OK'),
+            child: Text(
+              AppStrings.ok,
+              style: const TextStyle(color: AppClr.primaryColor),
+            ),
           ),
         ],
+        backgroundColor: AppClr.cardBackground,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
       ),
     );
   }

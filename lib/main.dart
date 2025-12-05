@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/cores/utils/providers.dart';
 import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import 'feature/splash/splash_screen.dart';
@@ -14,12 +15,13 @@ void main() async {
 class MyApp extends StatelessWidget {
   const MyApp({super.key});
   static final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+
   @override
   Widget build(BuildContext context) {
     return MultiBlocProvider(
       providers: Providers.globalProviders,
       child: MaterialApp(
-        title: 'HEChat',
+        title: AppStrings.appName,
         navigatorKey: MyApp.navigatorKey,
         home:   SplashScreen(),
         debugShowCheckedModeBanner: false,
@@ -32,7 +34,7 @@ class MyApp extends StatelessWidget {
           visualDensity: VisualDensity.adaptivePlatformDensity,
           appBarTheme: AppBarTheme(
             backgroundColor: AppClr.primaryColor,
-            foregroundColor: Colors.white,
+            foregroundColor: AppClr.white,
           ),
           floatingActionButtonTheme: const FloatingActionButtonThemeData(
             backgroundColor: AppClr.primaryColor,

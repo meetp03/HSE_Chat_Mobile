@@ -1,8 +1,4 @@
-import 'package:flutter/foundation.dart';
-
 import '../../../cores/utils/utils.dart';
-
-// message_model.dart (Key parts to check/update)
 
 class Message {
   final String id;
@@ -37,10 +33,8 @@ class Message {
     required this.isSentByMe,
   });
 
-  // ✅ CRITICAL: This determines message alignment
+  // This determines message alignment
   factory Message.fromJson(Map<String, dynamic> json, int currentUserId) {
-
-
     // Helpers
     int parseInt(dynamic v) {
       if (v == null) return 0;
@@ -57,16 +51,21 @@ class Message {
     DateTime parseDate(dynamic v) {
       return Utils.parseUtcDate(v);
     }
+
     try {
       // Parse fromId properly (could be int or string)
       final fromId = parseInt(json['from_id']);
 
       // Build sender robustly
-      final senderMap = (json['sender'] is Map<String, dynamic>) ? (json['sender'] as Map<String, dynamic>) : <String, dynamic>{};
+      final senderMap = (json['sender'] is Map<String, dynamic>)
+          ? (json['sender'] as Map<String, dynamic>)
+          : <String, dynamic>{};
       final sender = Sender.fromJson(senderMap);
       final bySenderId = sender.id;
 
-      final isSent = (fromId != 0 && fromId == currentUserId) || (bySenderId != 0 && bySenderId == currentUserId);
+      final isSent =
+          (fromId != 0 && fromId == currentUserId) ||
+          (bySenderId != 0 && bySenderId == currentUserId);
 
       // Reply message may be a Map; if so, parse safely. If it's not a Map, ignore.
       Message? replyMsg;
@@ -82,9 +81,15 @@ class Message {
         message: parseString(json['message']),
         status: parseInt(json['status']),
         messageType: parseInt(json['message_type']),
-        fileName: json['file_name'] != null ? parseString(json['file_name']) : null,
-        fileUrl: json['other_file_url'] != null ? parseString(json['other_file_url']) : (json['file_url'] != null ? parseString(json['file_url']) : null),
-        replyTo: json['reply_to'] != null ? parseString(json['reply_to']) : null,
+        fileName: json['file_name'] != null
+            ? parseString(json['file_name'])
+            : null,
+        fileUrl: json['other_file_url'] != null
+            ? parseString(json['other_file_url'])
+            : (json['file_url'] != null ? parseString(json['file_url']) : null),
+        replyTo: json['reply_to'] != null
+            ? parseString(json['reply_to'])
+            : null,
         createdAt: parseDate(json['created_at']),
         updatedAt: parseDate(json['updated_at']),
         sender: sender,
@@ -93,7 +98,6 @@ class Message {
       );
     } catch (e, st) {
       // Fallback: create a minimal Message to avoid crashing the UI
-      debugPrint('⚠️ Message.fromJson error: $e\n$st');
       return Message(
         id: json['_id']?.toString() ?? json['id']?.toString() ?? '',
         fromId: parseInt(json['from_id']),
@@ -102,7 +106,8 @@ class Message {
         status: parseInt(json['status']),
         messageType: parseInt(json['message_type']),
         fileName: json['file_name']?.toString(),
-        fileUrl: json['other_file_url']?.toString() ?? json['file_url']?.toString(),
+        fileUrl:
+            json['other_file_url']?.toString() ?? json['file_url']?.toString(),
         replyTo: json['reply_to']?.toString(),
         createdAt: DateTime.now(),
         updatedAt: DateTime.now(),
@@ -165,10 +170,6 @@ class Message {
     };
   }
 
-  // Compatibility aliases so code that expects the other Message shape
-  // (used in Conversation model) continues to work. This avoids large
-  // refactors across the codebase where both `message`/`updatedAt` and
-  // `content`/`timestamp` are used interchangeably.
   String get content => message;
   DateTime get timestamp => updatedAt;
 
@@ -194,11 +195,7 @@ class Sender {
   final String name;
   final String? photoUrl;
 
-  Sender({
-    required this.id,
-    required this.name,
-    this.photoUrl,
-  });
+  Sender({required this.id, required this.name, this.photoUrl});
 
   factory Sender.fromJson(Map<String, dynamic> json) {
     // Sender id may be string or int
@@ -215,11 +212,7 @@ class Sender {
   }
 
   Map<String, dynamic> toJson() {
-    return {
-      'id': id,
-      'name': name,
-      'photo_url': photoUrl,
-    };
+    return {'id': id, 'name': name, 'photo_url': photoUrl};
   }
 }
 
@@ -228,17 +221,13 @@ enum MessageKind { SYSTEM, IMAGE, VIDEO, AUDIO, FILE, TEXT }
 
 extension MessageKindHelper on Message {
   MessageKind kind() {
-
-    // ✅ Check if message is deleted FIRST
+    //  Check if message is deleted FIRST
     final normalizedMessage = message.toLowerCase().trim();
     if (normalizedMessage == 'this message was deleted' ||
         normalizedMessage.contains('message was deleted')) {
       return MessageKind.TEXT;
     }
-    // Prefer server-provided `messageType` when available to avoid false-positive
-    // detections based on filename/URL. This prevents trying to decode video/audio
-    // bytes as an image which triggers FlutterJNI decode errors.
-    // Mapping notes (server):
+
     // 9 = system, 0 = text, 1 = image/attachment, 4 = audio (example), 5 = video
     if (messageType == 9) return MessageKind.SYSTEM;
     if (messageType == 0) return MessageKind.TEXT;
@@ -249,16 +238,35 @@ extension MessageKindHelper on Message {
     // Fallback to inspect fileUrl/fileName if messageType is unknown/ambiguous
     final candidate = (fileUrl ?? fileName ?? '').toLowerCase();
     if (candidate.isNotEmpty) {
-      if (candidate.endsWith('.png') || candidate.endsWith('.jpg') || candidate.endsWith('.jpeg') || candidate.endsWith('.gif') || candidate.endsWith('.webp')) return MessageKind.IMAGE;
-      if (candidate.endsWith('.mp4') || candidate.endsWith('.mov') || candidate.endsWith('.mkv') || candidate.endsWith('.webm') || candidate.contains('video')) return MessageKind.VIDEO;
-      if (candidate.endsWith('.mp3') || candidate.endsWith('.wav') || candidate.endsWith('.m4a') || candidate.contains('audio')) return MessageKind.AUDIO;
+      if (candidate.endsWith('.png') ||
+          candidate.endsWith('.jpg') ||
+          candidate.endsWith('.jpeg') ||
+          candidate.endsWith('.gif') ||
+          candidate.endsWith('.webp')) {
+        return MessageKind.IMAGE;
+      }
+      if (candidate.endsWith('.mp4') ||
+          candidate.endsWith('.mov') ||
+          candidate.endsWith('.mkv') ||
+          candidate.endsWith('.webm') ||
+          candidate.contains('video')) {
+        return MessageKind.VIDEO;
+      }
+      if (candidate.endsWith('.mp3') ||
+          candidate.endsWith('.wav') ||
+          candidate.endsWith('.m4a') ||
+          candidate.contains('audio')) {
+        return MessageKind.AUDIO;
+      }
       return MessageKind.FILE;
     }
 
     // Last-resort: inspect message HTML for embedded media tags
     final msgLower = message.toLowerCase();
     if (msgLower.contains('<video')) return MessageKind.VIDEO;
-    if (msgLower.contains('<img') || msgLower.contains('data:image')) return MessageKind.IMAGE;
+    if (msgLower.contains('<img') || msgLower.contains('data:image')) {
+      return MessageKind.IMAGE;
+    }
 
     return MessageKind.TEXT;
   }

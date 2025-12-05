@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/feature/home/bloc/group_cubit.dart';
 import 'package:hec_chat/feature/home/widgets/create_group_screen.dart';
 
@@ -45,7 +46,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
 
   void _onScroll() {
     if (_scrollController.position.pixels >=
-            _scrollController.position.maxScrollExtent - 100 &&
+        _scrollController.position.maxScrollExtent - 100 &&
         _scrollController.position.maxScrollExtent > 0) {
       context.read<GroupCubit>().loadMoreUsers();
     }
@@ -65,9 +66,9 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Select Users'),
+        title: const Text(AppStrings.selectUsersTitle),
         backgroundColor: AppClr.primaryColor,
-        foregroundColor: Colors.white,
+        foregroundColor: AppClr.white,
         actions: [
           if (_selectedUsers.isNotEmpty)
             TextButton(
@@ -80,9 +81,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                   ),
                 );
               },
-              child: const Text(
-                'Next',
-                style: TextStyle(color: Colors.white, fontSize: 16),
+              child: Text(
+                AppStrings.nextButton,
+                style: TextStyle(
+                  color: AppClr.white,
+                  fontSize: 16.0,
+                ),
               ),
             ),
         ],
@@ -107,12 +111,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
         controller: _searchController,
         focusNode: _searchFocusNode,
         decoration: InputDecoration(
-          hintText: 'Search users...',
+          hintText: AppStrings.searchUsersHint,
           prefixIcon: const Icon(Icons.search),
           border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
           enabledBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
-            borderSide: BorderSide(color: Colors.grey, width: 1.5),
+            borderSide: BorderSide(color: AppClr.grey, width: 1.5),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(12),
@@ -120,12 +124,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear),
-                  onPressed: () {
-                    _searchController.clear();
-                    context.read<GroupCubit>().clearUsersSearch();
-                  },
-                )
+            icon: const Icon(Icons.clear),
+            onPressed: () {
+              _searchController.clear();
+              context.read<GroupCubit>().clearUsersSearch();
+            },
+          )
               : null,
 
           contentPadding: const EdgeInsets.symmetric(horizontal: 16),
@@ -148,7 +152,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Selected: ${_selectedUsers.length} users',
+                  '${AppStrings.selectedLabel} ${_selectedUsers.length} ${AppStrings.usersLabel}',
                   style: TextStyle(
                     fontWeight: FontWeight.bold,
                     color: AppClr.primaryColor,
@@ -161,10 +165,10 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
                         _selectedUsers.clear();
                       });
                     },
-                    child: const Text(
-                      'Clear All',
+                    child: Text(
+                      AppStrings.clearAllButton,
                       style: TextStyle(
-                        color: Colors.redAccent,
+                        color: AppClr.errorColor,
                         fontWeight: FontWeight.w600,
                       ),
                     ),
@@ -188,12 +192,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                Text('Error: ${state.message}'),
+                Text('${AppStrings.errorPrefix}: ${state.message}'),
                 const SizedBox(height: 16),
                 ElevatedButton(
                   onPressed: () =>
                       context.read<GroupCubit>().loadUsers(refresh: true),
-                  child: const Text('Retry'),
+                  child: const Text(AppStrings.retryButton),
                 ),
               ],
             ),
@@ -201,7 +205,7 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
         } else if (state is GroupUsersLoaded) {
           return _buildUsersListView(state);
         }
-        return const Center(child: Text('No users found'));
+        return const Center(child: Text(AppStrings.noUsersFound));
       },
     );
   }
@@ -215,14 +219,14 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
             Icon(
               state.currentQuery.isNotEmpty ? Icons.search_off : Icons.people,
               size: 64,
-              color: Colors.grey,
+              color: AppClr.grey,
             ),
             const SizedBox(height: 16),
             Text(
               state.currentQuery.isNotEmpty
-                  ? 'No users found for "${state.currentQuery}"'
-                  : 'No users found',
-              style: const TextStyle(fontSize: 18, color: Colors.grey),
+                  ? '${AppStrings.noUsersFoundForQuery} "${state.currentQuery}"'
+                  : AppStrings.noUsersFound,
+              style: TextStyle(fontSize: 18, color: AppClr.grey),
             ),
           ],
         ),
@@ -250,12 +254,12 @@ class _UserSelectionScreenState extends State<UserSelectionScreen> {
           leading: CircleAvatar(
             backgroundColor: isSelected
                 ? AppClr.primaryColor
-                : Colors.green.shade100,
+                : AppClr.avatarBackground,
             child: Text(
               user.name.substring(0, 1),
               style: TextStyle(
                 fontWeight: FontWeight.bold,
-                color: isSelected ? Colors.white : Colors.black,
+                color: isSelected ? AppClr.white : AppClr.black,
               ),
             ),
           ),

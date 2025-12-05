@@ -1,20 +1,17 @@
-// screens/create_group_screen.dart
 import 'dart:io';
-
 import 'package:flutter/material.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:hec_chat/cores/constants/app_colors.dart';
+import 'package:hec_chat/cores/constants/app_strings.dart';
 import 'package:hec_chat/feature/home/bloc/group_cubit.dart';
 import 'package:hec_chat/cores/utils/snackbar.dart';
-
 import '../../../cores/utils/shared_preferences.dart';
 
 class CreateGroupScreen extends StatefulWidget {
   final List<int> selectedUserIds;
 
-  const CreateGroupScreen({Key? key, required this.selectedUserIds})
-    : super(key: key);
+  const CreateGroupScreen({super.key, required this.selectedUserIds});
 
   @override
   State<CreateGroupScreen> createState() => _CreateGroupScreenState();
@@ -44,7 +41,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
     } catch (e) {
       showCustomSnackBar(
         context,
-        'Failed to pick image: $e',
+        '${AppStrings.failedToPickImage}: $e',
         type: SnackBarType.error,
       );
     }
@@ -55,7 +52,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
       if (widget.selectedUserIds.isEmpty) {
         showCustomSnackBar(
           context,
-          'Please select at least one user',
+          AppStrings.selectAtLeastOneUser,
           type: SnackBarType.error,
         );
         return;
@@ -87,7 +84,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         if (state is GroupCreated) {
           showCustomSnackBar(
             context,
-            'Group created successfully',
+            AppStrings.groupCreatedSuccessfully,
             type: SnackBarType.success,
           );
 
@@ -96,23 +93,22 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
         } else if (state is GroupError) {
           showCustomSnackBar(
             context,
-            'Error: ${state.message}',
+            '${AppStrings.error}: ${state.message}',
             type: SnackBarType.error,
           );
         }
       },
       child: Scaffold(
         appBar: AppBar(
-          title: const Text('Create Channel'),
+          title: const Text(AppStrings.createChannel),
           backgroundColor: AppClr.primaryColor,
-          foregroundColor: Colors.white,
+          foregroundColor: AppClr.white,
         ),
         body: Padding(
           padding: const EdgeInsets.all(16.0),
           child: Form(
             key: _formKey,
             child: SingleChildScrollView(
-              // Added SingleChildScrollView
               child: Column(
                 children: [
                   // Group Image
@@ -129,7 +125,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       ),
                       child: CircleAvatar(
                         radius: 50,
-                        backgroundColor: Colors.grey.shade200,
+                        backgroundColor: AppClr.groupAvatarBackground,
                         backgroundImage: _selectedImagePath != null
                             ? FileImage(File(_selectedImagePath!))
                             : null,
@@ -137,7 +133,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                             ? const Icon(
                                 Icons.camera_alt,
                                 size: 40,
-                                color: Colors.grey,
+                                color: AppClr.grey,
                               )
                             : null,
                       ),
@@ -149,13 +145,13 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   TextFormField(
                     controller: _nameController,
                     decoration: InputDecoration(
-                      labelText: 'Channel Name',
+                      labelText: AppStrings.channelName,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
-                        borderSide: BorderSide(color: Colors.grey, width: 1.5),
+                        borderSide: BorderSide(color: AppClr.grey, width: 1.5),
                       ),
                       focusedBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
@@ -167,7 +163,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                     ),
                     validator: (value) {
                       if (value == null || value.trim().isEmpty) {
-                        return 'Please enter channel name';
+                        return AppStrings.enterChannelName;
                       }
                       return null;
                     },
@@ -178,14 +174,14 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                   TextFormField(
                     controller: _descriptionController,
                     decoration: InputDecoration(
-                      labelText: 'Description (Optional)',
+                      labelText: AppStrings.descriptionOptional,
                       border: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                       ),
                       enabledBorder: OutlineInputBorder(
                         borderRadius: BorderRadius.circular(12),
                         borderSide: const BorderSide(
-                          color: Colors.grey,
+                          color: AppClr.grey,
                           width: 1.5,
                         ),
                       ),
@@ -208,9 +204,7 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                       vertical: 10,
                     ),
                     decoration: BoxDecoration(
-                      color: AppClr.primaryColor.withOpacity(
-                        0.15,
-                      ), // Fixed: use withOpacity instead of withValues
+                      color: AppClr.selectedUsersBackground,
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(color: AppClr.primaryColor, width: 1),
                     ),
@@ -224,12 +218,11 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                         ),
                         const SizedBox(width: 8),
                         Text(
-                          'Selected Users: ${widget.selectedUserIds.length}',
+                          '${AppStrings.selectedUsers}: ${widget.selectedUserIds.length}',
                           style: TextStyle(
                             fontSize: 16,
                             fontWeight: FontWeight.w600,
-                            color: AppClr
-                                .primaryColor, // Fixed: use AppClr.primaryColor instead of Colors.green
+                            color: AppClr.primaryColor,
                           ),
                         ),
                       ],
@@ -248,11 +241,11 @@ class _CreateGroupScreenState extends State<CreateGroupScreen> {
                         onPressed: _createGroup,
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppClr.primaryColor,
-                          foregroundColor: Colors.white,
+                          foregroundColor: AppClr.white,
                           minimumSize: const Size(double.infinity, 50),
                         ),
                         child: const Text(
-                          'Create Channel',
+                          AppStrings.createChannel,
                           style: TextStyle(fontSize: 16),
                         ),
                       );

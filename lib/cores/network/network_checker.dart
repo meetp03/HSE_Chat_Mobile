@@ -11,15 +11,15 @@ class NetworkChecker {
     'https://cloudflare.com',
     'https://api.github.com',
   ];
-  static const int _timeoutSeconds = 8; // Increased timeout
-  static const int _maxRetries = 3; // Increased retries
+  static const int _timeoutSeconds = 8;
+  static const int _maxRetries = 3;
   static const String _fallbackHost = '8.8.8.8'; // Google DNS for socket check
   static const int _fallbackPort = 53; // DNS port
 
-  /// Checks if the device is connected to any network (Wi-Fi, mobile, etc.)
+  // Checks if the device is connected to any network (Wi-Fi, mobile, etc.)
   static Future<bool> isConnected() async {
     try {
-      // Step 1: Check connectivity status
+      // Check connectivity status
       final connectivityResult = await _connectivity.checkConnectivity();
 
       if (connectivityResult == ConnectivityResult.none) {
@@ -34,7 +34,7 @@ class NetworkChecker {
         print('Network Type: ${connectivityResult.toString()}');
       }
 
-      // Step 2: Verify actual internet access
+      // Verify actual internet access
       bool hasInternet = await _checkInternetAccess();
 
       if (kDebugMode) {
@@ -50,7 +50,7 @@ class NetworkChecker {
     }
   }
 
-  /// Performs multiple checks to verify internet connectivity
+  // Performs multiple checks to verify internet connectivity
   static Future<bool> _checkInternetAccess() async {
     // Try HTTP checks first
     for (String url in _testUrls) {
@@ -68,7 +68,7 @@ class NetworkChecker {
     return socketResult;
   }
 
-  /// Attempts an HTTP request to the given URL
+  // Attempts an HTTP request to the given URL
   static Future<bool> _tryHttpCheck(String url) async {
     int attempts = 0;
 
@@ -106,7 +106,7 @@ class NetworkChecker {
     return false;
   }
 
-  /// Fallback socket connection check to Google DNS
+  // Fallback socket connection check to Google DNS
   static Future<bool> _trySocketCheck() async {
     try {
       final socket = await Socket.connect(
@@ -127,7 +127,7 @@ class NetworkChecker {
     }
   }
 
-  /// Stream to listen for connectivity changes
+  // Stream to listen for connectivity changes
   static Stream<bool> get onConnectivityChanged {
     return _connectivity.onConnectivityChanged.asyncMap((result) async {
       if (result == ConnectivityResult.none) {
@@ -143,7 +143,7 @@ class NetworkChecker {
     });
   }
 
-  /// Alternative method to check internet connection
+  // Alternative method to check internet connection
   static Future<bool> hasInternetConnection() async {
     return await _checkInternetAccess();
   }

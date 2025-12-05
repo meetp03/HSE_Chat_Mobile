@@ -1,13 +1,10 @@
-// cubit/group_cubit.dart
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/network/api_response.dart';
 import 'package:hec_chat/cores/utils/shared_preferences.dart';
 import 'package:hec_chat/feature/home/model/contact_model.dart';
 import 'package:hec_chat/feature/home/model/pagination_model.dart';
-import 'package:hec_chat/feature/home/model/user_model.dart';
 import 'package:hec_chat/feature/home/repository/message_repository.dart';
 import 'package:hec_chat/feature/home/model/group_model.dart';
-
 part 'group_state.dart';
 
 class GroupCubit extends Cubit<GroupState> {
@@ -22,9 +19,9 @@ class GroupCubit extends Cubit<GroupState> {
 
   GroupCubit(this._repository) : super(GroupInitial());
 
-  /* --------------------------------------------------------------------- /
-  /                         USERS LIST WITH PAGINATION & SEARCH           /
-  / --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           USERS LIST WITH PAGINATION & SEARCH
+   --------------------------------------------------------------------- */
 
   // Search users
   void searchUsers(String query) {
@@ -67,8 +64,8 @@ class GroupCubit extends Cubit<GroupState> {
           .getUsersList(
             userId: SharedPreferencesHelper.getCurrentUserId(),
             page: _usersCurrentPage,
-            perPage: 20, // Load more users per page for selection
-            query: _usersCurrentQuery, // Pass search query
+            perPage: 20,
+            query: _usersCurrentQuery,
           );
 
       if (!response.success || response.data == null) {
@@ -121,9 +118,9 @@ class GroupCubit extends Cubit<GroupState> {
     }
   }
 
-  /* --------------------------------------------------------------------- /
-  /                         GROUP CREATION                                /
-  / --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           GROUP CREATION
+   --------------------------------------------------------------------- */
   Future<void> createGroup({
     required String name,
     required List<int> members,

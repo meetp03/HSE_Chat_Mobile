@@ -1,4 +1,3 @@
-// models/contact_model.dart
 import 'package:hec_chat/feature/home/model/pagination_model.dart';
 
 class ContactModel {
@@ -23,7 +22,6 @@ class ContactModel {
       id: json['id'],
       name: json['name'],
       photoUrl: json['photo_url'],
-      // Coerce server boolean-like values (0/1 or true/false) into Dart bool
       isOnline: (json['is_online'] == 1) || (json['is_online'] == true),
       lastSeen: json['last_seen'],
       email: json['email'],

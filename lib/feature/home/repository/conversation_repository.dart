@@ -1,10 +1,11 @@
 import 'package:dio/dio.dart';
+import 'package:flutter/foundation.dart';
 import 'package:hec_chat/cores/constants/api_urls.dart';
 import 'package:hec_chat/cores/network/api_response.dart';
 import 'package:hec_chat/cores/network/dio_client.dart';
 import 'package:hec_chat/cores/network/network_exceptions.dart';
 import 'package:hec_chat/feature/home/model/conversation_model.dart';
- 
+
 abstract class IConversationRepository {
   Future<ApiResponse<ConversationResponse>> getConversations({
     int page = 1,
@@ -20,21 +21,13 @@ abstract class IConversationRepository {
     required String conversationId,
   });
 
-  //   Chat request methods
-  Future<ApiResponse<dynamic>> acceptChatRequest({
-    required String requestId,
-  });
+  Future<ApiResponse<dynamic>> acceptChatRequest({required String requestId});
 
-  Future<ApiResponse<dynamic>> declineChatRequest({
-    required String requestId,
-  });
+  Future<ApiResponse<dynamic>> declineChatRequest({required String requestId});
 }
-
-
 
 class ConversationRepository implements IConversationRepository {
   final DioClient _dio;
-
   const ConversationRepository(this._dio);
 
   //   Accept chat request
@@ -44,10 +37,7 @@ class ConversationRepository implements IConversationRepository {
   }) async {
     try {
       final path = '${ApiUrls.baseUrl}/api/messages/accept-chat-request';
-      final response = await _dio.post(
-        path,
-        data: {'id': requestId},
-      );
+      final response = await _dio.post(path, data: {'id': requestId});
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
@@ -80,10 +70,7 @@ class ConversationRepository implements IConversationRepository {
   }) async {
     try {
       final path = '${ApiUrls.baseUrl}/api/messages/decline-chat-request';
-      final response = await _dio.post(
-        path,
-        data: {'id': requestId},
-      );
+      final response = await _dio.post(path, data: {'id': requestId});
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
@@ -115,16 +102,9 @@ class ConversationRepository implements IConversationRepository {
     String query = '',
   }) async {
     try {
+      final Map<String, dynamic> queryParams = {'page': page, 'per_page': 10};
 
-      final Map<String, dynamic> queryParams = {
-        'page': page,
-        'per_page': 10,
-      };
-
-      final Map<String, dynamic> requestData = {
-        'page': page,
-        'per_page': 10,
-      };
+      final Map<String, dynamic> requestData = {'page': page, 'per_page': 10};
 
       if (query.isNotEmpty) {
         queryParams['search'] = query;
@@ -169,30 +149,25 @@ class ConversationRepository implements IConversationRepository {
     String query = '',
   }) async {
     try {
-
-      final Map<String, dynamic> queryParams = {
-        'page': page,
-        'per_page': 10,
-      };
+      final Map<String, dynamic> queryParams = {'page': page, 'per_page': 10};
 
       if (query.isNotEmpty) {
         queryParams['search'] = query;
       }
-
-      print('📍 Making unread request to: ${ApiUrls.unreadConversations}');
-      print('🔍 Query Params: $queryParams');
 
       final response = await _dio.post(
         ApiUrls.unreadConversations,
         queryParameters: queryParams,
       );
 
-      print('✅ Unread Response Status: ${response.statusCode}');
-
       if (response.statusCode == 200) {
         if (response.data['success'] == true) {
           final data = ConversationResponse.fromJson(response.data);
-          print('✅ Parsed ${data.data.conversations.length} unread conversations');
+          if (kDebugMode) {
+            print(
+              'Parsed ${data.data.conversations.length} unread conversations',
+            );
+          }
 
           return ApiResponse<ConversationResponse>.success(
             data,
@@ -210,31 +185,44 @@ class ConversationRepository implements IConversationRepository {
         );
       }
     } on DioException catch (e) {
-      print('❌ DioException (Unread): ${e.message}');
+      if (kDebugMode) {
+        print('❌ DioException (Unread): ${e.message}');
+      }
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse<ConversationResponse>.error(networkException.message);
     } catch (e) {
-      print('❌ Exception (Unread): $e');
+      if (kDebugMode) {
+        print('❌ Exception (Unread): $e');
+      }
       return ApiResponse<ConversationResponse>.error('Unexpected error: $e');
     }
   }
 
-  /// Delete a conversation by id (user or group). Endpoint: POST /messages/conversations/{id}/delete
+  // Delete a conversation by id (user or group). Endpoint: POST /messages/conversations/{id}/delete
+  @override
   Future<ApiResponse<dynamic>> deleteConversation({
     required String conversationId,
   }) async {
     try {
-      final path = '${ApiUrls.baseUrl}/api/messages/conversations/$conversationId/delete';
+      final path =
+          '${ApiUrls.baseUrl}/api/messages/conversations/$conversationId/delete';
       final response = await _dio.post(path);
 
       if (response.statusCode == 200 || response.statusCode == 201) {
         final data = response.data as Map<String, dynamic>?;
         if (data != null && data['success'] == true) {
-          return ApiResponse.success(data, message: data['message']?.toString());
+          return ApiResponse.success(
+            data,
+            message: data['message']?.toString(),
+          );
         }
-        return ApiResponse.error(data?['message']?.toString() ?? 'Failed to delete conversation');
+        return ApiResponse.error(
+          data?['message']?.toString() ?? 'Failed to delete conversation',
+        );
       }
-      return ApiResponse.error('Delete failed with status: ${response.statusCode}');
+      return ApiResponse.error(
+        'Delete failed with status: ${response.statusCode}',
+      );
     } on DioException catch (e) {
       final networkException = NetworkExceptions.getDioException(e);
       return ApiResponse.error(networkException.message);

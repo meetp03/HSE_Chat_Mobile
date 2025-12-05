@@ -1,5 +1,5 @@
-
-  import 'package:intl/intl.dart';
+import 'package:flutter/foundation.dart';
+import 'package:intl/intl.dart';
 
 class Utils {
   static String getInitials(String name) {
@@ -11,7 +11,7 @@ class Utils {
     return (parts[0][0] + (parts.length > 1 ? parts[1][0] : '')).toUpperCase();
   }
 
-  /// Format UTC time to local time with date comparison
+  // Format UTC time to local time with date comparison
   static String formatConversationTime(DateTime utcTime) {
     try {
       // Convert to local time
@@ -21,40 +21,46 @@ class Utils {
       final now = DateTime.now();
       final today = DateTime(now.year, now.month, now.day);
       final yesterday = DateTime(now.year, now.month, now.day - 1);
-      final messageDay = DateTime(localTime.year, localTime.month, localTime.day);
+      final messageDay = DateTime(
+        localTime.year,
+        localTime.month,
+        localTime.day,
+      );
 
       // Format time based on date
-      final timeFormat = DateFormat('h:mm a'); // e.g., 11:00 AM
+      final timeFormat = DateFormat('h:mm a');
 
       if (messageDay == today) {
-        return timeFormat.format(localTime); // Show time only for today
+        return timeFormat.format(localTime);
       } else if (messageDay == yesterday) {
         return 'Yesterday ${timeFormat.format(localTime)}';
       } else if (now.difference(localTime).inDays < 7) {
-        final dayFormat = DateFormat('EEE'); // Mon, Tue, etc.
+        final dayFormat = DateFormat('EEE');
         return '${dayFormat.format(localTime)} ${timeFormat.format(localTime)}';
       } else {
-        final dateFormat = DateFormat('MMM d'); // Dec 1
+        final dateFormat = DateFormat('MMM d');
         return '${dateFormat.format(localTime)} ${timeFormat.format(localTime)}';
       }
     } catch (e) {
-      print('Error formatting conversation time: $e');
+      if (kDebugMode) {
+        print('Error formatting conversation time: $e');
+      }
       return '';
     }
   }
 
-  /// Format UTC time to simple time (just hours and minutes)
+  // Format UTC time to simple time
   static String formatTimeOnly(DateTime utcTime) {
     try {
       final localTime = utcTime.toLocal();
-      return DateFormat('h:mm a').format(localTime); // 11:00 AM
+      return DateFormat('h:mm a').format(localTime);
     } catch (e) {
       print('Error formatting time only: $e');
       return '';
     }
   }
 
-  /// Format UTC time to relative time (e.g., "2 hours ago")
+  // Format UTC time to relative time
   static String formatRelativeTime(DateTime utcTime) {
     try {
       final localTime = utcTime.toLocal();
@@ -73,12 +79,14 @@ class Utils {
         return DateFormat('MMM d').format(localTime);
       }
     } catch (e) {
-      print('Error formatting relative time: $e');
+      if (kDebugMode) {
+        print('Error formatting relative time: $e');
+      }
       return '';
     }
   }
 
-  /// Parse UTC date string to DateTime object with robust error handling
+  // Parse UTC date string to DateTime object with robust error handling
   static DateTime parseUtcDate(dynamic value) {
     try {
       if (value == null) return DateTime.now();
@@ -122,7 +130,7 @@ class Utils {
     }
   }
 
-  /// Get debug info for timezone debugging
+  // Get debug info for timezone debugging
   static String getDebugTimeInfo(DateTime utcTime) {
     try {
       final local = utcTime.toLocal();
@@ -140,15 +148,4 @@ Chat Time: ${formatTimeOnly(utcTime)}
       return 'Error getting time info: $e';
     }
   }
-
-
-
-
-
-
-
-
-
-
-
- }
+}

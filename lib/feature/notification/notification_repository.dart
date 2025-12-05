@@ -1,4 +1,4 @@
-// notification_repository.dart
+ import 'package:flutter/foundation.dart';
 import 'package:hec_chat/cores/network/dio_client.dart';
 import 'package:hec_chat/cores/network/api_response.dart';
 import 'package:hec_chat/feature/home/model/notification_model.dart';
@@ -23,7 +23,7 @@ class NotificationRepository {
     }
   }
 
-  /// Fetch just the unseen count (lightweight call)
+  // Fetch just the unseen count (lightweight call)
   Future<int?> fetchUnseenCount() async {
     try {
       // Use the same endpoint but with minimal data
@@ -58,7 +58,9 @@ class NotificationRepository {
       }
       return null;
     } catch (e) {
-      print('❌ NotificationRepository: failed to fetch unseen count: $e');
+      if (kDebugMode) {
+        print('NotificationRepository: failed to fetch unseen count: $e');
+      }
       return null;
     }
   }

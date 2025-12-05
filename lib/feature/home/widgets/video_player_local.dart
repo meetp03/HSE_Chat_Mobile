@@ -1,6 +1,4 @@
-// NEW: Local video player widget
 import 'dart:io';
-
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
@@ -10,10 +8,10 @@ class VideoPlayerViewerLocal extends StatefulWidget {
   final String messageId;
 
   const VideoPlayerViewerLocal({
-    Key? key,
+    super.key,
     required this.localPath,
     required this.messageId,
-  }) : super(key: key);
+  });
 
   @override
   State<VideoPlayerViewerLocal> createState() => _VideoPlayerViewerLocalState();
@@ -40,7 +38,7 @@ class _VideoPlayerViewerLocalState extends State<VideoPlayerViewerLocal> {
       );
       setState(() {});
     } catch (e) {
-      debugPrint('⚠️ Local video init failed: $e');
+      debugPrint('Local video init failed: $e');
     }
   }
 

@@ -1,4 +1,3 @@
-// user_info_state.dart
 import 'package:equatable/equatable.dart';
  import 'package:hec_chat/feature/home/model/common_groups_response.dart';
 

@@ -1,5 +1,3 @@
-// notification_model.dart
-import 'package:meta/meta.dart';
 
 class AppNotificationData {
   final int id;

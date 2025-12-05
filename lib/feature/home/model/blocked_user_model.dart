@@ -1,4 +1,3 @@
-// models/blocked_user_model.dart
 import 'package:hec_chat/feature/home/model/pagination_model.dart';
 class BlockedUserModel {
   final int id;

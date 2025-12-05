@@ -1,4 +1,3 @@
-// models/group_model.dart
 class CreateGroupRequest {
   final String name;
   final List<int> members;

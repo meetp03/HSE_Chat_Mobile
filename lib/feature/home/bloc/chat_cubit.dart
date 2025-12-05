@@ -43,13 +43,13 @@ class ChatCubit extends Cubit<ChatState> {
   Message? _replyingToMessage;
   Message? _editingMessage;
 
-  /// Get the message being replied to
+  // Get the message being replied to
   Message? get replyingToMessage => _replyingToMessage;
 
-  /// Get the message being edited
+  // Get the message being edited
   Message? get editingMessage => _editingMessage;
 
-  /// Set a message to reply to
+  // Set a message to reply to
   void setReplyingTo(Message? message) {
     _replyingToMessage = message;
     _editingMessage = null; // Clear edit mode when replying
@@ -59,7 +59,7 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Set a message to edit
+  // Set a message to edit
   void setEditingMessage(Message? message) {
     _editingMessage = message;
     _replyingToMessage = null; // Clear reply mode when editing
@@ -69,7 +69,7 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Clear reply/edit mode
+  // Clear reply/edit mode
   void clearReplyEditMode() {
     _replyingToMessage = null;
     _editingMessage = null;
@@ -79,7 +79,7 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Edit an existing message
+  // Edit an existing message
   Future<String?> editMessage({
     required String messageId,
     required String newMessage,
@@ -87,7 +87,6 @@ class ChatCubit extends Cubit<ChatState> {
     if (state is! ChatLoaded) return 'Chat not loaded';
 
     try {
-      print('✏️ Editing message: $messageId');
 
       final response = await _chatRepository.editMessage(
         messageId: messageId,
@@ -114,18 +113,22 @@ class ChatCubit extends Cubit<ChatState> {
         // Clear editing mode
         clearReplyEditMode();
 
-        print('✅ Message edited successfully');
+        if (kDebugMode) {
+          print('✅ Message edited successfully');
+        }
         return null;
       } else {
         return response.message ?? 'Failed to edit message';
       }
     } catch (e) {
-      print('❌ Error editing message: $e');
+      if (kDebugMode) {
+        print('Error editing message: $e');
+      }
       return 'Failed to edit message: $e';
     }
   }
 
-  /// Send a reply to a message
+  // Send a reply to a message
   Future<String?> sendReply({
     required String message,
     required Message replyToMessage,
@@ -133,15 +136,13 @@ class ChatCubit extends Cubit<ChatState> {
     if (state is! ChatLoaded || _otherUserId == null || _isGroup == null) {
       return 'Invalid chat state';
     }
-    // 🐛 DEBUG: Log what we're sending
-    print('🚀 SENDING REPLY:');
-    print('   To Message ID: ${replyToMessage.id}');
-    print('   To Message Text: ${replyToMessage.message}');
-    print('   Reply Text: $message');
-    try {
-      print('💬 Sending reply to message: ${replyToMessage.id}');
 
-      // ✅ CORRECT - Use the full MongoDB _id directly
+    try {
+      if (kDebugMode) {
+        print('Sending reply to message: ${replyToMessage.id}');
+      }
+
+      // Use the full MongoDB _id directly
       final replyToId = replyToMessage.id;
 
       final response = await _chatRepository.replyToMessage(
@@ -155,9 +156,7 @@ class ChatCubit extends Cubit<ChatState> {
       if (response.success && response.data != null) {
         final messageData = response.data!.data.message;
         final newMessage = Message.fromJson(messageData, currentUserId);
-        print('📥 API RESPONSE:');
-        print('   reply_to: ${messageData['reply_to']}');
-        print('   reply_message: ${messageData['reply_message']}');
+
         // Add the new reply message to the list
         if (state is ChatLoaded) {
           final currentState = state as ChatLoaded;
@@ -170,148 +169,30 @@ class ChatCubit extends Cubit<ChatState> {
         // Clear reply mode
         clearReplyEditMode();
 
-        print('✅ Reply sent successfully');
+        if (kDebugMode) {
+          print('Reply sent successfully');
+        }
         return null;
       } else {
         return response.message ?? 'Failed to send reply';
       }
     } catch (e) {
-      print('❌ Error sending reply: $e');
+      if (kDebugMode) {
+        print('Error sending reply: $e');
+      }
       return 'Failed to send reply: $e';
     }
   }
 
- /* Future<void> loadConversations(
-    int userId,
-    String otherUserId,
-    bool isGroup,
-      Conversation? initialConversationData,
-  ) async {
-    try {
-      emit(ChatLoading());
-
-      print('📥 Loading conversations for: $otherUserId (isGroup: $isGroup)');
-      print('👤 Current user ID: $userId');
-
-      final response = await _chatRepository.getConversations(
-        userId: userId,
-        otherUserId: otherUserId,
-        isGroup: isGroup,
-        page: 1,
-        limit: _limit,
-      );
-
-      if (response.success && response.data != null) {
-        // ✅ Pass currentUserId (not group ID) for proper alignment
-        // Server returns conversations in newest->oldest. Convert to
-        // oldest->newest for UI-friendly chronological ordering.
-        final raw = (response.data?.data.conversations ?? [])
-            .map((json) => Message.fromJson(json, userId))
-            .toList()
-            .reversed
-            .toList();
-
-        // Deduplicate loaded messages (server sometimes returns repeats)
-        final conversations = _dedupeMessages(raw);
-
-        final conversationId = isGroup
-            ? (response.data?.data.group['id']?.toString() ?? otherUserId)
-            : otherUserId;
-
-        _otherUserId = conversationId;
-        _isGroup = isGroup;
-        _currentPage = 1;
-        _hasMore = response.data?.meta.hasMore ?? false;
-
-        print('✅ Loaded ${conversations.length} messages');
-        if (conversations.isNotEmpty) {
-          final first = conversations.first;
-          final last = conversations.last;
-          print(
-            '🧭 Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}',
-          );
-          print(
-            '🧭 Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}',
-          );
-        }
-        print('🆔 Stored conversation ID: $_otherUserId');
-
-        await markAsRead();
-        _setupSocketListeners();
-        _socketService.joinConversation(conversationId);
-
-        final group = response.data?.data.group;
-        final user = response.data?.data.user;
-        final conv = response.data?.data.conversations;
-
-        final otherUserName = isGroup
-            ? (group?['name']?.toString() ?? 'Unknown Group')
-            : (user?['name']?.toString() ?? 'Unknown User');
-
-        final otherUserAvatar = isGroup
-            ? (group?['photo_url']?.toString())
-            : (user?['photo_url']?.toString());
-
-        // ✅ EXTRACT BLOCKED FROM USER DATA
-        final isTheyBlockedMe = user?['is_blocked'] == true;
-        final isIBlockedThem = user?['is_blocked_by_auth_user'] == true;
-
-        print('🔒 Maru block  status: $isTheyBlockedMe');
-        print('🔒 Me aane block kryo status: $isIBlockedThem');
-        print('🔍 User data keys: ${user?.keys.toList()}');
-        // ✨ NEW: Extract chat request data from API response
-        String? chatRequestStatus;
-        String? chatRequestFrom;
-        String? chatRequestTo;
-        String? chatRequestId;
-        // ✅ BUILD GROUP DATA FROM API RESPONSE
-        ChatGroup? groupModel;
-        if (isGroup && group != null) {
-          try {
-            groupModel = ChatGroup.fromJson(group);
-            print(
-              '✅ Group data extracted: ${groupModel.name} with ${groupModel.members.length} members',
-            );
-          } catch (e) {
-            print('⚠️ Failed to parse group into ChatGroup: $e');
-            groupModel = null;
-          }
-        }
-        emit(
-          ChatLoaded(
-            messages: conversations,
-            otherUserId: otherUserId,
-            otherUserName: otherUserName,
-            otherUserAvatar: otherUserAvatar,
-            hasMore: _hasMore,
-            isGroup: isGroup,
-            commonGroupData: groupModel,
-            isIBlockedThem: isIBlockedThem,
-            isTheyBlockedMe: isTheyBlockedMe,
-              groupData:
-          ),
-        );
-      } else {
-        emit(ChatError(response.message ?? 'Failed to load messages'));
-      }
-    } catch (e) {
-      print('❌ Error loading messages: $e');
-      emit(ChatError('Failed to load messages: $e'));
-    }
-  }
-*/
 
   Future<void> loadConversations(
       int userId,
       String otherUserId,
       bool isGroup,
-      Conversation? initialConversationData, // ✨ NEW: Accept conversation data
+      Conversation? initialConversationData,
       ) async {
     try {
       emit(ChatLoading());
-
-      print('📥 Loading conversations for: $otherUserId (isGroup: $isGroup)');
-      print('👤 Current user ID: $userId');
 
       final response = await _chatRepository.getConversations(
         userId: userId,
@@ -322,7 +203,7 @@ class ChatCubit extends Cubit<ChatState> {
       );
 
       if (response.success && response.data != null) {
-        // ✅ Pass currentUserId (not group ID) for proper alignment
+        // Pass currentUserId (not group ID) for proper alignment
         // Server returns conversations in newest->oldest. Convert to
         // oldest->newest for UI-friendly chronological ordering.
         final raw = (response.data?.data.conversations ?? [])
@@ -343,18 +224,26 @@ class ChatCubit extends Cubit<ChatState> {
         _currentPage = 1;
         _hasMore = response.data?.meta.hasMore ?? false;
 
-        print('✅ Loaded ${conversations.length} messages');
+        if (kDebugMode) {
+          print('Loaded ${conversations.length} messages');
+        }
         if (conversations.isNotEmpty) {
           final first = conversations.first;
           final last = conversations.last;
-          print(
-            '🧭 Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}',
+          if (kDebugMode) {
+            print(
+            'Conversation order: first(createdAt)=${first.createdAt.toIso8601String()} id=${first.id} isSentByMe=${first.isSentByMe}',
           );
-          print(
-            '🧭 Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}',
+          }
+          if (kDebugMode) {
+            print(
+            'Conversation order: last(createdAt)=${last.createdAt.toIso8601String()} id=${last.id} isSentByMe=${last.isSentByMe}',
           );
+          }
         }
-        print('🆔 Stored conversation ID: $_otherUserId');
+        if (kDebugMode) {
+          print('Stored conversation ID: $_otherUserId');
+        }
 
         await markAsRead();
         _setupSocketListeners();
@@ -371,15 +260,12 @@ class ChatCubit extends Cubit<ChatState> {
             ? (group?['photo_url']?.toString())
             : (user?['photo_url']?.toString());
 
-        // ✅ EXTRACT BLOCKED FROM USER DATA
+        // EXTRACT BLOCKED FROM USER DATA
         final isTheyBlockedMe = user?['is_blocked'] == true;
         final isIBlockedThem = user?['is_blocked_by_auth_user'] == true;
 
-        print('🔒 Maru block status: $isTheyBlockedMe');
-        print('🔒 Me aane block kryo status: $isIBlockedThem');
-        print('🔍 User data keys: ${user?.keys.toList()}');
 
-        // ✨ NEW: Extract chat request data from API response
+        // Extract chat request data from API response
         String? chatRequestStatus;
         String? chatRequestFrom;
         String? chatRequestTo;
@@ -394,28 +280,35 @@ class ChatCubit extends Cubit<ChatState> {
             chatRequestTo = firstConv['chat_request_to']?.toString();
             chatRequestId = firstConv['chat_request_id']?.toString();
 
-            print('📨 Chat Request Status: $chatRequestStatus');
-            print('📨 Chat Request From: $chatRequestFrom');
-            print('📨 Chat Request To: $chatRequestTo');
-            print('📨 Chat Request ID: $chatRequestId');
+            if (kDebugMode) {
+              print('📨 Chat Request Status: $chatRequestStatus');
+              print('📨 Chat Request From: $chatRequestFrom');
+              print('📨 Chat Request To: $chatRequestTo');
+              print('📨 Chat Request ID: $chatRequestId');
+            }
+
           }
         }
 
-        // ✅ BUILD GROUP DATA FROM API RESPONSE
+        //  BUILD GROUP DATA FROM API RESPONSE
         ChatGroup? groupModel;
         if (isGroup && group != null) {
           try {
             groupModel = ChatGroup.fromJson(group);
-            print(
-              '✅ Group data extracted: ${groupModel.name} with ${groupModel.members.length} members',
+            if (kDebugMode) {
+              print(
+              'Group data extracted: ${groupModel.name} with ${groupModel.members.length} members',
             );
+            }
           } catch (e) {
-            print('⚠️ Failed to parse group into ChatGroup: $e');
+            if (kDebugMode) {
+              print('Failed to parse group into ChatGroup: $e');
+            }
             groupModel = null;
           }
         }
 
-        // ✨ NEW: Update initial conversation data with loaded info
+        // Update initial conversation data with loaded info
         Conversation? updatedConversationData;
         if (initialConversationData != null) {
           updatedConversationData = initialConversationData.copyWith(
@@ -437,26 +330,31 @@ class ChatCubit extends Cubit<ChatState> {
             commonGroupData: groupModel,
             isIBlockedThem: isIBlockedThem,
             isTheyBlockedMe: isTheyBlockedMe,
-            groupData: updatedConversationData, // ✅ Pass updated conversation data
+            groupData: updatedConversationData,
           ),
         );
       } else {
         emit(ChatError(response.message ?? 'Failed to load messages'));
       }
     } catch (e) {
-      print('❌ Error loading messages: $e');
+      if (kDebugMode) {
+        print('Error loading messages: $e');
+      }
       emit(ChatError('Failed to load messages: $e'));
     }
   }
   Future<void> loadMoreMessages() async {
-    if (_isLoadingMore || !_hasMore || _otherUserId == null || _isGroup == null)
+    if (_isLoadingMore || !_hasMore || _otherUserId == null || _isGroup == null) {
       return;
+    }
 
     try {
       _isLoadingMore = true;
       emit((state as ChatLoaded).copyWith(isLoadingMore: true));
 
-      print('📥 Loading more messages - page: ${_currentPage + 1}');
+      if (kDebugMode) {
+        print('Loading more messages - page: ${_currentPage + 1}');
+      }
 
       final response = await _chatRepository.getConversations(
         userId: currentUserId,
@@ -486,7 +384,9 @@ class ChatCubit extends Cubit<ChatState> {
         _hasMore = response.data!.meta.hasMore;
         _isLoadingMore = false;
 
-        print('✅ Loaded ${newMessages.length} more messages');
+        if (kDebugMode) {
+          print('Loaded ${newMessages.length} more messages');
+        }
 
         emit(
           currentState.copyWith(
@@ -497,7 +397,9 @@ class ChatCubit extends Cubit<ChatState> {
         );
       }
     } catch (e) {
-      print('❌ Error loading more messages: $e');
+      if (kDebugMode) {
+        print('Error loading more messages: $e');
+      }
       _isLoadingMore = false;
       if (state is ChatLoaded) {
         emit((state as ChatLoaded).copyWith(isLoadingMore: false));
@@ -505,14 +407,16 @@ class ChatCubit extends Cubit<ChatState> {
     }
   }
 
-  /// Sends a message or file. Returns null on success, otherwise returns an error message.
+  // Sends a message or file. Returns null on success, otherwise returns an error message.
   Future<String?> sendMessage({
     required String message,
     String? replyTo,
     String? filePath,
   }) async {
     if (state is! ChatLoaded || _otherUserId == null || _isGroup == null) {
-      print('❌ Cannot send message - invalid state');
+      if (kDebugMode) {
+        print('Cannot send message - invalid state');
+      }
       return 'Invalid chat state';
     }
 
@@ -522,12 +426,11 @@ class ChatCubit extends Cubit<ChatState> {
     final hasText = message.trim().isNotEmpty;
     final hasFile = filePath != null && filePath.isNotEmpty;
     if (hasText && hasFile) {
-      print('❌ Cannot send both text and file in same request');
+      if (kDebugMode) {
+        print('Cannot send both text and file in same request');
+      }
       return 'Cannot send both text and file';
     }
-
-    print('📤 Sending message to: $_otherUserId (isGroup: $_isGroup)');
-    print('👤 From user ID: $currentUserId');
 
     // Generate a temp id for optimistic UI
     final tempId = 'temp_${DateTime.now().millisecondsSinceEpoch}';
@@ -592,21 +495,23 @@ class ChatCubit extends Cubit<ChatState> {
           final pct = total > 0
               ? (sent / total * 100).clamp(0, 100).toInt()
               : 0;
-          if (this.state is ChatLoaded) {
-            final s = this.state as ChatLoaded;
+          if (state is ChatLoaded) {
+            final s = state as ChatLoaded;
             final updatedMap = Map<String, int>.from(s.uploadProgress);
             updatedMap[tempId] = pct;
             emit(s.copyWith(uploadProgress: updatedMap));
           }
-          if (kDebugMode)
+          if (kDebugMode) {
             print('📤 Upload progress for $tempId: $pct% ($sent/$total)');
+          }
         }
 
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
             '📤 ChatCubit: calling repository.sendFileMultipart for $filePath',
           );
-        // IMPORTANT: backend expects `message_type = 1` for multipart attachments
+        }
+        // backend expects `message_type = 1` for multipart attachments
         // Always send 1 for multipart payloads; use `inferredMessageType` only for optimistic UI rendering.
         final resp = await _chatRepository.sendFileMultipart(
           toId: _otherUserId!,
@@ -621,18 +526,19 @@ class ChatCubit extends Cubit<ChatState> {
           onSendProgress: onProgress,
         );
 
-        if (kDebugMode)
+        if (kDebugMode) {
           print(
-            '📦 ChatCubit: repository returned success=${resp.success} message=${resp.message}',
+            'ChatCubit: repository returned success=${resp.success} message=${resp.message}',
           );
+        }
         if (resp.success && resp.data != null) {
           final serverMsgMap = resp.data!.data.message;
 
           final serverMsg = Message.fromJson(serverMsgMap, currentUserId);
 
           // Replace temp message with server message & clear progress
-          if (this.state is ChatLoaded) {
-            final s = this.state as ChatLoaded;
+          if (state is ChatLoaded) {
+            final s = state as ChatLoaded;
             final updatedMap = Map<String, int>.from(s.uploadProgress);
             updatedMap.remove(tempId);
             final updated = s.messages
@@ -645,19 +551,23 @@ class ChatCubit extends Cubit<ChatState> {
             );
           }
 
-          if (kDebugMode)
-            print('✅ File message sent successfully: ${resp.data}');
+          if (kDebugMode) {
+            print('File message sent successfully: ${resp.data}');
+          }
           return null;
         } else {
           final err = resp.message ?? 'Failed to send file. Please try again.';
-          print('❌ ChatCubit: repository reported failure: $err');
-          if (kDebugMode)
-            print('❌ ChatCubit: File send response payload: ${resp.data}');
+          if (kDebugMode) {
+            print('ChatCubit: repository reported failure: $err');
+          }
+          if (kDebugMode) {
+            print('ChatCubit: File send response payload: ${resp.data}');
+          }
 
           // mark temp message as failed and clear progress
           _markMessageAsFailed(tempId);
-          if (this.state is ChatLoaded) {
-            final s = this.state as ChatLoaded;
+          if (state is ChatLoaded) {
+            final s = state as ChatLoaded;
             final updatedMap = Map<String, int>.from(s.uploadProgress);
             updatedMap.remove(tempId);
             emit(s.copyWith(uploadProgress: updatedMap));
@@ -667,10 +577,12 @@ class ChatCubit extends Cubit<ChatState> {
         }
       } catch (e) {
         // Log detailed exception for debugging but return a generic message to UI
-        print('❌ Error sending file multipart: $e');
+        if (kDebugMode) {
+          print('Error sending file multipart: $e');
+        }
         _markMessageAsFailed(tempId);
-        if (this.state is ChatLoaded) {
-          final s = this.state as ChatLoaded;
+        if (state is ChatLoaded) {
+          final s = state as ChatLoaded;
           final updatedMap = Map<String, int>.from(s.uploadProgress);
           updatedMap.remove(tempId);
           emit(s.copyWith(uploadProgress: updatedMap));
@@ -720,8 +632,8 @@ class ChatCubit extends Cubit<ChatState> {
         final messageData = response.data!.data.message;
         final serverMessage = Message.fromJson(messageData, currentUserId);
 
-        if (this.state is ChatLoaded) {
-          final latest = this.state as ChatLoaded;
+        if (state is ChatLoaded) {
+          final latest = state as ChatLoaded;
           final updatedMessages = latest.messages.map((msg) {
             return msg.id == textTempId ? serverMessage : msg;
           }).toList();
@@ -737,12 +649,16 @@ class ChatCubit extends Cubit<ChatState> {
         return null;
       } else {
         final err = response.message ?? 'Failed to send message';
-        print('❌ Failed to send message: $err');
+        if (kDebugMode) {
+          print('Failed to send message: $err');
+        }
         _markMessageAsFailed(textTempId);
         return err;
       }
     } catch (e) {
-      print('❌ Error sending message: $e');
+      if (kDebugMode) {
+        print('Error sending message: $e');
+      }
       _markMessageAsFailed(textTempId);
       return 'Failed to send message. Please try again.';
     }
@@ -763,7 +679,6 @@ class ChatCubit extends Cubit<ChatState> {
     if (_otherUserId == null || _isGroup == null) return;
 
     try {
-      print('📖 Marking messages as read for: $_otherUserId');
 
       await _chatRepository.markAsRead(
         userId: currentUserId,
@@ -771,9 +686,10 @@ class ChatCubit extends Cubit<ChatState> {
         isGroup: _isGroup!,
       );
 
-      print('✅ Messages marked as read');
     } catch (e) {
-      print('❌ Failed to mark as read: $e');
+      if (kDebugMode) {
+        print('Failed to mark as read: $e');
+      }
     }
   }
 
@@ -784,11 +700,14 @@ class ChatCubit extends Cubit<ChatState> {
       final isBlocked = data['isBlocked'] == true;
       final type = data['type']?.toString();
 
-      print('🔒 Processing block/unblock event:');
-      print('   - blockedBy: $blockedBy');
-      print('   - currentUserId: $currentUserId');
-      print('   - isBlocked: $isBlocked');
-      print('   - type: $type');
+      if (kDebugMode) {
+        print('Processing block/unblock event:');
+        print('   - blockedBy: $blockedBy');
+        print('   - currentUserId: $currentUserId');
+        print('   - isBlocked: $isBlocked');
+        print('   - type: $type');
+      }
+
 
       // not relevant -> ignore
       final blockedToId = blockedTo?['id']?.toString();
@@ -838,10 +757,6 @@ class ChatCubit extends Cubit<ChatState> {
         final updatedisTheyBlockedMe =
             newisTheyBlockedMe ?? currentState.isTheyBlockedMe;
 
-        print(
-          '🔄 Updating block flags: isIBlockedThem=$updatedisIBlockedThem isTheyBlockedMe=$updatedisTheyBlockedMe',
-        );
-
         emit(
           currentState.copyWith(
             isIBlockedThem: updatedisIBlockedThem,
@@ -850,61 +765,24 @@ class ChatCubit extends Cubit<ChatState> {
         );
 
         try {
-          print('✅ Block status updated in UI');
+          if (kDebugMode) {
+            print('Block status updated in UI');
+          }
         } catch (e) {
-          print('⚠️ Error notifying conversation cubit: $e');
-        }
-      }
-    } catch (e) {
-      print('❌ Error handling block/unblock event: $e');
-    }
-  }
-
-  /*
-  void _handleBlockUnblockEvent(Map<String, dynamic> data) {
-    try {
-      final blockedBy = data['blockedBy']?.toString();
-      final blockedTo = data['blockedTo'] as Map<String, dynamic>?;
-      final isBlocked = data['isBlocked'] == true;
-      final type = data['type']?.toString();
-
-      print('🔒 Processing block/unblock event:');
-      print('   - blockedBy: $blockedBy');
-      print('   - currentUserId: $currentUserId');
-      print('   - isBlocked: $isBlocked');
-      print('   - type: $type');
-
-      // Check if this event is relevant to current chat
-      if (blockedBy == _otherUserId ||
-          (blockedTo != null && blockedTo['id']?.toString() == _otherUserId)) {
-        print('🔄 Updating block status for user $_otherUserId to: $isBlocked');
-
-        if (state is ChatLoaded) {
-          final currentState = state as ChatLoaded;
-          emit(currentState.copyWith(isIBlockedThem: isBlocked,isTheyBlockedMe: blockedBy));
-
-          // Also update the conversation cubit if needed
-          // This ensures the home screen reflects the updated block status
-          try {
-            // You might want to notify conversation cubit here
-            print('✅ Block status updated in UI');
-          } catch (e) {
-            print('⚠️ Error notifying conversation cubit: $e');
+          if (kDebugMode) {
+            print('Error notifying conversation cubit: $e');
           }
         }
       }
     } catch (e) {
-      print('❌ Error handling block/unblock event: $e');
+      if (kDebugMode) {
+        print('Error handling block/unblock event: $e');
+      }
     }
   }
-*/
 
   void _setupSocketListeners() {
     if (_otherUserId == null || _isGroup == null) return;
-
-    print('🔌 Setting up socket listeners for: $_otherUserId');
-    print('👤 Current user ID: $currentUserId');
-
     _socketService.cleanupChatListeners(_otherUserId!);
     _socketService.addMessageListener((dynamic raw) {
       try {
@@ -925,7 +803,7 @@ class ChatCubit extends Cubit<ChatState> {
           }
         }
       } catch (e) {
-        if (kDebugMode) print('⚠️ Error processing socket message: $e');
+        if (kDebugMode) print('Error processing socket message: $e');
       }
     });
 
@@ -944,7 +822,7 @@ class ChatCubit extends Cubit<ChatState> {
             final existing = currentState.messages[existingIndex];
             final shouldReplace = newMessage.updatedAt.isAfter(existing.updatedAt) || newMessage.message != existing.message;
             if (shouldReplace) {
-              if (kDebugMode) print('🔁 Replacing existing message ${newMessage.id} with updated socket message');
+              if (kDebugMode) print('Replacing existing message ${newMessage.id} with updated socket message');
               final updatedMessages = List<Message>.from(currentState.messages);
               updatedMessages[existingIndex] = newMessage;
               final deduped = _dedupeMessages(updatedMessages);
@@ -952,16 +830,16 @@ class ChatCubit extends Cubit<ChatState> {
 
               if (!newMessage.isSentByMe) markAsRead();
             } else {
-              if (kDebugMode) print('🔁 Skipping socket message (already present and not newer): ${newMessage.id}');
+              if (kDebugMode) print('Skipping socket message (already present and not newer): ${newMessage.id}');
             }
             return;
           }
         }
 
         if (kDebugMode) {
-          print('📨 Received new message via socket: ${newMessage.id}');
-          print('👤 Message from: ${newMessage.fromId}, Current user: $currentUserId');
-          print('🔍 Is sent by me: ${newMessage.isSentByMe}');
+          print('Received new message via socket: ${newMessage.id}');
+          print('Message from: ${newMessage.fromId}, Current user: $currentUserId');
+          print('Is sent by me: ${newMessage.isSentByMe}');
         }
 
         // Append incoming message and dedupe as a safety net
@@ -971,15 +849,13 @@ class ChatCubit extends Cubit<ChatState> {
 
         if (!newMessage.isSentByMe) markAsRead();
       } catch (e) {
-        if (kDebugMode) print('⚠️ Error handling onNewMessage: $e');
+        if (kDebugMode) print('Error handling onNewMessage: $e');
       }
     });
 
     _socketService.onTyping(_otherUserId!, (isTyping) {
-      print('⌨️ User typing status: $isTyping');
     });
 
-    print('✅ Socket listeners setup complete');
 
     // Generic fallback: listen to all socket messages and handle any that
     // match this conversation's from/to id. This catches cases when the
@@ -1008,17 +884,18 @@ class ChatCubit extends Cubit<ChatState> {
           final currentState = state as ChatLoaded;
 
           // Append and dedupe centrally
-          if (kDebugMode)
+          if (kDebugMode) {
             print(
-              '🔁 Fallback listener appending message ${newMessage.id} for conv $_otherUserId',
+              'Fallback listener appending message ${newMessage.id} for conv $_otherUserId',
             );
+          }
           final appended = [...currentState.messages, newMessage];
           final deduped = _dedupeMessages(appended);
           emit(currentState.copyWith(messages: deduped));
           if (!newMessage.isSentByMe) markAsRead();
         }
       } catch (e) {
-        if (kDebugMode) print('⚠️ Generic socket listener error: $e');
+        if (kDebugMode) print('Generic socket listener error: $e');
       }
     };
 
@@ -1036,7 +913,9 @@ class ChatCubit extends Cubit<ChatState> {
           data) as Map<String, dynamic>?;
 
       if (deletedMap == null) {
-        print('⚠️ No deleted message data found in event');
+        if (kDebugMode) {
+          print('No deleted message data found in event');
+        }
         return;
       }
 
@@ -1047,11 +926,15 @@ class ChatCubit extends Cubit<ChatState> {
       ].where((e) => e != null).map((e) => e!).toList();
 
       if (idCandidates.isEmpty) {
-        print('⚠️ No valid message ID found in delete event');
+        if (kDebugMode) {
+          print('No valid message ID found in delete event');
+        }
         return;
       }
 
-      print('🔍 Looking for message with IDs: $idCandidates');
+      if (kDebugMode) {
+        print('Looking for message with IDs: $idCandidates');
+      }
 
       if (state is ChatLoaded) {
         final s = state as ChatLoaded;
@@ -1060,34 +943,41 @@ class ChatCubit extends Cubit<ChatState> {
         final messageExists = s.messages.any((m) => idCandidates.contains(m.id));
 
         if (!messageExists) {
-          print('⚠️ Deleted message not found in current chat');
+          if (kDebugMode) {
+            print('Deleted message not found in current chat');
+          }
           return;
         }
 
         final updated = s.messages.map((m) {
           final matches = idCandidates.contains(m.id);
           if (matches) {
-            print('✅ Found matching message ${m.id}, replacing with deleted version');
+            if (kDebugMode) {
+              print('Found matching message ${m.id}, replacing with deleted version');
+            }
 
             try {
               // Try to parse the server's deleted message payload
               final replaced = Message.fromJson(deletedMap, currentUserId);
-              print('✅ Successfully parsed deleted message: "${replaced.message}"');
+              if (kDebugMode) {
+                print('Successfully parsed deleted message: "${replaced.message}"');
+              }
               return replaced;
             } catch (e) {
-              print('⚠️ Failed to parse deleted message map: $e');
+              if (kDebugMode) {
+                print('Failed to parse deleted message map: $e');
+              }
               // Fallback: just update the text
               return m.copyWith(
                 message: deletedMap['message']?.toString() ?? 'This message was deleted',
-                updatedAt: DateTime.now(), // ✅ Update timestamp to force UI rebuild
+                updatedAt: DateTime.now(), // Update timestamp to force UI rebuild
               );
             }
           }
           return m;
         }).toList();
 
-        // ✅ IMPORTANT: Always emit new state, even if content looks similar
-        print('🔄 Emitting updated state with ${updated.length} messages');
+        // Always emit new state, even if content looks similar
         emit(s.copyWith(
           messages: updated,
           // Force a new list instance to ensure Flutter detects the change
@@ -1097,20 +987,28 @@ class ChatCubit extends Cubit<ChatState> {
         try {
           _socketService.requestConversations();
         } catch (e) {
-          print('⚠️ Failed to request conversations refresh: $e');
+          if (kDebugMode) {
+            print('Failed to request conversations refresh: $e');
+          }
         }
 
-        print('✅ Message deleted event processed successfully');
+        if (kDebugMode) {
+          print('Message deleted event processed successfully');
+        }
       } else {
-        print('⚠️ Cannot process delete event - chat not loaded');
+        if (kDebugMode) {
+          print('Cannot process delete event - chat not loaded');
+        }
       }
     } catch (e, stackTrace) {
-      print('❌ Error handling message deleted event: $e');
-      print('Stack trace: $stackTrace');
+      if (kDebugMode) {
+        print('❌ Error handling message deleted event: $e');
+        print('Stack trace: $stackTrace');
+      }
+
     }
   }
   void dispose() {
-    print('🧹 Disposing ChatCubit');
 
     if (_otherUserId != null) {
       _socketService.cleanupChatListeners(_otherUserId!);
@@ -1141,11 +1039,11 @@ class ChatCubit extends Cubit<ChatState> {
     final seenIds = <String>{};
 
     for (var m in messages) {
-      // ✅ PRIMARY: Use MongoDB _id for deduplication (most reliable)
+      //  PRIMARY: Use MongoDB _id for deduplication (most reliable)
       if (m.id.isNotEmpty) {
         if (seenIds.contains(m.id)) {
           if (kDebugMode) {
-            print('🔇 Skipping duplicate by id: ${m.id}');
+            print('Skipping duplicate by id: ${m.id}');
           }
           continue;
         }
@@ -1154,12 +1052,12 @@ class ChatCubit extends Cubit<ChatState> {
         continue;
       }
 
-      // ✅ FALLBACK: For messages without ID (temporary messages only)
+      // FALLBACK: For messages without ID (temporary messages only)
       // Use timestamp + fromId to avoid false positives
       final fallbackKey = '${m.fromId}|${m.createdAt.millisecondsSinceEpoch}';
       if (seenIds.contains(fallbackKey)) {
         if (kDebugMode) {
-          print('🔇 Skipping duplicate by fallback key: $fallbackKey');
+          print('Skipping duplicate by fallback key: $fallbackKey');
         }
         continue;
       }
@@ -1170,7 +1068,7 @@ class ChatCubit extends Cubit<ChatState> {
     return out;
   }
 
-  /// Delete a message for me (remove from this client's view). Returns null on success or error message.
+  // Delete a message for me (remove from this client's view). Returns null on success or error message.
   Future<String?> deleteMessageForMe({
     required String conversationId,
     required String previousMessageId,
@@ -1180,7 +1078,7 @@ class ChatCubit extends Cubit<ChatState> {
     try {
       if (kDebugMode) {
         print(
-        '🗑️ Requesting delete-for-me: $targetMessageId in conv $conversationId',
+        '🗑Requesting delete-for-me: $targetMessageId in conv $conversationId',
       );
       }
       final resp = await _chatRepository.deleteMessageForMe(
@@ -1203,13 +1101,13 @@ class ChatCubit extends Cubit<ChatState> {
       }
     } catch (e) {
       if (kDebugMode) {
-        print('❌ deleteMessageForMe error: $e');
+        print('deleteMessageForMe error: $e');
       }
       return 'Failed to delete message: $e';
     }
   }
 
-  /// Delete message for everyone in the conversation (server-side). Returns null on success else error.
+  //Delete message for everyone in the conversation (server-side). Returns null on success else error.
   Future<String?> deleteMessageForEveryone({
     required String conversationId,
     required String previousMessageId,
@@ -1219,7 +1117,7 @@ class ChatCubit extends Cubit<ChatState> {
     try {
       if (kDebugMode) {
         print(
-        '🗑️ Requesting delete-for-everyone: $targetMessageId in conv $conversationId',
+        'Requesting delete-for-everyone: $targetMessageId in conv $conversationId',
       );
       }
       final resp = await _chatRepository.deleteMessageForEveryone(
@@ -1271,14 +1169,13 @@ class ChatCubit extends Cubit<ChatState> {
        }
      } catch (e) {
        if (kDebugMode) {
-         print('❌ deleteMessageForEveryone error: $e');
+         print('deleteMessageForEveryone error: $e');
        }
        return 'Failed to delete message for everyone: $e';
      }
   }
 
-  /// Public aliases so UI code can call either `deleteMessageForMe`/`deleteMessageForEveryone`
-  /// or the shorter `deleteForMe`/`deleteForEveryone` depending on preference.
+  //Public aliases so UI code can call either `deleteMessageForMe`/`deleteMessageForEveryone` or the shorter `deleteForMe`/`deleteForEveryone` depending on preference.
   Future<String?> deleteForMe({
     required String conversationId,
     required String previousMessageId,

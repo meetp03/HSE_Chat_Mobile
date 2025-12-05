@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter_bloc/flutter_bloc.dart';
 import 'package:hec_chat/cores/network/api_response.dart';
 import 'package:hec_chat/cores/network/socket_service.dart';
@@ -7,7 +8,6 @@ import 'package:hec_chat/feature/home/model/conversation_model.dart';
 import 'package:hec_chat/feature/home/repository/conversation_repository.dart';
 import 'package:hec_chat/feature/home/repository/message_repository.dart';
 import 'package:hec_chat/cores/network/dio_client.dart';
-
 import '../../../cores/constants/api_urls.dart';
 
 class ConversationCubit extends Cubit<ConversationState> {
@@ -31,12 +31,6 @@ class ConversationCubit extends Cubit<ConversationState> {
   bool _unreadIsLoadingMore = false;
   String _unreadCurrentQuery = '';
   List<Conversation> _unreadConversations = [];
-
-  // Note: previous dedup used a processed ID set which could swallow legitimate
-  // updates (like delete-for-everyone events). We'll remove that global set and
-  // instead perform local, conversation-scoped duplicate checks when handling
-  // incoming messages. This avoids ignoring updates while still preventing
-  // obvious exact-duplicates.
 
   void search(String query) {
     _currentQuery = query.trim();
@@ -137,7 +131,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       _isLoadingMore = false;
     } catch (e) {
       _isLoadingMore = false;
-      print('❌ Error loading conversations: $e');
+      if (kDebugMode) {
+        print('Error loading conversations: $e');
+      }
       emit(ConversationError(e.toString()));
     }
   }
@@ -145,12 +141,16 @@ class ConversationCubit extends Cubit<ConversationState> {
   //  Accept chat request
   Future<bool> acceptChatRequest(String requestId) async {
     try {
-      print('📨 Accepting chat request: $requestId');
+      if (kDebugMode) {
+        print('Accepting chat request: $requestId');
+      }
 
       final resp = await _repo.acceptChatRequest(requestId: requestId);
 
       if (!resp.success) {
-        print('❌ Accept request API failed: ${resp.message}');
+        if (kDebugMode) {
+          print('Accept request API failed: ${resp.message}');
+        }
         return false;
       }
 
@@ -170,10 +170,14 @@ class ConversationCubit extends Cubit<ConversationState> {
       }).toList();
 
       _emitUnifiedLoadedState();
-      print('✅ Chat request accepted locally');
+      if (kDebugMode) {
+        print('Chat request accepted locally');
+      }
       return true;
     } catch (e) {
-      print('❌ Error accepting chat request: $e');
+      if (kDebugMode) {
+        print('Error accepting chat request: $e');
+      }
       return false;
     }
   }
@@ -181,12 +185,12 @@ class ConversationCubit extends Cubit<ConversationState> {
   //   Decline chat request
   Future<bool> declineChatRequest(String requestId) async {
     try {
-      print('📨 Declining chat request: $requestId');
-
       final resp = await _repo.declineChatRequest(requestId: requestId);
 
       if (!resp.success) {
-        print('❌ Decline request API failed: ${resp.message}');
+        if (kDebugMode) {
+          print('Decline request API failed: ${resp.message}');
+        }
         return false;
       }
 
@@ -206,10 +210,14 @@ class ConversationCubit extends Cubit<ConversationState> {
       }).toList();
 
       _emitUnifiedLoadedState();
-      print('✅ Chat request declined locally');
+      if (kDebugMode) {
+        print('Chat request declined locally');
+      }
       return true;
     } catch (e) {
-      print('❌ Error declining chat request: $e');
+      if (kDebugMode) {
+        print('Error declining chat request: $e');
+      }
       return false;
     }
   }
@@ -283,7 +291,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       _unreadIsLoadingMore = false;
     } catch (e) {
       _unreadIsLoadingMore = false;
-      print('❌ Error loading unread conversations: $e');
+      if (kDebugMode) {
+        print('Error loading unread conversations: $e');
+      }
       emit(ConversationError(e.toString()));
     }
   }
@@ -338,14 +348,16 @@ class ConversationCubit extends Cubit<ConversationState> {
   Future<void> refresh() => loadConversations(refresh: true);
   Future<void> refreshUnread() => loadUnreadConversations(refresh: true);
 
-  /// Delete a conversation (by groupId or user conv id). Returns true on success.
+  // Delete a conversation (by groupId or user conv id). Returns true on success.
   Future<bool> deleteConversation(String conversationId) async {
     try {
       final resp = await _repo.deleteConversation(
         conversationId: conversationId,
       );
       if (!resp.success) {
-        print('❌ deleteConversation API failed: ${resp.message}');
+        if (kDebugMode) {
+          print('deleteConversation API failed: ${resp.message}');
+        }
         return false;
       }
 
@@ -363,7 +375,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       _emitUnifiedLoadedState();
       return true;
     } catch (e) {
-      print('❌ Error in deleteConversation: $e');
+      if (kDebugMode) {
+        print('Error in deleteConversation: $e');
+      }
       return false;
     }
   }
@@ -400,9 +414,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     emit(ConversationInitial());
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         SOCKET LISTENERS                              */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           SOCKET LISTENERS
+   --------------------------------------------------------------------- */
 
   void _listenToSocket() {
     _socket.addMessageListener((raw) {
@@ -412,24 +426,20 @@ class ConversationCubit extends Cubit<ConversationState> {
       final data = raw['data'];
       final action = data?['action']?.toString() ?? data?['type']?.toString();
 
-      print('🔄 Socket: event=$event, action=$action');
-
-      // ✅ Handle by ACTION only (ignore event type)
+      // Handle by ACTION only (ignore event type)
       _handleSocketAction(action, data);
     });
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                    CENTRALIZED ACTION ROUTER                          */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                   CENTRALIZED ACTION ROUTER
+   --------------------------------------------------------------------- */
 
   void _handleSocketAction(String? action, dynamic data) {
     if (action == null || data == null) return;
 
     switch (action) {
-      // ══════════════════════════════════════════════════════════════
       // GROUP 1: MESSAGE ACTIONS
-      // ══════════════════════════════════════════════════════════════
       case 'new_message':
         _handleNewMessage(data);
         break;
@@ -438,9 +448,7 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleMessagesRead(data);
         break;
 
-      // ══════════════════════════════════════════════════════════════
       // GROUP 2: GROUP MANAGEMENT ACTIONS
-      // ══════════════════════════════════════════════════════════════
 
       case 'members_added':
         _handleMembersAdded(data);
@@ -474,9 +482,7 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleGroupDeleted(data['group_id']?.toString());
         break;
 
-      // ══════════════════════════════════════════════════════════════
       // GROUP 3: CONVERSATION ACTIONS
-      // ══════════════════════════════════════════════════════════════
       case 'chat_request':
         _handleChatRequest(data);
         break;
@@ -499,23 +505,23 @@ class ConversationCubit extends Cubit<ConversationState> {
         _handleMessageDeletedForConversation(data);
         break;
 
-      // ══════════════════════════════════════════════════════════════
       // UNKNOWN ACTIONS
-      // ══════════════════════════════════════════════════════════════
       default:
-        print('ℹ️ Unhandled action: $action');
+        if (kDebugMode) {
+          print('Unhandled action: $action');
+        }
         break;
     }
   }
 
-  /// Handle when an admin is promoted in a group
+  // Handle when an admin is promoted in a group
   void _handleAdminPromoted(dynamic payload) {
     try {
-      print('👑 Processing admin_promoted event');
-
       final groupId = payload['group_id']?.toString();
       if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in admin_promoted payload');
+        if (kDebugMode) {
+          print('No group_id in admin_promoted payload');
+        }
         return;
       }
 
@@ -557,21 +563,25 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Conversation updated after admin_promoted');
+        if (kDebugMode) {
+          print('Conversation updated after admin_promoted');
+        }
       }
     } catch (e) {
-      print('❌ Error handling admin_promoted: $e');
+      if (kDebugMode) {
+        print('Error handling admin_promoted: $e');
+      }
     }
   }
 
-  /// Handle when an admin is dismissed in a group
+  // Handle when an admin is dismissed in a group
   void _handleAdminDismissed(dynamic payload) {
     try {
-      print('👥 Processing admin_dismissed event');
-
       final groupId = payload['group_id']?.toString();
       if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in admin_dismissed payload');
+        if (kDebugMode) {
+          print('No group_id in admin_dismissed payload');
+        }
         return;
       }
 
@@ -611,41 +621,45 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Conversation updated after admin_dismissed');
+        if (kDebugMode) {
+          print('Conversation updated after admin_dismissed');
+        }
       }
     } catch (e) {
-      print('❌ Error handling admin_dismissed: $e');
+      if (kDebugMode) {
+        print('Error handling admin_dismissed: $e');
+      }
     }
   }
 
-  // ##################### temporary method ##########################
+  // temporary method
   void _handleMemberRemoved(dynamic payload) {
     try {
-      print('🚫 Processing member_removed event');
-
       final groupId = payload['group_id']?.toString();
       final removedUserId = payload['removed_user_id']?.toString();
       final removedBy = payload['removed_by']?.toString();
 
       if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in member_removed payload');
+        if (kDebugMode) {
+          print('No group_id in member_removed payload');
+        }
         return;
       }
 
       if (removedUserId == null || removedUserId.isEmpty) {
-        print('⚠️ No removed_user_id in member_removed payload');
+        if (kDebugMode) {
+          print('No removed_user_id in member_removed payload');
+        }
         return;
       }
-
-      print(
-        '🔍 Group: $groupId, Removed User: $removedUserId, Removed By: $removedBy, Current User: $_currentUserId',
-      );
 
       // Check if the current user was removed (either by someone else OR by themselves)
       final isCurrentUserRemoved = removedUserId == _currentUserId.toString();
 
       if (isCurrentUserRemoved) {
-        print('🚪 Current user was removed from group: $groupId');
+        if (kDebugMode) {
+          print('Current user was removed from group: $groupId');
+        }
 
         // Remove the group from conversations completely
         _allConversations = _allConversations
@@ -657,7 +671,9 @@ class ConversationCubit extends Cubit<ConversationState> {
             .toList();
 
         _emitUnifiedLoadedState();
-        print('✅ Group removed from conversations (current user removed)');
+        if (kDebugMode) {
+          print('Group removed from conversations (current user removed)');
+        }
         return;
       }
 
@@ -697,103 +713,31 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Conversation updated after member_removed (other member)');
+        if (kDebugMode) {
+          print('Conversation updated after member_removed (other member)');
+        }
       } else {
-        print('⚠️ Group $groupId not found in conversations');
+        if (kDebugMode) {
+          print('Group $groupId not found in conversations');
+        }
       }
     } catch (e) {
-      print('❌ Error handling member_removed: $e');
+      if (kDebugMode) {
+        print('Error handling member_removed: $e');
+      }
     }
   }
 
-  /// ################# working method ##############################
-  /// Handle when a member is removed from a group
-  /*
-  void _handleMemberRemoved(dynamic payload) {
-    try {
-      print('🚫 Processing member_removed event');
-
-      final groupId = payload['group_id']?.toString();
-      final removedUserId = payload['removed_user_id']?.toString();
-
-      if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in member_removed payload');
-        return;
-      }
-
-      // Check if the current user was removed
-      final isCurrentUserRemoved = removedUserId == _currentUserId.toString();
-
-      if (isCurrentUserRemoved) {
-        print('🚪 Current user was removed from group: $groupId');
-        // Remove the group from conversations
-        _allConversations = _allConversations
-            .where((c) => !(c.isGroup && c.groupId == groupId))
-            .toList();
-
-        _unreadConversations = _unreadConversations
-            .where((c) => !(c.isGroup && c.groupId == groupId))
-            .toList();
-
-        _emitUnifiedLoadedState();
-        print('✅ Group removed from conversations');
-        return;
-      }
-
-      // If another member was removed, just update the last message
-      final systemMessage = payload['systemMessage'] ?? payload['notification'];
-      final lastMessageText =
-          systemMessage?['message']?.toString() ??
-          systemMessage?['body']?.toString() ??
-          'Member removed';
-
-      bool changed = false;
-
-      _allConversations = _allConversations.map((c) {
-        if (c.isGroup && c.groupId == groupId) {
-          changed = true;
-          return c.copyWith(
-            lastMessage: lastMessageText,
-            timestamp: DateTime.now(),
-          );
-        }
-        return c;
-      }).toList();
-
-      if (changed) {
-        _allConversations.sort((a, b) => b.timestamp.compareTo(a.timestamp));
-      }
-
-      _unreadConversations = _unreadConversations.map((c) {
-        if (c.isGroup && c.groupId == groupId) {
-          return c.copyWith(
-            lastMessage: lastMessageText,
-            timestamp: DateTime.now(),
-          );
-        }
-        return c;
-      }).toList();
-
-      if (changed) {
-        _emitUnifiedLoadedState();
-        print('✅ Conversation updated after member_removed');
-      }
-    } catch (e) {
-      print('❌ Error handling member_removed: $e');
-    }
-  }
-*/
-
-  /// Handle when a member leaves a group
+  // Handle when a member leaves a group
   void _handleMemberLeft(dynamic payload) {
     try {
-      print('🚶 Processing member_left event');
-
       final groupId = payload['group_id']?.toString();
       final leftUserId = payload['left_user_id']?.toString();
 
       if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in member_left payload');
+        if (kDebugMode) {
+          print('No group_id in member_left payload');
+        }
         return;
       }
 
@@ -801,7 +745,7 @@ class ConversationCubit extends Cubit<ConversationState> {
       final isCurrentUserLeft = leftUserId == _currentUserId.toString();
 
       if (isCurrentUserLeft) {
-        print('🚪 Current user left group: $groupId');
+        print('Current user left group: $groupId');
         // Remove the group from conversations
         _allConversations = _allConversations
             .where((c) => !(c.isGroup && c.groupId == groupId))
@@ -812,7 +756,9 @@ class ConversationCubit extends Cubit<ConversationState> {
             .toList();
 
         _emitUnifiedLoadedState();
-        print('✅ Group removed from conversations after leaving');
+        if (kDebugMode) {
+          print('Group removed from conversations after leaving');
+        }
         return;
       }
 
@@ -852,21 +798,24 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Conversation updated after member_left');
+        if (kDebugMode) {
+          print('Conversation updated after member_left');
+        }
       }
     } catch (e) {
-      print('❌ Error handling member_left: $e');
+      if (kDebugMode) {
+        print('Error handling member_left: $e');
+      }
     }
   }
 
-  // Add this new handler method
   void _handleMembersAdded(dynamic payload) {
     try {
-      print('👥 Processing members_added event');
-
       final groupId = payload['group_id']?.toString();
       if (groupId == null || groupId.isEmpty) {
-        print('⚠️ No group_id in members_added payload');
+        if (kDebugMode) {
+          print('No group_id in members_added payload');
+        }
         return;
       }
 
@@ -903,18 +852,24 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Conversation updated after members_added');
+        if (kDebugMode) {
+          print('Conversation updated after members_added');
+        }
       } else {
         // Group might be new to this user - refresh to get it
-        print('🔄 Group not found locally, refreshing conversations');
+        if (kDebugMode) {
+          print('Group not found locally, refreshing conversations');
+        }
         loadConversations(refresh: true);
       }
     } catch (e) {
-      print('❌ Error handling members_added: $e');
+      if (kDebugMode) {
+        print('Error handling members_added: $e');
+      }
     }
   }
 
-  // New: update conversation preview when a message is deleted (for everyone)
+  // update conversation preview when a message is deleted (for everyone)
   void _handleMessageDeletedForConversation(dynamic payload) {
     try {
       if (payload == null) return;
@@ -963,13 +918,10 @@ class ConversationCubit extends Cubit<ConversationState> {
             if (remaining.isNotEmpty) {
               final last = remaining.last;
               // Safely read the last message text/timestamp from either Message model
-              final String lastMsgText =
-                  (last.content != null && last.content.isNotEmpty)
+              final String lastMsgText = (last.content.isNotEmpty)
                   ? last.content
-                  : (last.message ?? '');
-              final DateTime lastTs = (last.timestamp != null)
-                  ? last.timestamp
-                  : (last.updatedAt ?? DateTime.now());
+                  : (last.message);
+              final DateTime lastTs = last.timestamp;
               return c.copyWith(lastMessage: lastMsgText, timestamp: lastTs);
             }
           }
@@ -998,13 +950,10 @@ class ConversationCubit extends Cubit<ConversationState> {
                 .toList();
             if (remaining.isNotEmpty) {
               final last = remaining.last;
-              final String lastMsgText =
-                  (last.content != null && last.content.isNotEmpty)
+              final String lastMsgText = (last.content.isNotEmpty)
                   ? last.content
-                  : (last.message ?? '');
-              final DateTime lastTs = (last.timestamp != null)
-                  ? last.timestamp
-                  : (last.updatedAt ?? DateTime.now());
+                  : (last.message);
+              final DateTime lastTs = last.timestamp;
               return c.copyWith(lastMessage: lastMsgText, timestamp: lastTs);
             }
           }
@@ -1017,25 +966,29 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print(
-          '✅ Conversation preview updated after delete-for-everyone for id $deletedId',
-        );
+        if (kDebugMode) {
+          print(
+            'Conversation preview updated after delete-for-everyone for id $deletedId',
+          );
+        }
       }
     } catch (e) {
-      print(
-        '❌ Error handling message_deleted_for_everyone in ConversationCubit: $e',
-      );
+      if (kDebugMode) {
+        print(
+          'Error handling message_deleted_for_everyone in ConversationCubit: $e',
+        );
+      }
     }
   }
 
   //   Handle new chat request
   void _handleChatRequest(dynamic payload) {
     try {
-      print('📨 Processing chat_request event');
-
       final conv = _extractConversationFromPayload(payload);
       if (conv == null) {
-        print('❌ Failed to extract conversation from chat_request');
+        if (kDebugMode) {
+          print('Failed to extract conversation from chat_request');
+        }
         return;
       }
 
@@ -1053,23 +1006,27 @@ class ConversationCubit extends Cubit<ConversationState> {
         }
 
         _emitUnifiedLoadedState();
-        print('✅ Chat request added to conversations');
+        if (kDebugMode) {
+          print('Chat request added to conversations');
+        }
       }
     } catch (e) {
-      print('❌ Error handling chat_request: $e');
+      if (kDebugMode) {
+        print('Error handling chat_request: $e');
+      }
     }
   }
 
   //  Handle chat request accepted
   void _handleChatRequestAccepted(dynamic payload) {
     try {
-      print('✅ Processing chat_request_accepted event');
-
       final requestId =
           payload['chat_request_id']?.toString() ?? payload['id']?.toString();
 
       if (requestId == null) {
-        print('❌ No request ID in accepted payload');
+        if (kDebugMode) {
+          print('No request ID in accepted payload');
+        }
         return;
       }
 
@@ -1092,23 +1049,27 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Chat request marked as accepted');
+        if (kDebugMode) {
+          print('Chat request marked as accepted');
+        }
       }
     } catch (e) {
-      print('❌ Error handling chat_request_accepted: $e');
+      if (kDebugMode) {
+        print('Error handling chat_request_accepted: $e');
+      }
     }
   }
 
   //   Handle chat request declined
   void _handleChatRequestDeclined(dynamic payload) {
     try {
-      print('📛 Processing chat_request_declined event');
-
       final requestId =
           payload['chat_request_id']?.toString() ?? payload['id']?.toString();
 
       if (requestId == null) {
-        print('❌ No request ID in declined payload');
+        if (kDebugMode) {
+          print('No request ID in declined payload');
+        }
         return;
       }
 
@@ -1131,10 +1092,14 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       if (changed) {
         _emitUnifiedLoadedState();
-        print('✅ Chat request marked as declined');
+        if (kDebugMode) {
+          print('Chat request marked as declined');
+        }
       }
     } catch (e) {
-      print('❌ Error handling chat_request_declined: $e');
+      if (kDebugMode) {
+        print('Error handling chat_request_declined: $e');
+      }
     }
   }
 
@@ -1148,33 +1113,29 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       return Conversation.fromJson(conv);
     } catch (e) {
-      print('❌ Error extracting conversation: $e');
+      if (kDebugMode) {
+        print('Error extracting conversation: $e');
+      }
       return null;
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                    GROUP 1: MESSAGE HANDLERS                          */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                GROUP 1: MESSAGE HANDLERS
+--------------------------------------------------------------------- */
 
   void _handleNewMessage(dynamic payload) {
-    print('📨 Processing new_message');
-
     // Extract message
     final msg = _extractMessageMap(payload);
     if (msg == null) {
-      print('❌ Failed to extract message');
+      if (kDebugMode) {
+        print('Failed to extract message');
+      }
       return;
     }
 
     // Create unique message ID candidate (may be null-like)
     final messageId = msg['_id']?.toString();
-
-    // Instead of global dedupe state, check whether this message already exists
-    // in our conversation lists and whether the incoming message is actually
-    // newer/meaningful (e.g. updated/deleted). If it's an exact duplicate with
-    // no newer timestamp/content, skip; otherwise allow processing so updates
-    // (like delete-for-everyone) are applied.
 
     bool appearsDuplicateAndStale() {
       if (messageId == null || messageId.isEmpty) return false;
@@ -1203,12 +1164,16 @@ class ConversationCubit extends Cubit<ConversationState> {
     }
 
     if (appearsDuplicateAndStale()) {
-      print('⏭️ Skipping stale duplicate message: ${messageId ?? '<no-id>'}');
+      if (kDebugMode) {
+        print('Skipping stale duplicate message: ${messageId ?? '<no-id>'}');
+      }
       return;
     }
 
     final isGroup = _isGroupMessage(msg);
-    print('✅ Processing ${isGroup ? "group" : "direct"} message: $messageId');
+    if (kDebugMode) {
+      print('Processing ${isGroup ? "group" : "direct"} message: $messageId');
+    }
     _updateConversationWithMessage(msg);
   }
 
@@ -1276,7 +1241,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       if ((readCount <= 0) &&
           !performedByMe &&
           (convKey == null || convKey.isEmpty)) {
-        print('⚠️ messages_read: No actionable data');
+        if (kDebugMode) {
+          print('messages_read: No actionable data');
+        }
         return;
       }
 
@@ -1285,12 +1252,14 @@ class ConversationCubit extends Cubit<ConversationState> {
       // Helper to match conversation
       bool matchesConv(Conversation conv) {
         final convGroupId = conv.groupId ?? conv.id;
-        if (convKey != null && convKey.isNotEmpty && convGroupId == convKey)
+        if (convKey != null && convKey.isNotEmpty && convGroupId == convKey) {
           return true;
+        }
         if (otherUserId != null &&
             otherUserId.isNotEmpty &&
-            conv.id == otherUserId)
+            conv.id == otherUserId) {
           return true;
+        }
         if (byUser != null && conv.id == byUser) return true;
         return false;
       }
@@ -1315,9 +1284,13 @@ class ConversationCubit extends Cubit<ConversationState> {
 
         if (changed) {
           _emitUnifiedLoadedState();
-          print('📣 messages_read applied (by me): convKey=$convKey');
+          if (kDebugMode) {
+            print('messages_read applied (by me): convKey=$convKey');
+          }
         } else {
-          print('ℹ️ messages_read by me processed but no match found');
+          if (kDebugMode) {
+            print('messages_read by me processed but no match found');
+          }
         }
         return;
       }
@@ -1363,26 +1336,30 @@ class ConversationCubit extends Cubit<ConversationState> {
 
         if (changed) {
           _emitUnifiedLoadedState();
-          print(
-            '📣 messages_read applied: convKey=$convKey, readCount=$readCount',
-          );
+          if (kDebugMode) {
+            print(
+              'messages_read applied: convKey=$convKey, readCount=$readCount',
+            );
+          }
         } else {
-          print('ℹ️ messages_read handled but no match found');
+          if (kDebugMode) {
+            print('messages_read handled but no match found');
+          }
         }
       }
     } catch (e, st) {
-      print('❌ Exception in _handleMessagesRead: $e\n$st');
+      if (kDebugMode) {
+        print('Exception in _handleMessagesRead: $e\n$st');
+      }
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                  GROUP 2: GROUP MANAGEMENT HANDLERS                   */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                GROUP 2: GROUP MANAGEMENT HANDLERS
+   --------------------------------------------------------------------- */
 
   void _handleGroupCreated(Map<String, dynamic>? data) {
     if (data == null) return;
-
-    print('🆕 Processing group_created');
 
     try {
       final createdGroup =
@@ -1391,11 +1368,8 @@ class ConversationCubit extends Cubit<ConversationState> {
       if (createdGroup != null && createdGroup is Map<String, dynamic>) {
         final groupId = createdGroup['id']?.toString();
         final groupName = createdGroup['name']?.toString() ?? 'New Group';
-        final creatorId =
-            data['creator_id']?.toString() ??
-            createdGroup['created_by']?.toString();
 
-        // ✅ FIX: Handle photo URL construction
+        //  Handle photo URL construction
         String? photoUrl = createdGroup['photo_url']?.toString();
         if (photoUrl != null &&
             photoUrl.isNotEmpty &&
@@ -1445,90 +1419,40 @@ class ConversationCubit extends Cubit<ConversationState> {
           _allConversations.insert(0, newConv);
         }
 
-        // ✅ KEY FIX: Always emit state to update UI
+        // Always emit state to update UI
         _emitUnifiedLoadedState();
-        print('✅ Group created/updated: $groupName with photo: $photoUrl');
-        return;
-      }
-    } catch (e) {
-      print('❌ Error in group_created: $e');
-    }
-  }
-  /*
-
-  void _handleGroupCreated(Map<String, dynamic>? data) {
-    if (data == null) return;
-
-    print('🆕 Processing group_created');
-
-    try {
-      // Priority 1: Use system message if available
-      final systemMessage =
-          data['systemMessage'] ?? data['conversation'] ?? data['notification'];
-
-      if (systemMessage != null && systemMessage is Map<String, dynamic>) {
-        if (systemMessage.containsKey('message') ||
-            systemMessage.containsKey('_id')) {
-          _handleConversationEvent({'conversation': systemMessage});
-          return;
+        if (kDebugMode) {
+          print('Group created/updated: $groupName with photo: $photoUrl');
         }
-      }
-
-      // Priority 2: Build from group data
-      final createdGroup =
-          data['created_group'] ?? data['group'] ?? data['groupData'];
-
-      if (createdGroup != null && createdGroup is Map<String, dynamic>) {
-        final groupId = createdGroup['id']?.toString();
-        final creatorId =
-            data['creator_id']?.toString() ??
-            createdGroup['created_by']?.toString();
-
-        final convMap = {
-          '_id': data['notification']?['id'] ?? '${groupId}_created',
-          'from_id': creatorId,
-          'to_id': groupId,
-          'to_type': 'App\\Models\\Group',
-          'group_id': groupId,
-          'message':
-              data['notification']?['body'] ??
-              data['notification']?['title'] ??
-              'Group created',
-          'message_type': 9,
-          'created_at': DateTime.now().toIso8601String(),
-          'sender': {'id': creatorId, 'name': createdGroup['name'] ?? 'Group'},
-          'group': createdGroup,
-        };
-
-        _handleConversationEvent({'conversation': convMap});
         return;
       }
     } catch (e) {
-      print('❌ Error in group_created: $e');
+      if (kDebugMode) {
+        print('Error in group_created: $e');
+      }
     }
   }
-*/
 
   void _handleGroupUpdated(Map<String, dynamic>? data) {
     if (data == null) return;
-
-    print('♻️ Processing group_updated event');
 
     // Extract group_id from root level
     final gid = data['group_id']?.toString();
 
     if (gid == null || gid.isEmpty) {
-      print('⚠️ No group_id in group_updated payload');
+      if (kDebugMode) {
+        print('No group_id in group_updated payload');
+      }
       return;
     }
-
-    print('♻️ Group ID: $gid');
 
     // Extract updated_group data - it has a complex nested structure
     final updatedGroup = data['updated_group'];
 
     if (updatedGroup == null) {
-      print('⚠️ No updated_group data');
+      if (kDebugMode) {
+        print('No updated_group data');
+      }
       return;
     }
 
@@ -1536,11 +1460,13 @@ class ConversationCubit extends Cubit<ConversationState> {
     final groupData = updatedGroup['_doc'] as Map<String, dynamic>?;
 
     if (groupData == null) {
-      print('⚠️ No _doc in updated_group');
+      if (kDebugMode) {
+        print('No _doc in updated_group');
+      }
       return;
     }
 
-    // ✅ FIX: Check for photo_url at multiple levels
+    //Check for photo_url at multiple levels
     // Priority: root level photo_url > _doc photo_url
     String? photoUrl;
 
@@ -1557,12 +1483,14 @@ class ConversationCubit extends Cubit<ConversationState> {
       photoUrl = groupData['photo_url'].toString();
     }
 
-    // ✅ FIX: If photo_url is relative path, construct full URL
+    // If photo_url is relative path, construct full URL
     if (photoUrl != null && !photoUrl.startsWith('http')) {
       photoUrl = '${ApiUrls.baseUrl}/$photoUrl/$photoUrl';
     }
 
-    print('✅ Extracted group data: name=${groupData['name']}, photo=$photoUrl');
+    if (kDebugMode) {
+      print('Extracted group data: name=${groupData['name']}, photo=$photoUrl');
+    }
 
     // Extract system message for last message update
     final systemMessage = data['systemMessage'] ?? data['notification'];
@@ -1581,7 +1509,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         // Use the properly constructed photoUrl
         final newPhoto = photoUrl ?? c.avatarUrl;
 
-        print('🔄 Updating conversation: $newName with photo: $newPhoto');
+        if (kDebugMode) {
+          print('Updating conversation: $newName with photo: $newPhoto');
+        }
 
         // Update last message if available
         if (lastMessageText != null && lastMessageText.isNotEmpty) {
@@ -1589,13 +1519,13 @@ class ConversationCubit extends Cubit<ConversationState> {
             title: newName,
             avatarUrl: newPhoto,
             lastMessage: lastMessageText,
-            timestamp: DateTime.now(), // Move to top
+            timestamp: DateTime.now(),
           );
         } else {
           return c.copyWith(
             title: newName,
             avatarUrl: newPhoto,
-            timestamp: DateTime.now(), // Move to top
+            timestamp: DateTime.now(),
           );
         }
       }
@@ -1629,11 +1559,15 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     if (changed) {
       _emitUnifiedLoadedState();
-      print(
-        '✅ Group updated successfully: ${groupData['name']} with photo: $photoUrl',
-      );
+      if (kDebugMode) {
+        print(
+          'Group updated successfully: ${groupData['name']} with photo: $photoUrl',
+        );
+      }
     } else {
-      print('⚠️ Group $gid not found in local conversations');
+      if (kDebugMode) {
+        print('Group $gid not found in local conversations');
+      }
       // Optionally refresh to get the group
       loadConversations(refresh: true);
     }
@@ -1641,11 +1575,11 @@ class ConversationCubit extends Cubit<ConversationState> {
 
   void _handleGroupDeleted(String? groupId) {
     if (groupId == null || groupId.isEmpty) {
-      print('⚠️ group_deleted: No group ID');
+      if (kDebugMode) {
+        print('group_deleted: No group ID');
+      }
       return;
     }
-
-    print('🗑️ Processing group_deleted: $groupId');
 
     final beforeCount = _allConversations.length;
 
@@ -1659,13 +1593,15 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     if (_allConversations.length != beforeCount) {
       _emitUnifiedLoadedState();
-      print('✅ Removed conversations for deleted group: $groupId');
+      if (kDebugMode) {
+        print('Removed conversations for deleted group: $groupId');
+      }
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                 GROUP 3: CONVERSATION HANDLERS                        */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                  GROUP 3: CONVERSATION HANDLERS
+  --------------------------------------------------------------------- */
 
   void _handleConversationEvent(dynamic payload) {
     try {
@@ -1676,12 +1612,12 @@ class ConversationCubit extends Cubit<ConversationState> {
           : null;
 
       if (conv == null || conv is! Map<String, dynamic>) {
-        print('⚠️ conversation_event: No usable data, refreshing');
+        if (kDebugMode) {
+          print('conversation_event: No usable data, refreshing');
+        }
         loadConversations(refresh: true);
         return;
       }
-
-      print('💬 Processing conversation_event');
 
       // Map to message-like shape
       final msg = <String, dynamic>{
@@ -1718,14 +1654,16 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       _handleNewMessage({'conversation': msg});
     } catch (e) {
-      print('❌ Error in conversation_event: $e');
+      if (kDebugMode) {
+        print('Error in conversation_event: $e');
+      }
       loadConversations(refresh: true);
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         MESSAGE EXTRACTION                            */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           MESSAGE EXTRACTION
+   --------------------------------------------------------------------- */
 
   Map<String, dynamic>? _extractMessageMap(dynamic payload) {
     try {
@@ -1766,14 +1704,16 @@ class ConversationCubit extends Cubit<ConversationState> {
         'to_user': toUser,
       };
     } catch (e) {
-      print('❌ extractMessage error: $e');
+      if (kDebugMode) {
+        print('extractMessage error: $e');
+      }
       return null;
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         CONVERSATION UPDATE                           */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                        CONVERSATION UPDATE
+   --------------------------------------------------------------------- */
 
   void _updateConversationWithMessage(Map<String, dynamic> msg) {
     final convId = _conversationIdFromMessage(msg);
@@ -1781,10 +1721,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     final lastText = _formatLastMessage(msg);
     final ts = _parseTimestamp(msg);
     final own = _isOwnMessage(msg);
-
-    print(
-      '🟢 Updating conversation - ID: $convId, isGroup: $isGroup, isOwn: $own',
-    );
 
     final msgId = (msg['_id'] ?? msg['id'])?.toString();
     final fromId = msg['from_id']?.toString();
@@ -1821,9 +1757,11 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (idx >= 0) {
       final old = all[idx];
       if (ts.isBefore(old.timestamp) || ts.isAtSameMomentAs(old.timestamp)) {
-        print(
-          '⏭️ Incoming message ts <= existing ts, skipping update for conv $convId',
-        );
+        if (kDebugMode) {
+          print(
+            'Incoming message ts <= existing ts, skipping update for conv $convId',
+          );
+        }
         return;
       }
       final newUnread = own ? old.unreadCount : old.unreadCount + 1;
@@ -1858,10 +1796,14 @@ class ConversationCubit extends Cubit<ConversationState> {
 
       _allConversations = all;
       _unreadConversations = unread;
-      print('✅ Updated conversation lists - Last message: $lastText');
+      if (kDebugMode) {
+        print('Updated conversation lists - Last message: $lastText');
+      }
       _emitUnifiedLoadedState();
     } else {
-      print('⚠️ Conversation not found, creating new');
+      if (kDebugMode) {
+        print('Conversation not found, creating new');
+      }
       _createConversationFromMessage(msg, convId, isGroup);
     }
   }
@@ -1918,7 +1860,9 @@ class ConversationCubit extends Cubit<ConversationState> {
       _unreadConversations = [newConv, ..._unreadConversations];
     }
 
-    print('✅ Created new conversation (from socket)');
+    if (kDebugMode) {
+      print('Created new conversation (from socket)');
+    }
     _emitUnifiedLoadedState();
 
     if (!isGroup && _isOwnMessage(msg)) {
@@ -1969,19 +1913,20 @@ class ConversationCubit extends Cubit<ConversationState> {
       _unreadConversations = updatedUnread;
       _emitUnifiedLoadedState();
     } catch (e) {
-      print('❌ Failed to update conversation title from user id: $e');
+      if (kDebugMode) {
+        print('Failed to update conversation title from user id: $e');
+      }
     }
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         HELPERS                                       */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           HELPERS
+ --------------------------------------------------------------------- */
 
   bool _isOwnMessage(Map<String, dynamic> msg) {
     final from = msg['from_id']?.toString();
     final currentId = _currentUserId.toString();
     final isOwn = from == currentId;
-    print('👤 Message from: $from, Current user: $currentId, Is own: $isOwn');
     return isOwn;
   }
 
@@ -1993,7 +1938,6 @@ class ConversationCubit extends Cubit<ConversationState> {
     if (txt.contains('<a href')) return 'File';
 
     final cleaned = txt.replaceAll(RegExp(r'<[^>]*>'), '').trim();
-    print('📝 Formatted message: "${cleaned}"');
     return cleaned;
   }
 
@@ -2004,9 +1948,9 @@ class ConversationCubit extends Cubit<ConversationState> {
         : DateTime.now();
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         PUBLIC API                                    */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           PUBLIC API
+   --------------------------------------------------------------------- */
 
   void initializeSocketConnection(String token) {
     _socket.initializeSocket(token);
@@ -2069,9 +2013,9 @@ class ConversationCubit extends Cubit<ConversationState> {
     return super.close();
   }
 
-  /* --------------------------------------------------------------------- */
-  /*                         CONVERSATION ID                              */
-  /* --------------------------------------------------------------------- */
+  /* ---------------------------------------------------------------------
+                           CONVERSATION ID
+   --------------------------------------------------------------------- */
 
   String _conversationIdFromMessage(Map<String, dynamic> msg) {
     final groupId = msg['group_id']?.toString();
@@ -2080,26 +2024,22 @@ class ConversationCubit extends Cubit<ConversationState> {
 
     // Priority 1: Group ID
     if (groupId != null && groupId.isNotEmpty && groupId != '0') {
-      print('📋 Conversation ID from group_id: $groupId');
       return groupId;
     }
 
     // Priority 2: to_type contains Group
     if (toType?.contains('Group') == true) {
-      print('📋 Conversation ID from to_id (Group type): $toId');
       return toId ?? 'unknown';
     }
 
     // Priority 3: to_id contains UUID format (groups use UUIDs)
     if (toId != null && toId.contains('-')) {
-      print('📋 Conversation ID from to_id (UUID): $toId');
       return toId;
     }
 
     // Priority 4: Direct message - use other user's ID
     final own = _isOwnMessage(msg);
     final other = own ? toId : msg['from_id']?.toString();
-    print('📋 Conversation ID from ${own ? "to_id" : "from_id"}: $other');
 
     return other?.toString() ?? 'unknown';
   }

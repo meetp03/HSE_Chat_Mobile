@@ -1,4 +1,3 @@
-// Small helper widget to play a cached video file using Chewie.
 import 'package:chewie/chewie.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_cache_manager/flutter_cache_manager.dart';
